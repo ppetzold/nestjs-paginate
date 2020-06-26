@@ -1,0 +1,15 @@
+{
+  "tabWidth": 4,
+  "printWidth": 120,
+  "semi": false,
+  "trailingComma": "es5",
+  "singleQuote": true,
+  "overrides": [
+    {
+      "files": "{*.json,*.md,.prettierrc,.*.yml}",
+      "options": {
+        "tabWidth": 2
+      }
+    }
+  ]
+}
