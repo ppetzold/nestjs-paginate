@@ -14,22 +14,15 @@ export const Paginate = createParamDecorator(
         const { query } = request
         const path = request.protocol + '://' + request.get('host') + request.baseUrl + request.path
 
-        function readParamAsArray(param: unknown): string[] {
-            const result = typeof param === 'string' ? [param] : param
-            if (Array.isArray(result) && result.every((value) => typeof value === 'string')) {
-                return result
-            }
-            return []
-        }
-
-        let sortBy: [string, string][] | undefined = undefined
+        let sortBy: [string, string][] = []
         if (query.sortBy) {
-            const params = readParamAsArray(query.sortBy)
-            for (const param of params) {
-                const items = param.split(':')
-                if (items.length === 2) {
-                    if (!sortBy) sortBy = []
-                    sortBy.push(items as [string, string])
+            const params = !Array.isArray(query.sortBy) ? [query.sortBy] : query.sortBy
+            if (params.some((param) => typeof param === 'string')) {
+                for (const param of params as string[]) {
+                    const items = param.split(':')
+                    if (items.length === 2) {
+                        sortBy.push([items[0], items[1]])
+                    }
                 }
             }
         }
@@ -37,7 +30,7 @@ export const Paginate = createParamDecorator(
         return {
             page: query.page ? parseInt(query.page.toString(), 10) : undefined,
             limit: query.limit ? parseInt(query.limit.toString(), 10) : undefined,
-            sortBy,
+            sortBy: sortBy.length > 0 ? sortBy : undefined,
             path,
         }
     }
