@@ -22,8 +22,8 @@ function contextFactory(query: Request['query']): Partial<ExecutionContext> {
                     Object({
                         protocol: 'http',
                         get: () => 'localhost',
-                        baseUrl: '/items',
-                        path: '/all',
+                        baseUrl: '',
+                        path: '/items',
                         query: query,
                     }),
             }),
@@ -41,7 +41,7 @@ describe('Decorator', () => {
             page: undefined,
             limit: undefined,
             sortBy: undefined,
-            path: 'http://localhost/items/all',
+            path: 'http://localhost/items',
         })
     })
 
@@ -61,7 +61,7 @@ describe('Decorator', () => {
                 ['id', 'ASC'],
                 ['createdAt', 'DESC'],
             ],
-            path: 'http://localhost/items/all',
+            path: 'http://localhost/items',
         })
     })
 })

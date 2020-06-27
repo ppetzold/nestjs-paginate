@@ -79,7 +79,7 @@ describe('paginate', () => {
         expect(links.last).toBe('?page=3&limit=2&sortBy=id:ASC')
     })
 
-    it('should default to defaultOrderby if query sortBy does not exist', async () => {
+    it('should default to defaultSortBy if query sortBy does not exist', async () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id', 'createdAt'],
             defaultSortBy: [['createdAt', 'DESC']],
@@ -91,6 +91,26 @@ describe('paginate', () => {
         const results = await paginate<CatEntity>(query, repo, config)
 
         expect(results.meta.sortBy).toStrictEqual([['createdAt', 'DESC']])
+    })
+
+    it('should accept multiple columns to sort', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id', 'createdAt'],
+        }
+        const query: PaginateQuery = {
+            path: '',
+            sortBy: [
+                ['createdAt', 'DESC'],
+                ['id', 'ASC'],
+            ],
+        }
+
+        const { meta } = await paginate<CatEntity>(query, repo, config)
+
+        expect(meta.sortBy).toStrictEqual([
+            ['createdAt', 'DESC'],
+            ['id', 'ASC'],
+        ])
     })
 
     it('should throw an error when no sortableColumns', async () => {
