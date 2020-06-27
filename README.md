@@ -28,7 +28,7 @@ The following code exposes a route that can be utilized like so:
 #### Endpoint
 
 ```url
-http://localhost:3000/cats?limit=10&page=2&sortBy=createdAt:DESC&sortBy=color:ASC
+http://localhost:3000/cats?limit=5&page=2&sortBy=color:DESC
 ```
 
 #### Result
@@ -63,17 +63,18 @@ http://localhost:3000/cats?limit=10&page=2&sortBy=createdAt:DESC&sortBy=color:AS
     }
   ],
   "meta": {
-    "itemsPerPage": 2,
-    "totalItems": 5,
+    "itemsPerPage": 5,
+    "totalItems": 12,
     "currentPage": 2,
     "totalPages": 3,
     "sortBy": [["color", "DESC"]]
   },
   "links": {
-    "first": "http://localhost:3000/cats?limit=2&page=1&sortBy=color:DESC",
-    "previous": "http://localhost:3000/cats?limit=2&page=1&sortBy=color:DESC",
-    "next": "http://localhost:3000/cats?limit=2&page=3&sortBy=color:DESC",
-    "last": "http://localhost:3000/cats?limit=2&page=3&sortBy=color:DESC"
+    "first": "http://localhost:3000/cats?limit=5&page=1&sortBy=color:DESC",
+    "previous": "http://localhost:3000/cats?limit=5&page=1&sortBy=color:DESC",
+    "current": "http://localhost:3000/cats?limit=5&page=2&sortBy=color:DESC",
+    "next": "http://localhost:3000/cats?limit=5&page=3&sortBy=color:DESC",
+    "last": "http://localhost:3000/cats?limit=5&page=3&sortBy=color:DESC"
   }
 }
 ```
