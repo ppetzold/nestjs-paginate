@@ -146,7 +146,7 @@ const paginateConfig: PaginateConfig<CatEntity> {
   /**
    * Required: false
    * Type: [string, 'ASC' | 'DESC'][]
-   * Default: [sortableColumns[0], 'ASC]]
+   * Default: [[sortableColumns[0], 'ASC]]
    * Description: The order to display the sorted entities.
    */
   defaultSortBy: [['name', 'DESC']],
