@@ -130,7 +130,7 @@ export class CatsController {
 const paginateConfig: PaginateConfig<CatEntity> {
   /**
    * Required: true (must have a minimum of one column)
-   * Type: keyof CatEntity
+   * Type: (keyof CatEntity)[]
    * Description: These are the columns that are valid to be sorted by.
    */
   sortableColumns: ['id', 'name', 'color'],
@@ -145,7 +145,7 @@ const paginateConfig: PaginateConfig<CatEntity> {
 
   /**
    * Required: false
-   * Type: [string, 'ASC' | 'DESC'][]
+   * Type: [keyof CatEntity, 'ASC' | 'DESC'][]
    * Default: [[sortableColumns[0], 'ASC]]
    * Description: The order to display the sorted entities.
    */
