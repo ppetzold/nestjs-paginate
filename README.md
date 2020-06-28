@@ -112,7 +112,7 @@ export class CatsService {
     return paginate(query, this.catsRepository, {
       sortableColumns: ['id', 'name', 'color'],
       searchableColumns: ['name', 'color'],
-      defaultOrderby: [['color', 'DESC']],
+      defaultSortBy: [['id', 'DESC']],
     })
   }
 }
