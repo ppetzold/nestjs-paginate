@@ -9,9 +9,7 @@
     "sourceMap": true,
     "outDir": "./lib",
     "baseUrl": "./",
-    "typeRoots": ["node_modules/@types"],
     "incremental": true
   },
-  "include": ["src"],
-  "exclude": ["src/__test__/*"]
+  "include": ["src"]
 }
