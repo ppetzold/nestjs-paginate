@@ -110,7 +110,8 @@ export class CatsService {
 
   public findAll(query: PaginateQuery): Promise<Paginated<CatEntity>> {
     return paginate(query, this.catsRepository, {
-      sortableColumns: ['name', 'color'],
+      sortableColumns: ['id', 'name', 'color'],
+      searchableColumns: ['name', 'color'],
       defaultOrderby: [['color', 'DESC']],
     })
   }
