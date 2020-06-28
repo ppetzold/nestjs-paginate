@@ -143,7 +143,7 @@ const paginateConfig: PaginateConfig<CatEntity> {
    * Type: (keyof CatEntity)[]
    * Description: These columns will be searched through when using the search query param.
    */
-  sortableColumns: ['name', 'color'],
+  searchableColumns: ['name', 'color'],
 
   /**
    * Required: false
