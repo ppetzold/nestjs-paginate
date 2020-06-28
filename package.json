@@ -15,8 +15,8 @@
     "express",
     "pagination",
     "paginate",
-    "filtration",
-    "filter"
+    "filtering",
+    "search"
   ],
   "scripts": {
     "prebuild": "rimraf lib",
