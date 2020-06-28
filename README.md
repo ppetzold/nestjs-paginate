@@ -68,7 +68,8 @@ http://localhost:3000/cats?limit=5&page=2&sortBy=color:DESC&search=i
     "totalItems": 12,
     "currentPage": 2,
     "totalPages": 3,
-    "sortBy": [["color", "DESC"]]
+    "sortBy": [["color", "DESC"]],
+    "search": "i"
   },
   "links": {
     "first": "http://localhost:3000/cats?limit=5&page=1&sortBy=color:DESC&search=i",
