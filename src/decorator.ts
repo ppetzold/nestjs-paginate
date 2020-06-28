@@ -5,6 +5,7 @@ export interface PaginateQuery {
     page?: number
     limit?: number
     sortBy?: [string, string][]
+    search?: string
     path: string
 }
 
@@ -14,14 +15,14 @@ export const Paginate = createParamDecorator(
         const { query } = request
         const path = request.protocol + '://' + request.get('host') + request.baseUrl + request.path
 
-        let sortBy: [string, string][] = []
+        const sortBy: [string, string][] = []
         if (query.sortBy) {
             const params = !Array.isArray(query.sortBy) ? [query.sortBy] : query.sortBy
-            if (params.some((param) => typeof param === 'string')) {
-                for (const param of params as string[]) {
+            for (const param of params as string[]) {
+                if (typeof param === 'string') {
                     const items = param.split(':')
                     if (items.length === 2) {
-                        sortBy.push([items[0], items[1]])
+                        sortBy.push(items as [string, string])
                     }
                 }
             }
@@ -30,7 +31,8 @@ export const Paginate = createParamDecorator(
         return {
             page: query.page ? parseInt(query.page.toString(), 10) : undefined,
             limit: query.limit ? parseInt(query.limit.toString(), 10) : undefined,
-            sortBy: sortBy.length > 0 ? sortBy : undefined,
+            sortBy: sortBy.length ? sortBy : undefined,
+            search: query.page ? query.search.toString() : undefined,
             path,
         }
     }

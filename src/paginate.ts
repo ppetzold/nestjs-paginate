@@ -1,4 +1,4 @@
-import { Repository, FindConditions, SelectQueryBuilder } from 'typeorm'
+import { Repository, FindConditions, SelectQueryBuilder, Like, ObjectLiteral } from 'typeorm'
 import { PaginateQuery } from './decorator'
 import { ServiceUnavailableException } from '@nestjs/common'
 
@@ -14,6 +14,7 @@ export class Paginated<T> {
         currentPage: number
         totalPages: number
         sortBy: SortBy<T>
+        search: string
     }
     links: {
         first?: string
@@ -26,6 +27,7 @@ export class Paginated<T> {
 
 export interface PaginateConfig<T> {
     sortableColumns: Column<T>[]
+    searchableColumns?: Column<T>[]
     maxLimit?: number
     defaultSortBy?: SortBy<T>
     defaultLimit?: number
@@ -40,6 +42,8 @@ export async function paginate<T>(
 ): Promise<Paginated<T>> {
     let page = query.page || 1
     const limit = query.limit || config.defaultLimit || 20
+    const sortBy = [] as SortBy<T>
+    const search = query.search
     const path = query.path
 
     function isEntityKey(sortableColumns: Column<T>[], column: string): column is Column<T> {
@@ -49,7 +53,6 @@ export async function paginate<T>(
     const { sortableColumns } = config
     if (config.sortableColumns.length < 1) throw new ServiceUnavailableException()
 
-    let sortBy: SortBy<T> = []
     if (query.sortBy) {
         for (const order of query.sortBy) {
             if (isEntityKey(sortableColumns, order[0]) && ['ASC', 'DESC'].includes(order[1])) {
@@ -58,39 +61,47 @@ export async function paginate<T>(
         }
     }
     if (!sortBy.length) {
-        sortBy = sortBy.concat(config.defaultSortBy || [[sortableColumns[0], 'ASC']])
+        sortBy.push(...(config.defaultSortBy || [[sortableColumns[0], 'ASC']]))
     }
+
+    if (page < 1) page = 1
 
     let [items, totalItems]: [T[], number] = [[], 0]
 
+    let queryBuilder: SelectQueryBuilder<T>
+
     if (repo instanceof Repository) {
-        const query = repo
+        queryBuilder = repo
             .createQueryBuilder('e')
             .take(limit)
             .skip((page - 1) * limit)
 
         for (const order of sortBy) {
-            query.addOrderBy('e.' + order[0], order[1])
+            queryBuilder.addOrderBy('e.' + order[0], order[1])
         }
-
-        ;[items, totalItems] = await query.where(config.where || {}).getManyAndCount()
     } else {
-        const query = repo.take(limit).skip((page - 1) * limit)
+        queryBuilder = repo.take(limit).skip((page - 1) * limit)
 
         for (const order of sortBy) {
-            query.addOrderBy(repo.alias + '.' + order[0], order[1])
+            queryBuilder.addOrderBy(repo.alias + '.' + order[0], order[1])
         }
-
-        ;[items, totalItems] = await query.getManyAndCount()
     }
+
+    const where: ObjectLiteral[] = []
+    if (search && config.searchableColumns) {
+        for (const column of config.searchableColumns) {
+            where.push({ [column]: Like(`%${search}%`), ...config.where })
+        }
+    }
+
+    ;[items, totalItems] = await queryBuilder.where(where.length ? where : config.where || {}).getManyAndCount()
 
     let totalPages = totalItems / limit
     if (totalItems % limit) totalPages = Math.ceil(totalPages)
 
-    if (page > totalPages) page = totalPages
-    if (page < 1) page = 1
-
-    const options = `&limit=${limit}${sortBy.map((order) => `&sortBy=${order.join(':')}`).join('')}`
+    const options = `&limit=${limit}${sortBy.map((order) => `&sortBy=${order.join(':')}`).join('')}${
+        search ? `&search=${search}` : ''
+    }`
 
     const buildLink = (p: number): string => path + '?page=' + p + options
 
@@ -102,6 +113,7 @@ export async function paginate<T>(
             currentPage: page,
             totalPages: totalPages,
             sortBy,
+            search,
         },
         links: {
             first: page == 1 ? undefined : buildLink(1),

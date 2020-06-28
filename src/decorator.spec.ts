@@ -3,6 +3,7 @@ import { HttpArgumentsHost, CustomParamFactory, ExecutionContext } from '@nestjs
 import { Request } from 'express'
 import { Paginate, PaginateQuery } from './decorator'
 
+// eslint-disable-next-line @typescript-eslint/ban-types
 function getParamDecoratorFactory<T>(decorator: Function): CustomParamFactory {
     class Test {
         public test(@decorator() _value: T): void {
@@ -41,6 +42,7 @@ describe('Decorator', () => {
             page: undefined,
             limit: undefined,
             sortBy: undefined,
+            search: undefined,
             path: 'http://localhost/items',
         })
     })
@@ -50,6 +52,7 @@ describe('Decorator', () => {
             page: '1',
             limit: '20',
             sortBy: ['id:ASC', 'createdAt:DESC'],
+            search: 'white',
         })
 
         const result: PaginateQuery = decoratorfactory(null, context)
@@ -61,6 +64,7 @@ describe('Decorator', () => {
                 ['id', 'ASC'],
                 ['createdAt', 'DESC'],
             ],
+            search: 'white',
             path: 'http://localhost/items',
         })
     })

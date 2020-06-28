@@ -11,7 +11,8 @@ Pagination and filtering helper method for TypeORM repositories or query builder
 
 - Pagination conforms to [JSON:API](https://jsonapi.org/)
 - Sort by multiple columns
-- Filter by multiple columns using operators
+- Filter using operators
+- Search across columns
 
 ## Installation
 
@@ -28,7 +29,7 @@ The following code exposes a route that can be utilized like so:
 #### Endpoint
 
 ```url
-http://localhost:3000/cats?limit=5&page=2&sortBy=color:DESC
+http://localhost:3000/cats?limit=5&page=2&sortBy=color:DESC&search=i
 ```
 
 #### Result
@@ -58,7 +59,7 @@ http://localhost:3000/cats?limit=5&page=2&sortBy=color:DESC
     },
     {
       "id": 3,
-      "name": "Shadow",
+      "name": "Kitty",
       "color": "black"
     }
   ],
@@ -70,11 +71,11 @@ http://localhost:3000/cats?limit=5&page=2&sortBy=color:DESC
     "sortBy": [["color", "DESC"]]
   },
   "links": {
-    "first": "http://localhost:3000/cats?limit=5&page=1&sortBy=color:DESC",
-    "previous": "http://localhost:3000/cats?limit=5&page=1&sortBy=color:DESC",
-    "current": "http://localhost:3000/cats?limit=5&page=2&sortBy=color:DESC",
-    "next": "http://localhost:3000/cats?limit=5&page=3&sortBy=color:DESC",
-    "last": "http://localhost:3000/cats?limit=5&page=3&sortBy=color:DESC"
+    "first": "http://localhost:3000/cats?limit=5&page=1&sortBy=color:DESC&search=i",
+    "previous": "http://localhost:3000/cats?limit=5&page=1&sortBy=color:DESC&search=i",
+    "current": "http://localhost:3000/cats?limit=5&page=2&sortBy=color:DESC&search=i",
+    "next": "http://localhost:3000/cats?limit=5&page=3&sortBy=color:DESC&search=i",
+    "last": "http://localhost:3000/cats?limit=5&page=3&sortBy=color:DESC&search=i"
   }
 }
 ```
@@ -135,6 +136,13 @@ const paginateConfig: PaginateConfig<CatEntity> {
    * Description: These are the columns that are valid to be sorted by.
    */
   sortableColumns: ['id', 'name', 'color'],
+
+  /**
+   * Required: false
+   * Type: (keyof CatEntity)[]
+   * Description: These columns will be searched through when using the search query param.
+   */
+  sortableColumns: ['name', 'color'],
 
   /**
    * Required: false
