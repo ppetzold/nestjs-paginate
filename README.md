@@ -11,8 +11,8 @@ Pagination and filtering helper method for TypeORM repositories or query builder
 
 - Pagination conforms to [JSON:API](https://jsonapi.org/)
 - Sort by multiple columns
-- Filter using operators
 - Search across columns
+- Filter using operators *(in progress)*
 
 ## Installation
 
