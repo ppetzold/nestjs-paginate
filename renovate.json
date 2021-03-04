@@ -1,5 +1,6 @@
 {
-  "extends": [
-    "config:base"
-  ]
+  "$schema": "http://json.schemastore.org/renovate",
+  "extends": ["config:base"],
+  "updateLockFiles": true,
+  "rangeStrategy": "bump"
 }
