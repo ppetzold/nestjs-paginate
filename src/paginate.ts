@@ -41,7 +41,7 @@ export async function paginate<T>(
     config: PaginateConfig<T>
 ): Promise<Paginated<T>> {
     let page = query.page || 1
-    const limit = query.limit || config.defaultLimit || 20
+    const limit = Math.min(query.limit || config.defaultLimit || 20, config.maxLimit || 100);
     const sortBy = [] as SortBy<T>
     const search = query.search
     const path = query.path
