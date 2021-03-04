@@ -1,6 +1,23 @@
-import { Repository, FindConditions, SelectQueryBuilder, Like, ObjectLiteral } from 'typeorm'
+import {
+    Repository,
+    FindConditions,
+    SelectQueryBuilder,
+    Like,
+    ObjectLiteral,
+    FindOperator,
+    Equal,
+    MoreThan,
+    MoreThanOrEqual,
+    In,
+    IsNull,
+    LessThan,
+    LessThanOrEqual,
+    Not,
+} from 'typeorm'
 import { PaginateQuery } from './decorator'
 import { ServiceUnavailableException } from '@nestjs/common'
+import { values, mapKeys } from 'lodash'
+import { stringify } from 'querystring'
 
 type Column<T> = Extract<keyof T, string>
 type Order<T> = [Column<T>, 'ASC' | 'DESC']
@@ -15,6 +32,7 @@ export class Paginated<T> {
         totalPages: number
         sortBy: SortBy<T>
         search: string
+        filter?: { [column: string]: string | string[] }
     }
     links: {
         first?: string
@@ -35,6 +53,17 @@ export interface PaginateConfig<T> {
     queryBuilder?: SelectQueryBuilder<T>
 }
 
+export enum FilterOperator {
+    EQ = '$eq',
+    GT = '$gt',
+    GTE = '$gte',
+    IN = '$in',
+    NULL = '$null',
+    LT = '$lt',
+    LTE = '$lte',
+    NOT = '$not',
+}
+
 export async function paginate<T>(
     query: PaginateQuery,
     repo: Repository<T> | SelectQueryBuilder<T>,
@@ -43,7 +72,6 @@ export async function paginate<T>(
     let page = query.page || 1
     const limit = Math.min(query.limit || config.defaultLimit || 20, config.maxLimit || 100);
     const sortBy = [] as SortBy<T>
-    const search = query.search
     const path = query.path
 
     function isEntityKey(sortableColumns: Column<T>[], column: string): column is Column<T> {
@@ -87,21 +115,80 @@ export async function paginate<T>(
         }
     }
 
-    const where: ObjectLiteral[] = []
-    if (search && config.searchableColumns) {
-        for (const column of config.searchableColumns) {
-            where.push({ [column]: Like(`%${search}%`), ...config.where })
+    const where = config.where || {}
+    if (query.filter) {
+        function getOperatorFn(op: FilterOperator): (...args: any[]) => FindOperator<T> {
+            switch (op) {
+                case FilterOperator.EQ:
+                    return Equal
+                case FilterOperator.GT:
+                    return MoreThan
+                case FilterOperator.GTE:
+                    return MoreThanOrEqual
+                case FilterOperator.IN:
+                    return In
+                case FilterOperator.NULL:
+                    return IsNull
+                case FilterOperator.LT:
+                    return LessThan
+                case FilterOperator.LTE:
+                    return LessThanOrEqual
+                case FilterOperator.NOT:
+                    return Not
+            }
+        }
+        function isOperator(value: any): value is FilterOperator {
+            return values(FilterOperator).includes(value)
+        }
+        for (const column of Object.keys(query.filter)) {
+            const input = query.filter[column]
+            const statements = !Array.isArray(input) ? [input] : input
+            for (const raw of statements) {
+                const tokens = raw.split(':')
+                if (tokens.length === 0 || tokens.length > 3) {
+                    continue
+                } else if (tokens.length === 2) {
+                    tokens.unshift(null)
+                } else if (tokens.length === 1) {
+                    tokens.unshift(null, FilterOperator.EQ)
+                }
+                const [op2, op1, value] = tokens
+                if (isOperator(op1)) {
+                    const args = op1 === FilterOperator.IN ? value.split(',') : value
+                    where[column] = getOperatorFn(op1)(args)
+                }
+                if (isOperator(op2)) {
+                    where[column] = getOperatorFn(op2)(where[column])
+                }
+            }
         }
     }
 
-    ;[items, totalItems] = await queryBuilder.where(where.length ? where : config.where || {}).getManyAndCount()
+    const search: ObjectLiteral[] = []
+    if (query.search && config.searchableColumns) {
+        for (const column of config.searchableColumns) {
+            search.push({ [column]: Like(`%${query.search}%`), ...where })
+        }
+    }
+
+    ;[items, totalItems] = await queryBuilder.where(search.length ? search : where).getManyAndCount()
 
     let totalPages = totalItems / limit
     if (totalItems % limit) totalPages = Math.ceil(totalPages)
 
-    const options = `&limit=${limit}${sortBy.map((order) => `&sortBy=${order.join(':')}`).join('')}${
-        search ? `&search=${search}` : ''
-    }`
+    const sortByQuery = sortBy.map((order) => `&sortBy=${order.join(':')}`).join('')
+    const searchQuery = query.search ? `&search=${query.search}` : ''
+    const filterQuery = query.filter
+        ? '&' +
+          stringify(
+              mapKeys(query.filter, (_param, name) => 'filter.' + name),
+              '&',
+              '=',
+              { encodeURIComponent: (str) => str }
+          )
+        : ''
+
+    const options = `&limit=${limit}${sortByQuery}${searchQuery}${filterQuery}`
 
     const buildLink = (p: number): string => path + '?page=' + p + options
 
@@ -113,7 +200,8 @@ export async function paginate<T>(
             currentPage: page,
             totalPages: totalPages,
             sortBy,
-            search,
+            search: query.search,
+            filter: query.filter,
         },
         links: {
             first: page == 1 ? undefined : buildLink(1),
