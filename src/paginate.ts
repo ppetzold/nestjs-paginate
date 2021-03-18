@@ -98,7 +98,7 @@ export async function paginate<T>(
         ;[items, totalItems] = await repo.findAndCount({
             skip: (page - 1) * limit,
             take: limit,
-            ...config.where,
+            where: where.length ? where : config.where || {},
         })
     } else {
         ;[items, totalItems] = await queryBuilder.where(where.length ? where : config.where || {}).getManyAndCount()
