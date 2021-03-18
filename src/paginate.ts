@@ -41,7 +41,7 @@ export async function paginate<T>(
     config: PaginateConfig<T>
 ): Promise<Paginated<T>> {
     let page = query.page || 1
-    const limit = Math.min(query.limit || config.defaultLimit || 20, config.maxLimit || 100);
+    const limit = Math.min(query.limit || config.defaultLimit || 20, config.maxLimit || 100)
     const sortBy = [] as SortBy<T>
     const search = query.search
     const path = query.path
@@ -94,7 +94,15 @@ export async function paginate<T>(
         }
     }
 
-    ;[items, totalItems] = await queryBuilder.where(where.length ? where : config.where || {}).getManyAndCount()
+    if (repo instanceof Repository) {
+        ;[items, totalItems] = await repo.findAndCount({
+            skip: (page - 1) * limit,
+            take: limit,
+            ...config.where,
+        })
+    } else {
+        ;[items, totalItems] = await queryBuilder.where(where.length ? where : config.where || {}).getManyAndCount()
+    }
 
     let totalPages = totalItems / limit
     if (totalItems % limit) totalPages = Math.ceil(totalPages)
