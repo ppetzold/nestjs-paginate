@@ -79,12 +79,12 @@ export function createPaginatedObject<T>(
 
 export async function paginate<T>(
     query: PaginateQuery,
-    repo: Repository<T> | SelectQueryBuilder<T>,
+    repository: Repository<T> | SelectQueryBuilder<T>,
     config: PaginateConfig<T>
 ): Promise<Paginated<T>> {
-    return repo instanceof Repository
-        ? paginateRepository(query, repo, config)
-        : paginateQueryBuilder(query, repo, config)
+    return repository instanceof SelectQueryBuilder
+        ? paginateQueryBuilder<T>(query, repository, config)
+        : paginateRepository<T>(query, repository, config)
 }
 
 export async function paginateRepository<T>(
@@ -117,6 +117,11 @@ export async function paginateRepository<T>(
         sort.push(...(config.defaultSortBy || [[sortableColumns[0], 'ASC']]))
     }
 
+    const order = {}
+    sort.map(([key, value]: OrderPair) => {
+        order[key] = value
+    })
+
     const w: ObjectLiteral[] = []
     if (search && config.searchableColumns) {
         for (const column of config.searchableColumns) {
@@ -125,11 +130,6 @@ export async function paginateRepository<T>(
     }
 
     const where = w.length ? w : config.where || {}
-
-    const order = {}
-    sort.map(([key, value]: OrderPair) => {
-        order[key] = value
-    })
 
     const [items, total] = await repo.findAndCount({
         skip: (page - 1) * limit,
