@@ -170,9 +170,13 @@ export async function paginateQueryBuilder<T>(
         sort.push(...(config.defaultSortBy || [[sortableColumns[0], 'ASC']]))
     }
 
-    for (const order of sort) {
-        queryBuilder.addOrderBy(queryBuilder.alias + '.' + order[0], order[1])
-    }
+    sort.map((order, index) => {
+        if (index == 0) {
+            queryBuilder.orderBy(queryBuilder.alias + '.' + order[0], order[1])
+        } else {
+            queryBuilder.addOrderBy(queryBuilder.alias + '.' + order[0], order[1])
+        }
+    })
 
     const w: ObjectLiteral[] = []
     if (search && config.searchableColumns) {
