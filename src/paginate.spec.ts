@@ -77,7 +77,7 @@ describe('paginate', () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id'],
             defaultLimit: 5,
-            maxLimit: 2
+            maxLimit: 2,
         }
         const query: PaginateQuery = {
             path: '',
@@ -102,14 +102,14 @@ describe('paginate', () => {
 
         const { links } = await paginate<CatEntity>(query, repo, config)
 
-        expect(links.first).toBe('?page=1&limit=2&sortBy=id:ASC')
-        expect(links.previous).toBe('?page=1&limit=2&sortBy=id:ASC')
-        expect(links.current).toBe('?page=2&limit=2&sortBy=id:ASC')
-        expect(links.next).toBe('?page=3&limit=2&sortBy=id:ASC')
-        expect(links.last).toBe('?page=3&limit=2&sortBy=id:ASC')
+        expect(links.first).toBe('?page=1&limit=2&sort=id:ASC')
+        expect(links.previous).toBe('?page=1&limit=2&sort=id:ASC')
+        expect(links.current).toBe('?page=2&limit=2&sort=id:ASC')
+        expect(links.next).toBe('?page=3&limit=2&sort=id:ASC')
+        expect(links.last).toBe('?page=3&limit=2&sort=id:ASC')
     })
 
-    it('should default to defaultSortBy if query sortBy does not exist', async () => {
+    it('should default to defaultSortBy if query sort does not exist', async () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id', 'createdAt'],
             defaultSortBy: [['id', 'DESC']],
@@ -120,7 +120,7 @@ describe('paginate', () => {
 
         const result = await paginate<CatEntity>(query, repo, config)
 
-        expect(result.meta.sortBy).toStrictEqual([['id', 'DESC']])
+        expect(result.meta.sort).toStrictEqual([['id', 'DESC']])
         expect(result.data).toStrictEqual(cats.slice(0).reverse())
     })
 
@@ -130,7 +130,7 @@ describe('paginate', () => {
         }
         const query: PaginateQuery = {
             path: '',
-            sortBy: [
+            sort: [
                 ['color', 'DESC'],
                 ['name', 'ASC'],
             ],
@@ -138,7 +138,7 @@ describe('paginate', () => {
 
         const result = await paginate<CatEntity>(query, repo, config)
 
-        expect(result.meta.sortBy).toStrictEqual([
+        expect(result.meta.sort).toStrictEqual([
             ['color', 'DESC'],
             ['name', 'ASC'],
         ])
@@ -159,7 +159,7 @@ describe('paginate', () => {
 
         expect(result.meta.search).toStrictEqual('i')
         expect(result.data).toStrictEqual([cats[0], cats[1], cats[3], cats[4]])
-        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&search=i')
+        expect(result.links.current).toBe('?page=1&limit=20&sort=id:ASC&search=i')
     })
 
     it('should throw an error when no sortableColumns', async () => {

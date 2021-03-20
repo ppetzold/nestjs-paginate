@@ -4,7 +4,7 @@ import { Request } from 'express'
 export interface PaginateQuery {
     page?: number
     limit?: number
-    sortBy?: [string, string][]
+    sort?: [string, string][]
     search?: string
     path: string
 }
@@ -15,14 +15,14 @@ export const Paginate = createParamDecorator(
         const { query } = request
         const path = request.protocol + '://' + request.get('host') + request.baseUrl + request.path
 
-        const sortBy: [string, string][] = []
-        if (query.sortBy) {
-            const params = !Array.isArray(query.sortBy) ? [query.sortBy] : query.sortBy
+        const sort: [string, string][] = []
+        if (query.sort) {
+            const params = !Array.isArray(query.sort) ? [query.sort] : query.sort
             for (const param of params as string[]) {
                 if (typeof param === 'string') {
                     const items = param.split(':')
                     if (items.length === 2) {
-                        sortBy.push(items as [string, string])
+                        sort.push(items as [string, string])
                     }
                 }
             }
@@ -31,7 +31,7 @@ export const Paginate = createParamDecorator(
         return {
             page: query.page ? parseInt(query.page.toString(), 10) : undefined,
             limit: query.limit ? parseInt(query.limit.toString(), 10) : undefined,
-            sortBy: sortBy.length ? sortBy : undefined,
+            sort: sort.length ? sort : undefined,
             search: query.search ? query.search.toString() : undefined,
             path,
         }
