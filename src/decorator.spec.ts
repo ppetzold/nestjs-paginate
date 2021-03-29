@@ -41,7 +41,7 @@ describe('Decorator', () => {
         expect(result).toStrictEqual({
             page: undefined,
             limit: undefined,
-            sortBy: undefined,
+            sort: undefined,
             search: undefined,
             path: 'http://localhost/items',
         })
@@ -51,7 +51,7 @@ describe('Decorator', () => {
         const context = contextFactory({
             page: '1',
             limit: '20',
-            sortBy: ['id:ASC', 'createdAt:DESC'],
+            sort: ['id:ASC', 'createdAt:DESC'],
             search: 'white',
         })
 
@@ -60,7 +60,7 @@ describe('Decorator', () => {
         expect(result).toStrictEqual({
             page: 1,
             limit: 20,
-            sortBy: [
+            sort: [
                 ['id', 'ASC'],
                 ['createdAt', 'DESC'],
             ],
