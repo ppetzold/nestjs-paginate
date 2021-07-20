@@ -25,6 +25,7 @@ jobs:
       - run: npm run test:cov
       - run: bash <(curl -s https://codecov.io/bash)
       - name: Semantic Release
+        if: github.event_name == 'push' && matrix.node-version == '14.x'
         uses: cycjimmy/semantic-release-action@v2
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
