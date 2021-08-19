@@ -115,11 +115,8 @@ export async function paginate<T>(
         }
     }
 
-    let hasWhereClause = false
-
     if (config.where) {
-        queryBuilder = queryBuilder.where(config.where)
-        hasWhereClause = true
+        queryBuilder = queryBuilder.andWhere(config.where)
     }
 
     if (query.search && config.searchableColumns) {
@@ -127,8 +124,7 @@ export async function paginate<T>(
         for (const column of config.searchableColumns) {
             search.push({ [column]: ILike(`%${query.search}%`) })
         }
-        queryBuilder = queryBuilder[hasWhereClause ? 'andWhere' : 'where'](search)
-        hasWhereClause = true
+        queryBuilder = queryBuilder.andWhere(search)
     }
 
     if (query.filter) {
@@ -196,7 +192,7 @@ export async function paginate<T>(
             }
         }
 
-        queryBuilder = queryBuilder[hasWhereClause ? 'andWhere' : 'where'](filter)
+        queryBuilder = queryBuilder.andWhere(filter)
     }
 
     ;[items, totalItems] = await queryBuilder.getManyAndCount()
