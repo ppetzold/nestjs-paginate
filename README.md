@@ -13,7 +13,7 @@ Pagination and filtering helper method for TypeORM repositories or query builder
 - Pagination conforms to [JSON:API](https://jsonapi.org/)
 - Sort by multiple columns
 - Search across columns
-- Filter using operators *(in progress)*
+- Filter using operators (`$eq`, `$not`, `$null`, `$in`, `$gt`, `$gte`, `$lt`, `$lte`)
 
 ## Installation
 
@@ -30,7 +30,7 @@ The following code exposes a route that can be utilized like so:
 #### Endpoint
 
 ```url
-http://localhost:3000/cats?limit=5&page=2&sortBy=color:DESC&search=i
+http://localhost:3000/cats?limit=5&page=2&sortBy=color:DESC&search=i&filter.age=$gte:3
 ```
 
 #### Result
@@ -41,27 +41,32 @@ http://localhost:3000/cats?limit=5&page=2&sortBy=color:DESC&search=i
     {
       "id": 4,
       "name": "George",
-      "color": "white"
+      "color": "white",
+      "age": 3
     },
     {
       "id": 5,
       "name": "Leche",
-      "color": "white"
+      "color": "white",
+      "age": 6
     },
     {
       "id": 2,
       "name": "Garfield",
-      "color": "ginger"
+      "color": "ginger",
+      "age": 4
     },
     {
       "id": 1,
       "name": "Milo",
-      "color": "brown"
+      "color": "brown",
+      "age": 5
     },
     {
       "id": 3,
       "name": "Kitty",
-      "color": "black"
+      "color": "black",
+      "age": 3
     }
   ],
   "meta": {
@@ -70,14 +75,17 @@ http://localhost:3000/cats?limit=5&page=2&sortBy=color:DESC&search=i
     "currentPage": 2,
     "totalPages": 3,
     "sortBy": [["color", "DESC"]],
-    "search": "i"
+    "search": "i",
+    "filter": {
+      "age": "$gte:3"
+    }
   },
   "links": {
-    "first": "http://localhost:3000/cats?limit=5&page=1&sortBy=color:DESC&search=i",
-    "previous": "http://localhost:3000/cats?limit=5&page=1&sortBy=color:DESC&search=i",
-    "current": "http://localhost:3000/cats?limit=5&page=2&sortBy=color:DESC&search=i",
-    "next": "http://localhost:3000/cats?limit=5&page=3&sortBy=color:DESC&search=i",
-    "last": "http://localhost:3000/cats?limit=5&page=3&sortBy=color:DESC&search=i"
+    "first": "http://localhost:3000/cats?limit=5&page=1&sortBy=color:DESC&search=i&filter.age=$gte:3",
+    "previous": "http://localhost:3000/cats?limit=5&page=1&sortBy=color:DESC&search=i&filter.age=$gte:3",
+    "current": "http://localhost:3000/cats?limit=5&page=2&sortBy=color:DESC&search=i&filter.age=$gte:3",
+    "next": "http://localhost:3000/cats?limit=5&page=3&sortBy=color:DESC&search=i&filter.age=$gte:3",
+    "last": "http://localhost:3000/cats?limit=5&page=3&sortBy=color:DESC&search=i&filter.age=$gte:3"
   }
 }
 ```
@@ -88,7 +96,7 @@ http://localhost:3000/cats?limit=5&page=2&sortBy=color:DESC&search=i
 import { Controller, Injectable, Get } from '@nestjs/common'
 import { InjectRepository } from '@nestjs/typeorm'
 import { Repository, Entity, PrimaryGeneratedColumn, Column } from 'typeorm'
-import { Paginate, PaginateQuery, paginate, Paginated } from 'nestjs-paginate'
+import { FilterOperator, Paginate, PaginateQuery, paginate, Paginated } from 'nestjs-paginate'
 
 @Entity()
 export class CatEntity {
@@ -100,6 +108,9 @@ export class CatEntity {
 
   @Column('text')
   color: string
+
+  @Column('int')
+  age: number
 }
 
 @Injectable()
@@ -114,6 +125,9 @@ export class CatsService {
       sortableColumns: ['id', 'name', 'color'],
       searchableColumns: ['name', 'color'],
       defaultSortBy: [['id', 'DESC']],
+      filterableColumns: {
+        age: [FilterOperator.GTE, FilterOperator.LTE],
+      },
     })
   }
 }
@@ -177,5 +191,13 @@ const paginateConfig: PaginateConfig<CatEntity> {
    * https://typeorm.io/#/find-optionsfind-options.md
    */
   where: { color: 'ginger' }
+
+  /**
+   * Required: false
+   * Type: FilterOperator - Based on TypeORM find operators
+   * Default: None
+   * Find more at https://typeorm.io/#/find-options/advanced-options
+   */
+  filterableColumns: { age: [FilterOperator.EQ, FilterOperator.IN] }
 }
 ```

@@ -32,6 +32,7 @@
     "@nestjs/common": "^8.0.6",
     "@types/express": "^4.17.13",
     "@types/jest": "^27.0.1",
+    "@types/lodash": "^4.14.172",
     "@types/node": "^16.6.2",
     "@typescript-eslint/eslint-plugin": "^4.29.2",
     "@typescript-eslint/parser": "^4.29.2",
@@ -82,5 +83,8 @@
     "branches": [
       "master"
     ]
+  },
+  "dependencies": {
+    "lodash": "^4.17.21"
   }
 }
