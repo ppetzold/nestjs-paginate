@@ -95,8 +95,8 @@ http://localhost:3000/cats?limit=5&page=2&sortBy=color:DESC&search=i&filter.age=
 ```ts
 import { Controller, Injectable, Get } from '@nestjs/common'
 import { InjectRepository } from '@nestjs/typeorm'
-import { Repository, Entity, PrimaryGeneratedColumn, Column } from 'typeorm'
 import { FilterOperator, Paginate, PaginateQuery, paginate, Paginated } from 'nestjs-paginate'
+import { Repository, Entity, PrimaryGeneratedColumn, Column } from 'typeorm'
 
 @Entity()
 export class CatEntity {
@@ -122,8 +122,8 @@ export class CatsService {
 
   public findAll(query: PaginateQuery): Promise<Paginated<CatEntity>> {
     return paginate(query, this.catsRepository, {
-      sortableColumns: ['id', 'name', 'color'],
-      searchableColumns: ['name', 'color'],
+      sortableColumns: ['id', 'name', 'color', 'age'],
+      searchableColumns: ['name', 'color', 'age'],
       defaultSortBy: [['id', 'DESC']],
       filterableColumns: {
         age: [FilterOperator.GTE, FilterOperator.LTE],
@@ -156,6 +156,14 @@ const paginateConfig: PaginateConfig<CatEntity> {
 
   /**
    * Required: false
+   * Type: [keyof CatEntity, 'ASC' | 'DESC'][]
+   * Default: [[sortableColumns[0], 'ASC]]
+   * Description: The order to display the sorted entities.
+   */
+  defaultSortBy: [['name', 'DESC']],
+
+  /**
+   * Required: false
    * Type: (keyof CatEntity)[]
    * Description: These columns will be searched through when using the search query param.
    */
@@ -168,14 +176,6 @@ const paginateConfig: PaginateConfig<CatEntity> {
    * Description: The maximum amount of entities to return per page.
    */
   maxLimit: 20,
-
-  /**
-   * Required: false
-   * Type: [keyof CatEntity, 'ASC' | 'DESC'][]
-   * Default: [[sortableColumns[0], 'ASC]]
-   * Description: The order to display the sorted entities.
-   */
-  defaultSortBy: [['name', 'DESC']],
 
   /**
    * Required: false
@@ -194,9 +194,9 @@ const paginateConfig: PaginateConfig<CatEntity> {
 
   /**
    * Required: false
-   * Type: FilterOperator - Based on TypeORM find operators
+   * Type: { [key in CatEntity]?: FilterOperator[] } - Operators based on TypeORM find operators
    * Default: None
-   * Find more at https://typeorm.io/#/find-options/advanced-options
+   * https://typeorm.io/#/find-options/advanced-options
    */
   filterableColumns: { age: [FilterOperator.EQ, FilterOperator.IN] }
 }
