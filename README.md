@@ -190,7 +190,7 @@ const paginateConfig: PaginateConfig<CatEntity> {
    * Default: None
    * https://typeorm.io/#/find-optionsfind-options.md
    */
-  where: { color: 'ginger' }
+  where: { color: 'ginger' },
 
   /**
    * Required: false
