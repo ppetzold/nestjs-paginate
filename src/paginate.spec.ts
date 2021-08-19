@@ -1,5 +1,5 @@
-import { createConnection, Repository, Column } from 'typeorm'
-import { Paginated, paginate, PaginateConfig } from './paginate'
+import { createConnection, Repository, Column, In } from 'typeorm'
+import { Paginated, paginate, PaginateConfig, FilterOperator } from './paginate'
 import { PaginateQuery } from './decorator'
 import { Entity, PrimaryGeneratedColumn, CreateDateColumn } from 'typeorm'
 import { HttpException } from '@nestjs/common'
@@ -14,6 +14,9 @@ export class CatEntity {
 
     @Column()
     color: string
+
+    @Column({ nullable: true })
+    age: number | null
 
     @CreateDateColumn()
     createdAt: string
@@ -33,18 +36,18 @@ describe('paginate', () => {
         })
         repo = connection.getRepository(CatEntity)
         cats = await repo.save([
-            repo.create({ name: 'Milo', color: 'brown' }),
-            repo.create({ name: 'Garfield', color: 'ginger' }),
-            repo.create({ name: 'Shadow', color: 'black' }),
-            repo.create({ name: 'George', color: 'white' }),
-            repo.create({ name: 'Leche', color: 'white' }),
+            repo.create({ name: 'Milo', color: 'brown', age: 6 }),
+            repo.create({ name: 'Garfield', color: 'ginger', age: null }),
+            repo.create({ name: 'Shadow', color: 'black', age: 4 }),
+            repo.create({ name: 'George', color: 'white', age: 3 }),
+            repo.create({ name: 'Leche', color: 'white', age: null }),
         ])
     })
 
     it('should return an instance of Paginated', async () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id'],
-            defaultSortBy: [['createdAt', 'DESC']],
+            defaultSortBy: [['id', 'ASC']],
             defaultLimit: 1,
         }
         const query: PaginateQuery = {
@@ -160,6 +163,205 @@ describe('paginate', () => {
         expect(result.meta.search).toStrictEqual('i')
         expect(result.data).toStrictEqual([cats[0], cats[1], cats[3], cats[4]])
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&search=i')
+    })
+
+    it('should return result based on where config and filter', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            where: {
+                color: 'white',
+            },
+            filterableColumns: {
+                name: [FilterOperator.NOT],
+            },
+        }
+        const query: PaginateQuery = {
+            path: '',
+            filter: {
+                name: '$not:Leche',
+            },
+        }
+
+        const result = await paginate<CatEntity>(query, repo, config)
+
+        expect(result.meta.filter).toStrictEqual({
+            name: '$not:Leche',
+        })
+        expect(result.data).toStrictEqual([cats[3]])
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.name=$not:Leche')
+    })
+
+    it('should return result based on multiple filter', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            filterableColumns: {
+                name: [FilterOperator.NOT],
+                color: [FilterOperator.EQ],
+            },
+        }
+        const query: PaginateQuery = {
+            path: '',
+            filter: {
+                name: '$not:Leche',
+                color: 'white',
+            },
+        }
+
+        const result = await paginate<CatEntity>(query, repo, config)
+
+        expect(result.meta.filter).toStrictEqual({
+            name: '$not:Leche',
+            color: 'white',
+        })
+        expect(result.data).toStrictEqual([cats[3]])
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.name=$not:Leche&filter.color=white')
+    })
+
+    it('should return result based on filter and search term', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            searchableColumns: ['name', 'color'],
+            filterableColumns: {
+                id: [FilterOperator.NOT, FilterOperator.IN],
+            },
+        }
+        const query: PaginateQuery = {
+            path: '',
+            search: 'white',
+            filter: {
+                id: '$not:$in:1,2,5',
+            },
+        }
+
+        const result = await paginate<CatEntity>(query, repo, config)
+
+        expect(result.meta.search).toStrictEqual('white')
+        expect(result.meta.filter).toStrictEqual({ id: '$not:$in:1,2,5' })
+        expect(result.data).toStrictEqual([cats[3]])
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&search=white&filter.id=$not:$in:1,2,5')
+    })
+
+    it('should return result based on filter and where config', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            where: {
+                color: In(['black', 'white']),
+            },
+            filterableColumns: {
+                id: [FilterOperator.NOT, FilterOperator.IN],
+            },
+        }
+        const query: PaginateQuery = {
+            path: '',
+            filter: {
+                id: '$not:$in:1,2,5',
+            },
+        }
+
+        const result = await paginate<CatEntity>(query, repo, config)
+
+        expect(result.data).toStrictEqual([cats[2], cats[3]])
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.id=$not:$in:1,2,5')
+    })
+
+    it('should return result based on range filter', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            filterableColumns: {
+                age: [FilterOperator.GTE],
+            },
+        }
+        const query: PaginateQuery = {
+            path: '',
+            filter: {
+                age: '$gte:4',
+            },
+        }
+
+        const result = await paginate<CatEntity>(query, repo, config)
+
+        expect(result.data).toStrictEqual([cats[0], cats[2]])
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.age=$gte:4')
+    })
+
+    it('should return result based on is null query', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            filterableColumns: {
+                age: [FilterOperator.NULL],
+            },
+        }
+        const query: PaginateQuery = {
+            path: '',
+            filter: {
+                age: '$null',
+            },
+        }
+
+        const result = await paginate<CatEntity>(query, repo, config)
+
+        expect(result.data).toStrictEqual([cats[1], cats[4]])
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.age=$null')
+    })
+
+    it('should return result based on not null query', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            filterableColumns: {
+                age: [FilterOperator.NOT, FilterOperator.NULL],
+            },
+        }
+        const query: PaginateQuery = {
+            path: '',
+            filter: {
+                age: '$not:$null',
+            },
+        }
+
+        const result = await paginate<CatEntity>(query, repo, config)
+
+        expect(result.data).toStrictEqual([cats[0], cats[2], cats[3]])
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.age=$not:$null')
+    })
+
+    it('should ignore filterable column which is not configured', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            filterableColumns: {
+                name: [FilterOperator.NOT, FilterOperator.NULL],
+            },
+        }
+        const query: PaginateQuery = {
+            path: '',
+            filter: {
+                age: '$not:$null',
+            },
+        }
+
+        const result = await paginate<CatEntity>(query, repo, config)
+
+        expect(result.data).toStrictEqual(cats)
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.age=$not:$null')
+    })
+
+    it('should ignore filter operator which is not configured', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            filterableColumns: {
+                age: [FilterOperator.NOT],
+            },
+        }
+        const query: PaginateQuery = {
+            path: '',
+            filter: {
+                age: '$not:$null',
+            },
+        }
+
+        const result = await paginate<CatEntity>(query, repo, config)
+
+        expect(result.data).toStrictEqual(cats)
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.age=$not:$null')
     })
 
     it('should throw an error when no sortableColumns', async () => {

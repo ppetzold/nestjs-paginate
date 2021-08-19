@@ -43,6 +43,7 @@ describe('Decorator', () => {
             limit: undefined,
             sortBy: undefined,
             search: undefined,
+            filter: undefined,
             path: 'http://localhost/items',
         })
     })
@@ -53,6 +54,8 @@ describe('Decorator', () => {
             limit: '20',
             sortBy: ['id:ASC', 'createdAt:DESC'],
             search: 'white',
+            'filter.name': '$not:$eq:Kitty',
+            'filter.createdAt': ['$gte:2020-01-01', '$lte:2020-12-31'],
         })
 
         const result: PaginateQuery = decoratorfactory(null, context)
@@ -66,6 +69,10 @@ describe('Decorator', () => {
             ],
             search: 'white',
             path: 'http://localhost/items',
+            filter: {
+                name: '$not:$eq:Kitty',
+                createdAt: ['$gte:2020-01-01', '$lte:2020-12-31'],
+            },
         })
     })
 })

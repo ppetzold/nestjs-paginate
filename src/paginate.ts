@@ -1,6 +1,23 @@
-import { Repository, FindConditions, SelectQueryBuilder, ObjectLiteral, ILike } from 'typeorm'
+import {
+    Repository,
+    FindConditions,
+    SelectQueryBuilder,
+    ObjectLiteral,
+    FindOperator,
+    Equal,
+    MoreThan,
+    MoreThanOrEqual,
+    In,
+    IsNull,
+    LessThan,
+    LessThanOrEqual,
+    Not,
+    ILike,
+} from 'typeorm'
 import { PaginateQuery } from './decorator'
 import { ServiceUnavailableException } from '@nestjs/common'
+import { values, mapKeys } from 'lodash'
+import { stringify } from 'querystring'
 
 type Column<T> = Extract<keyof T, string>
 type Order<T> = [Column<T>, 'ASC' | 'DESC']
@@ -15,6 +32,7 @@ export class Paginated<T> {
         totalPages: number
         sortBy: SortBy<T>
         search: string
+        filter?: { [column: string]: string | string[] }
     }
     links: {
         first?: string
@@ -32,7 +50,18 @@ export interface PaginateConfig<T> {
     defaultSortBy?: SortBy<T>
     defaultLimit?: number
     where?: FindConditions<T>
-    queryBuilder?: SelectQueryBuilder<T>
+    filterableColumns?: { [key in Column<T>]?: FilterOperator[] }
+}
+
+export enum FilterOperator {
+    EQ = '$eq',
+    GT = '$gt',
+    GTE = '$gte',
+    IN = '$in',
+    NULL = '$null',
+    LT = '$lt',
+    LTE = '$lte',
+    NOT = '$not',
 }
 
 export async function paginate<T>(
@@ -43,7 +72,6 @@ export async function paginate<T>(
     let page = query.page || 1
     const limit = Math.min(query.limit || config.defaultLimit || 20, config.maxLimit || 100)
     const sortBy = [] as SortBy<T>
-    const search = query.search
     const path = query.path
 
     function isEntityKey(sortableColumns: Column<T>[], column: string): column is Column<T> {
@@ -87,21 +115,108 @@ export async function paginate<T>(
         }
     }
 
-    const where: ObjectLiteral[] = []
-    if (search && config.searchableColumns) {
-        for (const column of config.searchableColumns) {
-            where.push({ [column]: ILike(`%${search}%`), ...config.where })
-        }
+    let hasWhereClause = false
+
+    if (config.where) {
+        queryBuilder = queryBuilder.where(config.where)
+        hasWhereClause = true
     }
 
-    ;[items, totalItems] = await queryBuilder.where(where.length ? where : config.where || {}).getManyAndCount()
+    if (query.search && config.searchableColumns) {
+        const search: ObjectLiteral[] = []
+        for (const column of config.searchableColumns) {
+            search.push({ [column]: ILike(`%${query.search}%`) })
+        }
+        queryBuilder = queryBuilder[hasWhereClause ? 'andWhere' : 'where'](search)
+        hasWhereClause = true
+    }
+
+    if (query.filter) {
+        const filter = {}
+        function getOperatorFn(op: FilterOperator): (...args: any[]) => FindOperator<T> {
+            switch (op) {
+                case FilterOperator.EQ:
+                    return Equal
+                case FilterOperator.GT:
+                    return MoreThan
+                case FilterOperator.GTE:
+                    return MoreThanOrEqual
+                case FilterOperator.IN:
+                    return In
+                case FilterOperator.NULL:
+                    return IsNull
+                case FilterOperator.LT:
+                    return LessThan
+                case FilterOperator.LTE:
+                    return LessThanOrEqual
+                case FilterOperator.NOT:
+                    return Not
+            }
+        }
+        function isOperator(value: any): value is FilterOperator {
+            return values(FilterOperator).includes(value)
+        }
+        for (const column of Object.keys(query.filter)) {
+            if (!(column in config.filterableColumns)) {
+                continue
+            }
+            const allowedOperators = config.filterableColumns[column as Column<T>]
+            const input = query.filter[column]
+            const statements = !Array.isArray(input) ? [input] : input
+            for (const raw of statements) {
+                const tokens = raw.split(':')
+                if (tokens.length === 0 || tokens.length > 3) {
+                    continue
+                } else if (tokens.length === 2) {
+                    if (tokens[1] !== FilterOperator.NULL) {
+                        tokens.unshift(null)
+                    }
+                } else if (tokens.length === 1) {
+                    if (tokens[0] === FilterOperator.NULL) {
+                        tokens.unshift(null)
+                    } else {
+                        tokens.unshift(null, FilterOperator.EQ)
+                    }
+                }
+                const [op2, op1, value] = tokens
+
+                if (!isOperator(op1) || !allowedOperators.includes(op1)) {
+                    continue
+                }
+                if (isOperator(op2) && !allowedOperators.includes(op2)) {
+                    continue
+                }
+                if (isOperator(op1)) {
+                    const args = op1 === FilterOperator.IN ? value.split(',') : value
+                    filter[column] = getOperatorFn(op1)(args)
+                }
+                if (isOperator(op2)) {
+                    filter[column] = getOperatorFn(op2)(filter[column])
+                }
+            }
+        }
+
+        queryBuilder = queryBuilder[hasWhereClause ? 'andWhere' : 'where'](filter)
+    }
+
+    ;[items, totalItems] = await queryBuilder.getManyAndCount()
 
     let totalPages = totalItems / limit
     if (totalItems % limit) totalPages = Math.ceil(totalPages)
 
-    const options = `&limit=${limit}${sortBy.map((order) => `&sortBy=${order.join(':')}`).join('')}${
-        search ? `&search=${search}` : ''
-    }`
+    const sortByQuery = sortBy.map((order) => `&sortBy=${order.join(':')}`).join('')
+    const searchQuery = query.search ? `&search=${query.search}` : ''
+    const filterQuery = query.filter
+        ? '&' +
+          stringify(
+              mapKeys(query.filter, (_param, name) => 'filter.' + name),
+              '&',
+              '=',
+              { encodeURIComponent: (str) => str }
+          )
+        : ''
+
+    const options = `&limit=${limit}${sortByQuery}${searchQuery}${filterQuery}`
 
     const buildLink = (p: number): string => path + '?page=' + p + options
 
@@ -113,7 +228,8 @@ export async function paginate<T>(
             currentPage: page,
             totalPages: totalPages,
             sortBy,
-            search,
+            search: query.search,
+            filter: query.filter,
         },
         links: {
             first: page == 1 ? undefined : buildLink(1),
