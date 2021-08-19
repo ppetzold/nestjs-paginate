@@ -77,7 +77,7 @@ describe('paginate', () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id'],
             defaultLimit: 5,
-            maxLimit: 2
+            maxLimit: 2,
         }
         const query: PaginateQuery = {
             path: '',

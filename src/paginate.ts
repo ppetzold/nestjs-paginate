@@ -1,4 +1,4 @@
-import { Repository, FindConditions, SelectQueryBuilder, Like, ObjectLiteral } from 'typeorm'
+import { Repository, FindConditions, SelectQueryBuilder, ObjectLiteral, ILike } from 'typeorm'
 import { PaginateQuery } from './decorator'
 import { ServiceUnavailableException } from '@nestjs/common'
 
@@ -41,7 +41,7 @@ export async function paginate<T>(
     config: PaginateConfig<T>
 ): Promise<Paginated<T>> {
     let page = query.page || 1
-    const limit = Math.min(query.limit || config.defaultLimit || 20, config.maxLimit || 100);
+    const limit = Math.min(query.limit || config.defaultLimit || 20, config.maxLimit || 100)
     const sortBy = [] as SortBy<T>
     const search = query.search
     const path = query.path
@@ -90,7 +90,7 @@ export async function paginate<T>(
     const where: ObjectLiteral[] = []
     if (search && config.searchableColumns) {
         for (const column of config.searchableColumns) {
-            where.push({ [column]: Like(`%${search}%`), ...config.where })
+            where.push({ [column]: ILike(`%${search}%`), ...config.where })
         }
     }
 
