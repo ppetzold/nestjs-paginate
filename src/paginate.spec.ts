@@ -191,6 +191,37 @@ describe('paginate', () => {
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.name=$not:Leche')
     })
 
+    it('should return result based on where array and filter', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            where: [
+                {
+                    color: 'white',
+                },
+                {
+                    age: 4,
+                },
+            ],
+            filterableColumns: {
+                name: [FilterOperator.NOT],
+            },
+        }
+        const query: PaginateQuery = {
+            path: '',
+            filter: {
+                name: '$not:Leche',
+            },
+        }
+
+        const result = await paginate<CatEntity>(query, repo, config)
+
+        expect(result.meta.filter).toStrictEqual({
+            name: '$not:Leche',
+        })
+        expect(result.data).toStrictEqual([cats[2], cats[3]])
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.name=$not:Leche')
+    })
+
     it('should return result based on multiple filter', async () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id'],
