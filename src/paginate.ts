@@ -49,7 +49,7 @@ export interface PaginateConfig<T> {
     maxLimit?: number
     defaultSortBy?: SortBy<T>
     defaultLimit?: number
-    where?: FindConditions<T>
+    where?: FindConditions<T> | FindConditions<T>[]
     filterableColumns?: { [key in Column<T>]?: FilterOperator[] }
 }
 
