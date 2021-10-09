@@ -43,6 +43,7 @@ describe('Decorator', () => {
             limit: undefined,
             sortBy: undefined,
             search: undefined,
+            searchBy: undefined,
             filter: undefined,
             path: 'http://localhost/items',
         })
@@ -68,6 +69,7 @@ describe('Decorator', () => {
                 ['createdAt', 'DESC'],
             ],
             search: 'white',
+            searchBy: undefined,
             path: 'http://localhost/items',
             filter: {
                 name: '$not:$eq:Kitty',

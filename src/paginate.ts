@@ -31,6 +31,7 @@ export class Paginated<T> {
         currentPage: number
         totalPages: number
         sortBy: SortBy<T>
+        searchBy: Column<T>[]
         search: string
         filter?: { [column: string]: string | string[] }
     }
@@ -72,13 +73,14 @@ export async function paginate<T>(
     let page = query.page || 1
     const limit = Math.min(query.limit || config.defaultLimit || 20, config.maxLimit || 100)
     const sortBy = [] as SortBy<T>
+    const searchBy: Column<T>[] = []
     const path = query.path
 
-    function isEntityKey(sortableColumns: Column<T>[], column: string): column is Column<T> {
-        return !!sortableColumns.find((c) => c === column)
+    function isEntityKey(entityColumns: Column<T>[], column: string): column is Column<T> {
+        return !!entityColumns.find((c) => c === column)
     }
 
-    const { sortableColumns } = config
+    const { sortableColumns, searchableColumns } = config
     if (config.sortableColumns.length < 1) throw new ServiceUnavailableException()
 
     if (query.sortBy) {
@@ -88,8 +90,21 @@ export async function paginate<T>(
             }
         }
     }
+
     if (!sortBy.length) {
         sortBy.push(...(config.defaultSortBy || [[sortableColumns[0], 'ASC']]))
+    }
+
+    if (query.searchBy && searchableColumns) {
+        for (const column of query.searchBy) {
+            if (isEntityKey(searchableColumns, column)) {
+                searchBy.push(column as Column<T>)
+            }
+        }
+    }
+
+    if (!query.searchBy && searchableColumns) {
+        searchBy.push(...searchableColumns)
     }
 
     if (page < 1) page = 1
@@ -119,9 +134,9 @@ export async function paginate<T>(
         queryBuilder = queryBuilder.andWhere(config.where)
     }
 
-    if (query.search && config.searchableColumns) {
+    if (query.search && searchBy) {
         const search: ObjectLiteral[] = []
-        for (const column of config.searchableColumns) {
+        for (const column of searchBy) {
             search.push({ [column]: ILike(`%${query.search}%`) })
         }
         queryBuilder = queryBuilder.andWhere(search)
@@ -225,6 +240,7 @@ export async function paginate<T>(
             totalPages: totalPages,
             sortBy,
             search: query.search,
+            searchBy,
             filter: query.filter,
         },
         links: {
