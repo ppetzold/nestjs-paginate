@@ -117,7 +117,7 @@ export async function paginate<T>(
     }
 
     if (config.where) {
-        queryBuilder = queryBuilder.andWhere(new Brackets(queryBuilder => queryBuilder.andWhere(config.where)))
+        queryBuilder = queryBuilder.andWhere(new Brackets(queryBuilder => queryBuilder.andWhere(config.where))) // Postgres fix (https://github.com/ppetzold/nestjs-paginate/pull/97)
     }
 
     if (query.search && config.searchableColumns) {
