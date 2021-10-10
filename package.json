@@ -42,7 +42,7 @@
     "jest": "^27.2.5",
     "prettier": "^2.4.1",
     "reflect-metadata": "^0.1.13",
-    "rxjs": "^7.3.1",
+    "rxjs": "^7.4.0",
     "sqlite3": "^5.0.2",
     "ts-jest": "^27.0.5",
     "ts-node": "^10.2.1",
