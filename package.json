@@ -22,6 +22,7 @@
     "prebuild": "rimraf lib",
     "build": "tsc",
     "format": "prettier --write \"src/**/*.ts\"",
+    "format:check": "prettier --list-different \"src/**/*.ts\"",
     "lint": "eslint -c .eslintrc.json --ext .ts --max-warnings 0 src",
     "test": "jest",
     "test:watch": "jest --watch",
