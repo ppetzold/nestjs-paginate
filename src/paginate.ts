@@ -13,6 +13,7 @@ import {
     LessThanOrEqual,
     Not,
     ILike,
+    Brackets
 } from 'typeorm'
 import { PaginateQuery } from './decorator'
 import { ServiceUnavailableException } from '@nestjs/common'
@@ -116,7 +117,7 @@ export async function paginate<T>(
     }
 
     if (config.where) {
-        queryBuilder = queryBuilder.andWhere(config.where)
+        queryBuilder = queryBuilder.andWhere(new Brackets(queryBuilder => queryBuilder.andWhere(config.where))) // Postgres fix (https://github.com/ppetzold/nestjs-paginate/pull/97)
     }
 
     if (query.search && config.searchableColumns) {
@@ -204,12 +205,12 @@ export async function paginate<T>(
     const searchQuery = query.search ? `&search=${query.search}` : ''
     const filterQuery = query.filter
         ? '&' +
-          stringify(
-              mapKeys(query.filter, (_param, name) => 'filter.' + name),
-              '&',
-              '=',
-              { encodeURIComponent: (str) => str }
-          )
+        stringify(
+            mapKeys(query.filter, (_param, name) => 'filter.' + name),
+            '&',
+            '=',
+            { encodeURIComponent: (str) => str }
+        )
         : ''
 
     const options = `&limit=${limit}${sortByQuery}${searchQuery}${filterQuery}`
