@@ -134,7 +134,7 @@ export async function paginate<T>(
         queryBuilder = queryBuilder.andWhere(config.where)
     }
 
-    if (query.search && searchBy) {
+    if (query.search && searchBy.length) {
         const search: ObjectLiteral[] = []
         for (const column of searchBy) {
             search.push({ [column]: ILike(`%${query.search}%`) })
