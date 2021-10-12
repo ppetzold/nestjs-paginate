@@ -244,7 +244,7 @@ export async function paginate<T>(
             totalPages: totalPages,
             sortBy,
             search: query.search,
-            searchBy,
+            searchBy: query.search ? searchBy : undefined,
             filter: query.filter,
         },
         links: {
