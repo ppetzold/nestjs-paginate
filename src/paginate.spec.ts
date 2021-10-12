@@ -165,6 +165,29 @@ describe('paginate', () => {
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&search=i')
     })
 
+    it('should return result based on search term and searchBy columns', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id', 'name', 'color'],
+            searchableColumns: ['name', 'color'],
+        }
+
+        const searchTerm = 'white'
+        const expectedResultData = cats.filter((cat: CatEntity) => cat.color === searchTerm)
+
+        const query: PaginateQuery = {
+            path: '',
+            search: searchTerm,
+            searchBy: ['color'],
+        }
+
+        const result = await paginate<CatEntity>(query, repo, config)
+
+        expect(result.meta.search).toStrictEqual(searchTerm)
+        expect(result.meta.searchBy).toStrictEqual(['color'])
+        expect(result.data).toStrictEqual(expectedResultData)
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&search=white&searchBy=color')
+    })
+
     it('should return result based on where config and filter', async () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id'],
