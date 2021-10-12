@@ -101,9 +101,7 @@ export async function paginate<T>(
                 searchBy.push(column as Column<T>)
             }
         }
-    }
-
-    if (!query.searchBy && searchableColumns) {
+    } else if (!query.searchBy && searchableColumns) {
         searchBy.push(...searchableColumns)
     }
 
@@ -217,6 +215,12 @@ export async function paginate<T>(
 
     const sortByQuery = sortBy.map((order) => `&sortBy=${order.join(':')}`).join('')
     const searchQuery = query.search ? `&search=${query.search}` : ''
+
+    const searchByQuery =
+        query.search && query.searchBy && searchBy.length
+            ? searchBy.map((column) => `&searchBy=${column}`).join('')
+            : ''
+
     const filterQuery = query.filter
         ? '&' +
           stringify(
@@ -227,7 +231,7 @@ export async function paginate<T>(
           )
         : ''
 
-    const options = `&limit=${limit}${sortByQuery}${searchQuery}${filterQuery}`
+    const options = `&limit=${limit}${sortByQuery}${searchQuery}${filterQuery}${searchByQuery}`
 
     const buildLink = (p: number): string => path + '?page=' + p + options
 
