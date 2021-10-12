@@ -81,29 +81,30 @@ export async function paginate<T>(
         return !!entityColumns.find((c) => c === column)
     }
 
-    const { sortableColumns, searchableColumns } = config
     if (config.sortableColumns.length < 1) throw new ServiceUnavailableException()
 
     if (query.sortBy) {
         for (const order of query.sortBy) {
-            if (isEntityKey(sortableColumns, order[0]) && ['ASC', 'DESC'].includes(order[1])) {
+            if (isEntityKey(config.sortableColumns, order[0]) && ['ASC', 'DESC'].includes(order[1])) {
                 sortBy.push(order as Order<T>)
             }
         }
     }
 
     if (!sortBy.length) {
-        sortBy.push(...(config.defaultSortBy || [[sortableColumns[0], 'ASC']]))
+        sortBy.push(...(config.defaultSortBy || [[config.sortableColumns[0], 'ASC']]))
     }
 
-    if (query.searchBy && searchableColumns) {
-        for (const column of query.searchBy) {
-            if (isEntityKey(searchableColumns, column)) {
-                searchBy.push(column as Column<T>)
+    if (config.searchableColumns) {
+        if (query.searchBy) {
+            for (const column of query.searchBy) {
+                if (isEntityKey(config.searchableColumns, column)) {
+                    searchBy.push(column)
+                }
             }
+        } else {
+            searchBy.push(...config.searchableColumns)
         }
-    } else if (!query.searchBy && searchableColumns) {
-        searchBy.push(...searchableColumns)
     }
 
     if (page < 1) page = 1
@@ -232,7 +233,7 @@ export async function paginate<T>(
           )
         : ''
 
-    const options = `&limit=${limit}${sortByQuery}${searchQuery}${filterQuery}${searchByQuery}`
+    const options = `&limit=${limit}${sortByQuery}${searchQuery}${searchByQuery}${filterQuery}`
 
     const buildLink = (p: number): string => path + '?page=' + p + options
 

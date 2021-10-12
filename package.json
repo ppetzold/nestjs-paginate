@@ -50,6 +50,9 @@
     "typeorm": "^0.2.38",
     "typescript": "^4.4.3"
   },
+  "dependencies": {
+    "lodash": "^4.17.21"
+  },
   "peerDependencies": {
     "@nestjs/common": "^8.0.11",
     "express": "^4.17.1",
@@ -84,8 +87,5 @@
     "branches": [
       "master"
     ]
-  },
-  "dependencies": {
-    "lodash": "^4.17.21"
   }
 }
