@@ -219,9 +219,7 @@ export async function paginate<T>(
     const searchQuery = query.search ? `&search=${query.search}` : ''
 
     const searchByQuery =
-        query.search && query.searchBy && searchBy.length
-            ? searchBy.map((column) => `&searchBy=${column}`).join('')
-            : ''
+        query.searchBy && searchBy.length ? searchBy.map((column) => `&searchBy=${column}`).join('') : ''
 
     const filterQuery = query.filter
         ? '&' +
