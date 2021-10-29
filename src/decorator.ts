@@ -17,14 +17,14 @@ export const Paginate = createParamDecorator((_data: unknown, ctx: ExecutionCont
     const { query } = request
 
     // Determine if Express or Fastify to rebuild the original url and reduce down to protocol, host and base url
-    let originalUrl;
+    let originalUrl
     if (request.originalUrl) {
-        originalUrl = request.protocol + '://' + request.get('host') + request.originalUrl;
+        originalUrl = request.protocol + '://' + request.get('host') + request.originalUrl
     } else {
-        originalUrl = request.protocol + '://' + request.hostname + request.url;
+        originalUrl = request.protocol + '://' + request.hostname + request.url
     }
-    const urlParts = new URL(originalUrl);
-    const path = urlParts.protocol + '//' + urlParts.host + urlParts.pathname;
+    const urlParts = new URL(originalUrl)
+    const path = urlParts.protocol + '//' + urlParts.host + urlParts.pathname
 
     const sortBy: [string, string][] = []
     const searchBy: string[] = []
