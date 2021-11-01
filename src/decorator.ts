@@ -15,7 +15,16 @@ export interface PaginateQuery {
 export const Paginate = createParamDecorator((_data: unknown, ctx: ExecutionContext): PaginateQuery => {
     const request: Request = ctx.switchToHttp().getRequest()
     const { query } = request
-    const path = request.protocol + '://' + request.get('host') + request.baseUrl + request.path
+
+    // Determine if Express or Fastify to rebuild the original url and reduce down to protocol, host and base url
+    let originalUrl
+    if (request.originalUrl) {
+        originalUrl = request.protocol + '://' + request.get('host') + request.originalUrl
+    } else {
+        originalUrl = request.protocol + '://' + request.hostname + request.url
+    }
+    const urlParts = new URL(originalUrl)
+    const path = urlParts.protocol + '//' + urlParts.host + urlParts.pathname
 
     const sortBy: [string, string][] = []
     const searchBy: string[] = []

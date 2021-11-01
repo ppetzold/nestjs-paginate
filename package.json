@@ -40,6 +40,7 @@
     "eslint": "^7.32.0",
     "eslint-config-prettier": "^8.3.0",
     "eslint-plugin-prettier": "^4.0.0",
+    "fastify": "^3.22.1",
     "jest": "^27.2.5",
     "prettier": "^2.4.1",
     "reflect-metadata": "^0.1.13",
@@ -56,6 +57,7 @@
   "peerDependencies": {
     "@nestjs/common": "^8.1.1",
     "express": "^4.17.1",
+    "fastify": "^3.22.1",
     "typeorm": "^0.2.38"
   },
   "jest": {
