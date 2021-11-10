@@ -20,7 +20,7 @@ import { ServiceUnavailableException } from '@nestjs/common'
 import { values, mapKeys } from 'lodash'
 import { stringify } from 'querystring'
 
-type Column<T> = Extract<keyof T, string>
+type Column<T> = string //Extract<keyof T, string>
 type Order<T> = [Column<T>, 'ASC' | 'DESC']
 type SortBy<T> = Order<T>[]
 
@@ -46,6 +46,7 @@ export class Paginated<T> {
 }
 
 export interface PaginateConfig<T> {
+    nestedRoutes?: string[]
     sortableColumns: Column<T>[]
     searchableColumns?: Column<T>[]
     maxLimit?: number
@@ -130,15 +131,27 @@ export async function paginate<T>(
         }
     }
 
+    if (config.nestedRoutes?.length && repo instanceof Repository) {
+        config.nestedRoutes.forEach((nestedRoute) => {
+            if (repo.metadata.relations.find((relation) => relation.propertyName === nestedRoute)) {
+                queryBuilder.leftJoinAndSelect(`e.${nestedRoute}`, nestedRoute)
+            }
+        })
+    }
+
     if (config.where) {
         queryBuilder = queryBuilder.andWhere(new Brackets((queryBuilder) => queryBuilder.andWhere(config.where))) // Postgres fix (https://github.com/ppetzold/nestjs-paginate/pull/97)
     }
 
     if (query.search && searchBy.length) {
         const search: ObjectLiteral[] = []
+
         for (const column of searchBy) {
-            search.push({ [column]: ILike(`%${query.search}%`) })
+            search.push(column.split('.').reduceRight(
+                (value: any, key) => ({[key]: value}), ILike(`%${query.search}%`))
+            )
         }
+
         queryBuilder = queryBuilder.andWhere(search)
     }
 
