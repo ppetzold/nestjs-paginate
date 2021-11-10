@@ -209,6 +209,24 @@ describe('paginate', () => {
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&search=Milo')
     })
 
+    it('should return result based on search term on one-to-many relation', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            nestedRoutes: ['toys'],
+            sortableColumns: ['id', 'name'],
+            searchableColumns: ['name', 'toys.name'],
+        }
+        const query: PaginateQuery = {
+            path: '',
+            search: 'Mouse',
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        expect(result.meta.search).toStrictEqual('Mouse')
+        expect(result.data).toStrictEqual([cats[0]])
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&search=Mouse')
+    })
+
     it('should return result based on search term and searchBy columns', async () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id', 'name', 'color'],
