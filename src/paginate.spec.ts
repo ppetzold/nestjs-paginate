@@ -1,5 +1,13 @@
 import { createConnection, Repository, Column, In } from 'typeorm'
-import { Paginated, paginate, PaginateConfig, FilterOperator } from './paginate'
+import {
+    Paginated,
+    paginate,
+    PaginateConfig,
+    FilterOperator,
+    isOperator,
+    getOperatorFn,
+    getFilterTokens,
+} from './paginate'
 import { PaginateQuery } from './decorator'
 import { Entity, PrimaryGeneratedColumn, CreateDateColumn } from 'typeorm'
 import { HttpException } from '@nestjs/common'
@@ -431,5 +439,49 @@ describe('paginate', () => {
         } catch (err) {
             expect(err).toBeInstanceOf(HttpException)
         }
+    })
+
+    it.each([
+        { operator: '$eq', result: true },
+        { operator: '$gte', result: true },
+        { operator: '$gt', result: true },
+        { operator: '$in', result: true },
+        { operator: '$null', result: true },
+        { operator: '$lt', result: true },
+        { operator: '$lte', result: true },
+        { operator: '$not', result: true },
+        { operator: '$fake', result: false },
+    ])('should check operator "$operator" valid is $result', ({ operator, result }) => {
+        expect(isOperator(operator)).toStrictEqual(result)
+    })
+
+    it.each([
+        { operator: '$eq', name: 'Equal' },
+        { operator: '$gt', name: 'MoreThan' },
+        { operator: '$gte', name: 'MoreThanOrEqual' },
+        { operator: '$in', name: 'In' },
+        { operator: '$null', name: 'IsNull' },
+        { operator: '$lt', name: 'LessThan' },
+        { operator: '$lte', name: 'LessThanOrEqual' },
+        { operator: '$not', name: 'Not' },
+    ])('should get operator function $name for "$operator"', ({ operator, name }) => {
+        const func = getOperatorFn<CatEntity>(operator as FilterOperator)
+        expect(func.name).toStrictEqual(name)
+    })
+
+    it.each([
+        { string: '$eq:value', tokens: [null, '$eq', 'value'] },
+        { string: '$eq:val:ue', tokens: [null, '$eq', 'val:ue'] },
+        { string: '$in:value1,value2,value3', tokens: [null, '$in', 'value1,value2,value3'] },
+        { string: 'value', tokens: [null, '$eq', 'value'] },
+        { string: 'val:ue', tokens: [null, '$eq', 'val:ue'] },
+        { string: '$not:value', tokens: [null, '$not', 'value'] },
+        { string: '$eq:$not:value', tokens: ['$eq', '$not', 'value'] },
+        { string: '$eq:$null', tokens: ['$eq', '$null'] },
+        { string: '$null', tokens: [null, '$null'] },
+        { string: '', tokens: [null, '$eq', ''] },
+        { string: '$eq:$not:$in:value', tokens: [] },
+    ])('should get filter tokens for "$string"', ({ string, tokens }) => {
+        expect(getFilterTokens(string)).toStrictEqual(tokens)
     })
 })
