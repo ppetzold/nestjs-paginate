@@ -92,9 +92,18 @@ export function getOperatorFn<T>(op: FilterOperator): (...args: any[]) => FindOp
 }
 
 export function getFilterTokens(raw: string): string[] {
-    const tokens = raw.split(':')
+    const tokens = []
+    const matches = raw.match(/(\$\w+):/g)
+
+    if (matches) {
+        const value = raw.replace(matches.join(''), '')
+        tokens.push(...matches.map((token) => token.substring(0, token.length - 1)), value)
+    } else {
+        tokens.push(raw)
+    }
+
     if (tokens.length === 0 || tokens.length > 3) {
-        return [];
+        return []
     } else if (tokens.length === 2) {
         if (tokens[1] !== FilterOperator.NULL) {
             tokens.unshift(null)
@@ -107,7 +116,7 @@ export function getFilterTokens(raw: string): string[] {
         }
     }
 
-    return tokens;
+    return tokens
 }
 
 function parseFilter<T>(query: PaginateQuery, config: PaginateConfig<T>) {
