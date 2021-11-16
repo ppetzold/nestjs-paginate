@@ -66,6 +66,85 @@ export enum FilterOperator {
     NOT = '$not',
 }
 
+export function isOperator(value: any): value is FilterOperator {
+    return values(FilterOperator).includes(value)
+}
+
+export function getOperatorFn<T>(op: FilterOperator): (...args: any[]) => FindOperator<T> {
+    switch (op) {
+        case FilterOperator.EQ:
+            return Equal
+        case FilterOperator.GT:
+            return MoreThan
+        case FilterOperator.GTE:
+            return MoreThanOrEqual
+        case FilterOperator.IN:
+            return In
+        case FilterOperator.NULL:
+            return IsNull
+        case FilterOperator.LT:
+            return LessThan
+        case FilterOperator.LTE:
+            return LessThanOrEqual
+        case FilterOperator.NOT:
+            return Not
+    }
+}
+
+export function getFilterTokens(raw: string): string[] {
+    const tokens = raw.split(':')
+    if (tokens.length === 0 || tokens.length > 3) {
+        return [];
+    } else if (tokens.length === 2) {
+        if (tokens[1] !== FilterOperator.NULL) {
+            tokens.unshift(null)
+        }
+    } else if (tokens.length === 1) {
+        if (tokens[0] === FilterOperator.NULL) {
+            tokens.unshift(null)
+        } else {
+            tokens.unshift(null, FilterOperator.EQ)
+        }
+    }
+
+    return tokens;
+}
+
+function parseFilter<T>(query: PaginateQuery, config: PaginateConfig<T>) {
+    const filter = {}
+
+    for (const column of Object.keys(query.filter)) {
+        if (!(column in config.filterableColumns)) {
+            continue
+        }
+        const allowedOperators = config.filterableColumns[column as Column<T>]
+        const input = query.filter[column]
+        const statements = !Array.isArray(input) ? [input] : input
+        for (const raw of statements) {
+            const tokens = getFilterTokens(raw)
+            if (tokens.length === 0) {
+                continue
+            }
+            const [op2, op1, value] = tokens
+
+            if (!isOperator(op1) || !allowedOperators.includes(op1)) {
+                continue
+            }
+            if (isOperator(op2) && !allowedOperators.includes(op2)) {
+                continue
+            }
+            if (isOperator(op1)) {
+                const args = op1 === FilterOperator.IN ? value.split(',') : value
+                filter[column] = getOperatorFn<T>(op1)(args)
+            }
+            if (isOperator(op2)) {
+                filter[column] = getOperatorFn<T>(op2)(filter[column])
+            }
+        }
+    }
+    return filter
+}
+
 export async function paginate<T>(
     query: PaginateQuery,
     repo: Repository<T> | SelectQueryBuilder<T>,
@@ -143,69 +222,7 @@ export async function paginate<T>(
     }
 
     if (query.filter) {
-        const filter = {}
-        function getOperatorFn(op: FilterOperator): (...args: any[]) => FindOperator<T> {
-            switch (op) {
-                case FilterOperator.EQ:
-                    return Equal
-                case FilterOperator.GT:
-                    return MoreThan
-                case FilterOperator.GTE:
-                    return MoreThanOrEqual
-                case FilterOperator.IN:
-                    return In
-                case FilterOperator.NULL:
-                    return IsNull
-                case FilterOperator.LT:
-                    return LessThan
-                case FilterOperator.LTE:
-                    return LessThanOrEqual
-                case FilterOperator.NOT:
-                    return Not
-            }
-        }
-        function isOperator(value: any): value is FilterOperator {
-            return values(FilterOperator).includes(value)
-        }
-        for (const column of Object.keys(query.filter)) {
-            if (!(column in config.filterableColumns)) {
-                continue
-            }
-            const allowedOperators = config.filterableColumns[column as Column<T>]
-            const input = query.filter[column]
-            const statements = !Array.isArray(input) ? [input] : input
-            for (const raw of statements) {
-                const tokens = raw.split(':')
-                if (tokens.length === 0 || tokens.length > 3) {
-                    continue
-                } else if (tokens.length === 2) {
-                    if (tokens[1] !== FilterOperator.NULL) {
-                        tokens.unshift(null)
-                    }
-                } else if (tokens.length === 1) {
-                    if (tokens[0] === FilterOperator.NULL) {
-                        tokens.unshift(null)
-                    } else {
-                        tokens.unshift(null, FilterOperator.EQ)
-                    }
-                }
-                const [op2, op1, value] = tokens
-
-                if (!isOperator(op1) || !allowedOperators.includes(op1)) {
-                    continue
-                }
-                if (isOperator(op2) && !allowedOperators.includes(op2)) {
-                    continue
-                }
-                if (isOperator(op1)) {
-                    const args = op1 === FilterOperator.IN ? value.split(',') : value
-                    filter[column] = getOperatorFn(op1)(args)
-                }
-                if (isOperator(op2)) {
-                    filter[column] = getOperatorFn(op2)(filter[column])
-                }
-            }
-        }
+        const filter = parseFilter<T>(query, config)
 
         queryBuilder = queryBuilder.andWhere(filter)
     }
