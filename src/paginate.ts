@@ -66,8 +66,8 @@ export enum FilterOperator {
     NOT = '$not',
 }
 
-export function isOperator(value: any): value is FilterOperator {
-    return values(FilterOperator).includes(value)
+export function isOperator(value: unknown): value is FilterOperator {
+    return values(FilterOperator).includes(value as any)
 }
 
 export function getOperatorFn<T>(op: FilterOperator): (...args: any[]) => FindOperator<T> {
