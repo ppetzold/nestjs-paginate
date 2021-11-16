@@ -473,6 +473,7 @@ describe('paginate', () => {
         { string: '$eq:value', tokens: [null, '$eq', 'value'] },
         { string: '$eq:val:ue', tokens: [null, '$eq', 'val:ue'] },
         { string: '$in:value1,value2,value3', tokens: [null, '$in', 'value1,value2,value3'] },
+        { string: '$not:$in:value1:a,value2:b,value3:c', tokens: ['$not', '$in', 'value1:a,value2:b,value3:c'] },
         { string: 'value', tokens: [null, '$eq', 'value'] },
         { string: 'val:ue', tokens: [null, '$eq', 'val:ue'] },
         { string: '$not:value', tokens: [null, '$not', 'value'] },
