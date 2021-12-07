@@ -227,13 +227,13 @@ export async function paginate<T>(
         for (const column of searchBy) {
             search.push({ [column]: ILike(`%${query.search}%`) })
         }
-        queryBuilder = queryBuilder.andWhere(search)
+        queryBuilder = queryBuilder.andWhere(new Brackets((queryBuilder) => queryBuilder.andWhere(search)))
     }
 
     if (query.filter) {
         const filter = parseFilter<T>(query, config)
 
-        queryBuilder = queryBuilder.andWhere(filter)
+        queryBuilder = queryBuilder.andWhere(new Brackets((queryBuilder) => queryBuilder.andWhere(filter)))
     }
 
     ;[items, totalItems] = await queryBuilder.getManyAndCount()
