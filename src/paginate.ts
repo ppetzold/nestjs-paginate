@@ -219,7 +219,7 @@ export async function paginate<T>(
     }
 
     if (config.where) {
-        queryBuilder = queryBuilder.andWhere(new Brackets((queryBuilder) => queryBuilder.andWhere(config.where))) // Postgres fix (https://github.com/ppetzold/nestjs-paginate/pull/97)
+        queryBuilder.andWhere(new Brackets((qb) => qb.andWhere(config.where)))
     }
 
     if (query.search && searchBy.length) {
@@ -227,13 +227,13 @@ export async function paginate<T>(
         for (const column of searchBy) {
             search.push({ [column]: ILike(`%${query.search}%`) })
         }
-        queryBuilder = queryBuilder.andWhere(new Brackets((queryBuilder) => queryBuilder.andWhere(search)))
+        queryBuilder.andWhere(new Brackets((qb) => qb.andWhere(search)))
     }
 
     if (query.filter) {
         const filter = parseFilter<T>(query, config)
 
-        queryBuilder = queryBuilder.andWhere(new Brackets((queryBuilder) => queryBuilder.andWhere(filter)))
+        queryBuilder.andWhere(new Brackets((qb) => qb.andWhere(filter)))
     }
 
     ;[items, totalItems] = await queryBuilder.getManyAndCount()
