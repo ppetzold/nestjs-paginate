@@ -232,7 +232,6 @@ export async function paginate<T>(
 
     if (query.filter) {
         const filter = parseFilter<T>(query, config)
-
         queryBuilder.andWhere(new Brackets((qb) => qb.andWhere(filter)))
     }
 
