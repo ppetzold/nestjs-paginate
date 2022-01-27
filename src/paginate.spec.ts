@@ -5,8 +5,8 @@ import {
     PaginateConfig,
     FilterOperator,
     isOperator,
-    getOperatorFn,
     getFilterTokens,
+    OperatorSymbolToFunction,
 } from './paginate'
 import { PaginateQuery } from './decorator'
 import { Entity, PrimaryGeneratedColumn, CreateDateColumn } from 'typeorm'
@@ -45,7 +45,7 @@ describe('paginate', () => {
         repo = connection.getRepository(CatEntity)
         cats = await repo.save([
             repo.create({ name: 'Milo', color: 'brown', age: 6 }),
-            repo.create({ name: 'Garfield', color: 'ginger', age: null }),
+            repo.create({ name: 'Garfield', color: 'ginger', age: 5 }),
             repo.create({ name: 'Shadow', color: 'black', age: 4 }),
             repo.create({ name: 'George', color: 'white', age: 3 }),
             repo.create({ name: 'Leche', color: 'white', age: null }),
@@ -342,7 +342,7 @@ describe('paginate', () => {
 
         const result = await paginate<CatEntity>(query, repo, config)
 
-        expect(result.data).toStrictEqual([cats[0], cats[2]])
+        expect(result.data).toStrictEqual([cats[0], cats[1], cats[2]])
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.age=$gte:4')
     })
 
@@ -356,14 +356,14 @@ describe('paginate', () => {
         const query: PaginateQuery = {
             path: '',
             filter: {
-                age: '$btw:4,6',
+                age: '$btw:4,5',
             },
         }
 
         const result = await paginate<CatEntity>(query, repo, config)
 
-        expect(result.data).toStrictEqual([cats[0], cats[2]])
-        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.age=$btw:4,6')
+        expect(result.data).toStrictEqual([cats[1], cats[2]])
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.age=$btw:4,5')
     })
 
     it('should return result based on is null query', async () => {
@@ -382,7 +382,7 @@ describe('paginate', () => {
 
         const result = await paginate<CatEntity>(query, repo, config)
 
-        expect(result.data).toStrictEqual([cats[1], cats[4]])
+        expect(result.data).toStrictEqual([cats[4]])
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.age=$null')
     })
 
@@ -402,7 +402,7 @@ describe('paginate', () => {
 
         const result = await paginate<CatEntity>(query, repo, config)
 
-        expect(result.data).toStrictEqual([cats[0], cats[2], cats[3]])
+        expect(result.data).toStrictEqual([cats[0], cats[1], cats[2], cats[3]])
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.age=$not:$null')
     })
 
@@ -487,7 +487,7 @@ describe('paginate', () => {
         { operator: '$btw', name: 'Between' },
         { operator: '$not', name: 'Not' },
     ])('should get operator function $name for "$operator"', ({ operator, name }) => {
-        const func = getOperatorFn<CatEntity>(operator as FilterOperator)
+        const func = OperatorSymbolToFunction.get(operator as FilterOperator)
         expect(func.name).toStrictEqual(name)
     })
 

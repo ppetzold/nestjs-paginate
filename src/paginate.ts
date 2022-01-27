@@ -72,28 +72,17 @@ export function isOperator(value: unknown): value is FilterOperator {
     return values(FilterOperator).includes(value as any)
 }
 
-export function getOperatorFn<T>(op: FilterOperator): (...args: any[]) => FindOperator<T> {
-    switch (op) {
-        case FilterOperator.EQ:
-            return Equal
-        case FilterOperator.GT:
-            return MoreThan
-        case FilterOperator.GTE:
-            return MoreThanOrEqual
-        case FilterOperator.IN:
-            return In
-        case FilterOperator.NULL:
-            return IsNull
-        case FilterOperator.LT:
-            return LessThan
-        case FilterOperator.LTE:
-            return LessThanOrEqual
-        case FilterOperator.BTW:
-            return Between
-        case FilterOperator.NOT:
-            return Not
-    }
-}
+export const OperatorSymbolToFunction = new Map<FilterOperator, (...args: any[]) => FindOperator<string>>([
+    [FilterOperator.EQ, Equal],
+    [FilterOperator.GT, MoreThan],
+    [FilterOperator.GTE, MoreThanOrEqual],
+    [FilterOperator.IN, In],
+    [FilterOperator.NULL, IsNull],
+    [FilterOperator.LT, LessThan],
+    [FilterOperator.LTE, LessThanOrEqual],
+    [FilterOperator.BTW, Between],
+    [FilterOperator.NOT, Not],
+])
 
 export function getFilterTokens(raw: string): string[] {
     const tokens = []
@@ -125,12 +114,11 @@ export function getFilterTokens(raw: string): string[] {
 
 function parseFilter<T>(query: PaginateQuery, config: PaginateConfig<T>) {
     const filter = {}
-
     for (const column of Object.keys(query.filter)) {
         if (!(column in config.filterableColumns)) {
             continue
         }
-        const allowedOperators = config.filterableColumns[column as Column<T>]
+        const allowedOperators = config.filterableColumns[column]
         const input = query.filter[column]
         const statements = !Array.isArray(input) ? [input] : input
         for (const raw of statements) {
@@ -147,12 +135,20 @@ function parseFilter<T>(query: PaginateQuery, config: PaginateConfig<T>) {
                 continue
             }
             if (isOperator(op1)) {
-                const args = op1 === FilterOperator.IN || op1 === FilterOperator.BTW ? value.split(',') : value
-                filter[column] =
-                    op1 === FilterOperator.BTW ? getOperatorFn<T>(op1)(args[0], args[1]) : getOperatorFn<T>(op1)(args)
+                switch (op1) {
+                    case FilterOperator.BTW:
+                        filter[column] = OperatorSymbolToFunction.get(op1)(...value.split(','))
+                        break
+                    case FilterOperator.IN:
+                        filter[column] = OperatorSymbolToFunction.get(op1)(value.split(','))
+                        break
+                    default:
+                        filter[column] = OperatorSymbolToFunction.get(op1)(value)
+                        break
+                }
             }
             if (isOperator(op2)) {
-                filter[column] = getOperatorFn<T>(op2)(filter[column])
+                filter[column] = OperatorSymbolToFunction.get(op2)(filter[column])
             }
         }
     }
@@ -236,7 +232,7 @@ export async function paginate<T>(
     }
 
     if (query.filter) {
-        const filter = parseFilter<T>(query, config)
+        const filter = parseFilter(query, config)
         queryBuilder.andWhere(new Brackets((qb) => qb.andWhere(filter)))
     }
 
