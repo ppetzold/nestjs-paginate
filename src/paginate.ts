@@ -14,6 +14,7 @@ import {
     Not,
     ILike,
     Brackets,
+    Between,
 } from 'typeorm'
 import { PaginateQuery } from './decorator'
 import { ServiceUnavailableException } from '@nestjs/common'
@@ -63,6 +64,7 @@ export enum FilterOperator {
     NULL = '$null',
     LT = '$lt',
     LTE = '$lte',
+    BTW = '$btw',
     NOT = '$not',
 }
 
@@ -86,6 +88,8 @@ export function getOperatorFn<T>(op: FilterOperator): (...args: any[]) => FindOp
             return LessThan
         case FilterOperator.LTE:
             return LessThanOrEqual
+        case FilterOperator.BTW:
+            return Between
         case FilterOperator.NOT:
             return Not
     }
@@ -144,7 +148,8 @@ function parseFilter<T>(query: PaginateQuery, config: PaginateConfig<T>) {
             }
             if (isOperator(op1)) {
                 const args = op1 === FilterOperator.IN ? value.split(',') : value
-                filter[column] = getOperatorFn<T>(op1)(args)
+                filter[column] =
+                    op1 === FilterOperator.BTW ? getOperatorFn<T>(op1)(args[0], args[1]) : getOperatorFn<T>(op1)(args)
             }
             if (isOperator(op2)) {
                 filter[column] = getOperatorFn<T>(op2)(filter[column])

@@ -13,7 +13,7 @@ Pagination and filtering helper method for TypeORM repositories or query builder
 - Pagination conforms to [JSON:API](https://jsonapi.org/)
 - Sort by multiple columns
 - Search across columns
-- Filter using operators (`$eq`, `$not`, `$null`, `$in`, `$gt`, `$gte`, `$lt`, `$lte`)
+- Filter using operators (`$eq`, `$not`, `$null`, `$in`, `$gt`, `$gte`, `$lt`, `$lte`, `$btw`)
 
 ## Installation
 
