@@ -346,6 +346,26 @@ describe('paginate', () => {
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.age=$gte:4')
     })
 
+    it('should return result based on between range filter', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            filterableColumns: {
+                age: [FilterOperator.BTW],
+            },
+        }
+        const query: PaginateQuery = {
+            path: '',
+            filter: {
+                age: '$btw:4,6',
+            },
+        }
+
+        const result = await paginate<CatEntity>(query, repo, config)
+
+        expect(result.data).toStrictEqual([cats[0], cats[2]])
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.age=$btw:4,6')
+    })
+
     it('should return result based on is null query', async () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id'],
@@ -449,6 +469,7 @@ describe('paginate', () => {
         { operator: '$null', result: true },
         { operator: '$lt', result: true },
         { operator: '$lte', result: true },
+        { operator: '$btw', result: true },
         { operator: '$not', result: true },
         { operator: '$fake', result: false },
     ])('should check operator "$operator" valid is $result', ({ operator, result }) => {
@@ -463,6 +484,7 @@ describe('paginate', () => {
         { operator: '$null', name: 'IsNull' },
         { operator: '$lt', name: 'LessThan' },
         { operator: '$lte', name: 'LessThanOrEqual' },
+        { operator: '$btw', name: 'Between' },
         { operator: '$not', name: 'Not' },
     ])('should get operator function $name for "$operator"', ({ operator, name }) => {
         const func = getOperatorFn<CatEntity>(operator as FilterOperator)
