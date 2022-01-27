@@ -147,7 +147,7 @@ function parseFilter<T>(query: PaginateQuery, config: PaginateConfig<T>) {
                 continue
             }
             if (isOperator(op1)) {
-                const args = op1 === FilterOperator.IN ? value.split(',') : value
+                const args = op1 === FilterOperator.IN || op1 === FilterOperator.BTW ? value.split(',') : value
                 filter[column] =
                     op1 === FilterOperator.BTW ? getOperatorFn<T>(op1)(args[0], args[1]) : getOperatorFn<T>(op1)(args)
             }
