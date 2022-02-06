@@ -202,3 +202,17 @@ const paginateConfig: PaginateConfig<CatEntity> {
   filterableColumns: { age: [FilterOperator.EQ, FilterOperator.IN] }
 }
 ```
+
+## Usage with Query Builder
+
+### Example
+
+```typescript
+const queryBuilder = repo
+  .createQueryBuilder('cats')
+  .leftJoinAndSelect('cats.owner', 'owner')
+  .where('cats.color = :color', { color: 'white' })
+  .andWhere('cats.owner = :ownerId', { ownerId })
+
+const result = await paginate<CatEntity>(query, queryBuilder, config)
+```

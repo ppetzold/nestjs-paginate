@@ -1,4 +1,4 @@
-import { createConnection, Repository, Column, In } from 'typeorm'
+import { createConnection, Repository, Column, In, createQueryBuilder, Connection } from 'typeorm'
 import {
     Paginated,
     paginate,
@@ -31,11 +31,12 @@ export class CatEntity {
 }
 
 describe('paginate', () => {
+    let connection: Connection
     let repo: Repository<CatEntity>
     let cats: CatEntity[]
 
     beforeAll(async () => {
-        const connection = await createConnection({
+        connection = await createConnection({
             type: 'sqlite',
             database: ':memory:',
             synchronize: true,
@@ -66,6 +67,44 @@ describe('paginate', () => {
 
         expect(result).toBeInstanceOf(Paginated)
         expect(result.data).toStrictEqual(cats.slice(0, 1))
+    })
+
+    it('should accept a query builder', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            defaultSortBy: [['id', 'ASC']],
+            defaultLimit: 1,
+        }
+        const query: PaginateQuery = {
+            path: '',
+        }
+
+        const queryBuilder = await repo.createQueryBuilder('cats')
+
+        const result = await paginate<CatEntity>(query, queryBuilder, config)
+
+        expect(result.data).toStrictEqual(cats.slice(0, 1))
+    })
+
+    it('should accept a query builder with custom condition', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            defaultSortBy: [['id', 'ASC']],
+            defaultLimit: 1,
+        }
+        const query: PaginateQuery = {
+            path: '',
+        }
+
+        const queryBuilder = await connection
+            .createQueryBuilder()
+            .select('cats')
+            .from(CatEntity, 'cats')
+            .where('cats.color = :color', { color: 'white' })
+
+        const result = await paginate<CatEntity>(query, queryBuilder, config)
+
+        expect(result.data).toStrictEqual(cats.slice(3, 4))
     })
 
     it('should default to page 1, if negative page is given', async () => {

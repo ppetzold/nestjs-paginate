@@ -113,7 +113,7 @@ export function getFilterTokens(raw: string): string[] {
 }
 
 function parseFilter<T>(query: PaginateQuery, config: PaginateConfig<T>) {
-    const filter = {}
+    const filter: { [columnName: string]: FindOperator<string> } = {}
     for (const column of Object.keys(query.filter)) {
         if (!(column in config.filterableColumns)) {
             continue
