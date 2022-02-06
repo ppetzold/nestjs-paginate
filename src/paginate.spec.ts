@@ -1,4 +1,4 @@
-import { createConnection, Repository, Column, In, createQueryBuilder, Connection } from 'typeorm'
+import { createConnection, Repository, Column, In, Connection } from 'typeorm'
 import {
     Paginated,
     paginate,
