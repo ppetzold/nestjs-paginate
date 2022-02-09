@@ -41,7 +41,7 @@
     "eslint-config-prettier": "^8.3.0",
     "eslint-plugin-prettier": "^4.0.0",
     "fastify": "^3.27.1",
-    "jest": "^27.5.0",
+    "jest": "^27.5.1",
     "prettier": "^2.5.1",
     "reflect-metadata": "^0.1.13",
     "rxjs": "^7.5.4",
