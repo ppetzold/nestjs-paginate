@@ -140,7 +140,7 @@ describe('paginate', () => {
         expect(result.data).toStrictEqual(cats.slice(0, 2))
     })
 
-    it('should return correct links', async () => {
+    it('should return correct links for some results', async () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id'],
         }
@@ -157,6 +157,27 @@ describe('paginate', () => {
         expect(links.current).toBe('?page=2&limit=2&sortBy=id:ASC')
         expect(links.next).toBe('?page=3&limit=2&sortBy=id:ASC')
         expect(links.last).toBe('?page=3&limit=2&sortBy=id:ASC')
+    })
+
+    it('should return only current link if zero results', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            searchableColumns: ['name']
+        }
+        const query: PaginateQuery = {
+            path: '',
+            page: 1,
+            limit: 2,
+            search: 'Pluto',
+        }
+
+        const { links } = await paginate<CatEntity>(query, repo, config)
+
+        expect(links.first).toBe(undefined)
+        expect(links.previous).toBe(undefined)
+        expect(links.current).toBe('?page=1&limit=2&sortBy=id:ASC&search=Pluto')
+        expect(links.next).toBe(undefined)
+        expect(links.last).toBe(undefined)
     })
 
     it('should default to defaultSortBy if query sortBy does not exist', async () => {
