@@ -278,7 +278,7 @@ export async function paginate<T>(
             previous: page - 1 < 1 ? undefined : buildLink(page - 1),
             current: buildLink(page),
             next: page + 1 > totalPages ? undefined : buildLink(page + 1),
-            last: page == totalPages ? undefined : buildLink(totalPages),
+            last: page == totalPages || !totalItems ? undefined : buildLink(totalPages),
         },
     }
 
