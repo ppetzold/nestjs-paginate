@@ -162,7 +162,7 @@ describe('paginate', () => {
     it('should return only current link if zero results', async () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id'],
-            searchableColumns: ['name']
+            searchableColumns: ['name'],
         }
         const query: PaginateQuery = {
             path: '',
