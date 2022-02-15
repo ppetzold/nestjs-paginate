@@ -30,7 +30,7 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand"
   },
   "devDependencies": {
-    "@nestjs/common": "^8.2.6",
+    "@nestjs/common": "^8.3.0",
     "@types/express": "^4.17.13",
     "@types/jest": "^27.4.0",
     "@types/lodash": "^4.14.178",
@@ -55,7 +55,7 @@
     "lodash": "^4.17.21"
   },
   "peerDependencies": {
-    "@nestjs/common": "^8.2.6",
+    "@nestjs/common": "^8.3.0",
     "express": "^4.17.2",
     "fastify": "^3.27.1",
     "typeorm": "^0.2.41"
