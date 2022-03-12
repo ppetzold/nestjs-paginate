@@ -2,7 +2,7 @@ import { ROUTE_ARGS_METADATA } from '@nestjs/common/constants'
 import { HttpArgumentsHost, CustomParamFactory, ExecutionContext } from '@nestjs/common/interfaces'
 import { Request as ExpressRequest } from 'express'
 import { FastifyRequest } from 'fastify'
-import { Paginate, PaginateQuery } from './decorator'
+import { Paginate, PaginateQuery } from '../index'
 
 // eslint-disable-next-line @typescript-eslint/ban-types
 function getParamDecoratorFactory<T>(decorator: Function): CustomParamFactory {

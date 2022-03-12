@@ -2,7 +2,6 @@ import {
     Repository,
     FindConditions,
     SelectQueryBuilder,
-    ObjectLiteral,
     FindOperator,
     Equal,
     MoreThan,
@@ -20,8 +19,25 @@ import { PaginateQuery } from './decorator'
 import { ServiceUnavailableException } from '@nestjs/common'
 import { values, mapKeys } from 'lodash'
 import { stringify } from 'querystring'
+import { WherePredicateOperator } from 'typeorm/query-builder/WhereClause'
 
-type Column<T> = Extract<keyof T, string>
+type Join<K, P> = K extends string ? (P extends string ? `${K}${'' extends P ? '' : '.'}${P}` : never) : never
+
+type Prev = [never, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, ...0[]]
+
+type Column<T, D extends number = 2> = [D] extends [never]
+    ? never
+    : T extends Record<string, any>
+    ? {
+          [K in keyof T]-?: K extends string
+              ? T[K] extends Date
+                  ? `${K}`
+                  : T[K] extends Array<infer U>
+                  ? `${K}` | Join<K, Column<U, Prev[D]>>
+                  : `${K}` | Join<K, Column<T[K], Prev[D]>>
+              : never
+      }[keyof T]
+    : ''
 type Order<T> = [Column<T>, 'ASC' | 'DESC']
 type SortBy<T> = Order<T>[]
 
@@ -47,6 +63,7 @@ export class Paginated<T> {
 }
 
 export interface PaginateConfig<T> {
+    relations?: Column<T>[]
     sortableColumns: Column<T>[]
     searchableColumns?: Column<T>[]
     maxLimit?: number
@@ -209,14 +226,20 @@ export async function paginate<T>(
             .skip((page - 1) * limit)
 
         for (const order of sortBy) {
-            queryBuilder.addOrderBy('e.' + order[0], order[1])
+            queryBuilder.addOrderBy(queryBuilder.alias + '.' + order[0], order[1])
         }
     } else {
         queryBuilder = repo.take(limit).skip((page - 1) * limit)
 
         for (const order of sortBy) {
-            queryBuilder.addOrderBy(repo.alias + '.' + order[0], order[1])
+            queryBuilder.addOrderBy(queryBuilder.alias + '.' + order[0], order[1])
         }
+    }
+
+    if (config.relations?.length) {
+        config.relations.forEach((relation) => {
+            queryBuilder.leftJoinAndSelect(`${queryBuilder.alias}.${relation}`, `${queryBuilder.alias}_${relation}`)
+        })
     }
 
     if (config.where) {
@@ -224,16 +247,50 @@ export async function paginate<T>(
     }
 
     if (query.search && searchBy.length) {
-        const search: ObjectLiteral[] = []
-        for (const column of searchBy) {
-            search.push({ [column]: ILike(`%${query.search}%`) })
-        }
-        queryBuilder.andWhere(new Brackets((qb) => qb.andWhere(search)))
+        queryBuilder.andWhere(
+            new Brackets((qb: SelectQueryBuilder<T>) => {
+                for (const column of searchBy) {
+                    const propertyPath = (column as string).split('.')
+                    if (
+                        propertyPath.length > 1
+                    ) {
+                        const condition: WherePredicateOperator = {
+                            operator: 'ilike',
+                            parameters: [`${qb.alias}_${column}`, `:${column}`],
+                        }
+                        qb.orWhere(qb['createWhereConditionExpression'](condition), {
+                            [column]: `%${query.search}%`,
+                        })
+                    } else {
+                        qb.orWhere({
+                            [column]: ILike(`%${query.search}%`),
+                        })
+                    }
+                }
+            })
+        )
     }
 
     if (query.filter) {
         const filter = parseFilter(query, config)
-        queryBuilder.andWhere(new Brackets((qb) => qb.andWhere(filter)))
+        queryBuilder.andWhere(new Brackets((qb: SelectQueryBuilder<T>) => {
+            for (const column in filter) {
+                const propertyPath = (column as string).split('.')
+                if (
+                    propertyPath.length > 1
+                ) {
+                    const condition = qb['getWherePredicateCondition'](column, filter[column]) as WherePredicateOperator
+                    condition.parameters = [`${qb.alias}_${column}`, `:${column}`]
+                    qb.andWhere(qb['createWhereConditionExpression'](condition), {
+                        [column]: filter[column].value,
+                    })
+                } else {
+                    qb.andWhere({
+                        [column]: filter[column],
+                    })
+                }
+            }
+        }))
     }
 
     ;[items, totalItems] = await queryBuilder.getManyAndCount()
