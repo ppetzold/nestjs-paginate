@@ -42,9 +42,9 @@ type Column<T, D extends number = 2> = [D] extends [never]
 type RelationColumn<T> = Extract<
     Column<T>,
     {
-        [K in Column<T>]: K extends `${infer R}.${string}` ? R : never;
+        [K in Column<T>]: K extends `${infer R}.${string}` ? R : never
     }[Column<T>]
-    >;
+>
 
 type Order<T> = [Column<T>, 'ASC' | 'DESC']
 type SortBy<T> = Order<T>[]
@@ -232,22 +232,22 @@ export async function paginate<T>(
             .createQueryBuilder('e')
             .take(limit)
             .skip((page - 1) * limit)
-
-        for (const order of sortBy) {
-            queryBuilder.addOrderBy(queryBuilder.alias + '.' + order[0], order[1])
-        }
     } else {
         queryBuilder = repo.take(limit).skip((page - 1) * limit)
-
-        for (const order of sortBy) {
-            queryBuilder.addOrderBy(queryBuilder.alias + '.' + order[0], order[1])
-        }
     }
 
     if (config.relations?.length) {
         config.relations.forEach((relation) => {
             queryBuilder.leftJoinAndSelect(`${queryBuilder.alias}.${relation}`, `${queryBuilder.alias}_${relation}`)
         })
+    }
+
+    for (const order of sortBy) {
+        if(order[0].split('.').length > 1) {
+            queryBuilder.addOrderBy(`${queryBuilder.alias}_${order[0]}`, order[1])
+        } else {
+            queryBuilder.addOrderBy(`${queryBuilder.alias}.${order[0]}`, order[1])
+        }
     }
 
     if (config.where) {
