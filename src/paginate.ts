@@ -38,6 +38,15 @@ type Column<T, D extends number = 2> = [D] extends [never]
               : never
       }[keyof T]
     : ''
+
+type RelationColumn<T> = Extract<
+    Column<T>,
+    {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        [K in Column<T>]: K extends `${infer R}.${infer Rest}` ? R : never;
+    }[Column<T>]
+    >;
+
 type Order<T> = [Column<T>, 'ASC' | 'DESC']
 type SortBy<T> = Order<T>[]
 
@@ -63,7 +72,7 @@ export class Paginated<T> {
 }
 
 export interface PaginateConfig<T> {
-    relations?: Column<T>[]
+    relations?: RelationColumn<T>[]
     sortableColumns: Column<T>[]
     searchableColumns?: Column<T>[]
     maxLimit?: number
