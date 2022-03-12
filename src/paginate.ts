@@ -42,8 +42,7 @@ type Column<T, D extends number = 2> = [D] extends [never]
 type RelationColumn<T> = Extract<
     Column<T>,
     {
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        [K in Column<T>]: K extends `${infer R}.${infer Rest}` ? R : never;
+        [K in Column<T>]: K extends `${infer R}.${string}` ? R : never;
     }[Column<T>]
     >;
 
