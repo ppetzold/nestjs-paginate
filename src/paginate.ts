@@ -243,7 +243,7 @@ export async function paginate<T>(
     }
 
     for (const order of sortBy) {
-        if(order[0].split('.').length > 1) {
+        if (order[0].split('.').length > 1) {
             queryBuilder.addOrderBy(`${queryBuilder.alias}_${order[0]}`, order[1])
         } else {
             queryBuilder.addOrderBy(`${queryBuilder.alias}.${order[0]}`, order[1])
