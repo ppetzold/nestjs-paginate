@@ -251,9 +251,7 @@ export async function paginate<T>(
             new Brackets((qb: SelectQueryBuilder<T>) => {
                 for (const column of searchBy) {
                     const propertyPath = (column as string).split('.')
-                    if (
-                        propertyPath.length > 1
-                    ) {
+                    if (propertyPath.length > 1) {
                         const condition: WherePredicateOperator = {
                             operator: 'ilike',
                             parameters: [`${qb.alias}_${column}`, `:${column}`],
@@ -273,24 +271,27 @@ export async function paginate<T>(
 
     if (query.filter) {
         const filter = parseFilter(query, config)
-        queryBuilder.andWhere(new Brackets((qb: SelectQueryBuilder<T>) => {
-            for (const column in filter) {
-                const propertyPath = (column as string).split('.')
-                if (
-                    propertyPath.length > 1
-                ) {
-                    const condition = qb['getWherePredicateCondition'](column, filter[column]) as WherePredicateOperator
-                    condition.parameters = [`${qb.alias}_${column}`, `:${column}`]
-                    qb.andWhere(qb['createWhereConditionExpression'](condition), {
-                        [column]: filter[column].value,
-                    })
-                } else {
-                    qb.andWhere({
-                        [column]: filter[column],
-                    })
+        queryBuilder.andWhere(
+            new Brackets((qb: SelectQueryBuilder<T>) => {
+                for (const column in filter) {
+                    const propertyPath = (column as string).split('.')
+                    if (propertyPath.length > 1) {
+                        const condition = qb['getWherePredicateCondition'](
+                            column,
+                            filter[column]
+                        ) as WherePredicateOperator
+                        condition.parameters = [`${qb.alias}_${column}`, `:${column}`]
+                        qb.andWhere(qb['createWhereConditionExpression'](condition), {
+                            [column]: filter[column].value,
+                        })
+                    } else {
+                        qb.andWhere({
+                            [column]: filter[column],
+                        })
+                    }
                 }
-            }
-        }))
+            })
+        )
     }
 
     ;[items, totalItems] = await queryBuilder.getManyAndCount()
