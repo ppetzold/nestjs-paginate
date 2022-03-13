@@ -45,6 +45,7 @@ describe('paginate', () => {
         catToys = await catToyRepo.save([
             catToyRepo.create({ name: 'Fuzzy Thing', cat: cats[0] }),
             catToyRepo.create({ name: 'Stuffed Mouse', cat: cats[0] }),
+            catToyRepo.create({ name: 'Mouse', cat: cats[0] }),
             catToyRepo.create({ name: 'String', cat: cats[1] }),
         ])
         catHomes = await catHomeRepo.save([
@@ -247,7 +248,7 @@ describe('paginate', () => {
         const result = await paginate<CatToyEntity>(query, catToyRepo, config)
 
         expect(result.meta.search).toStrictEqual('Milo')
-        expect(result.data).toStrictEqual([catToys[0], catToys[1]])
+        expect(result.data).toStrictEqual([catToys[0], catToys[1], catToys[2]])
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&search=Milo')
     })
 
@@ -267,11 +268,71 @@ describe('paginate', () => {
         expect(result.meta.search).toStrictEqual('Mouse')
         const toy = clone(catToys[1])
         delete toy.cat
-        expect(result.data).toStrictEqual([Object.assign(clone(cats[0]), { toys: [toy] })])
+        const toy2 = clone(catToys[2])
+        delete toy2.cat
+        expect(result.data).toStrictEqual([Object.assign(clone(cats[0]), { toys: [toy, toy2] })])
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&search=Mouse')
     })
 
     it('should return result based on search term on one-to-one relation', async () => {
+        const config: PaginateConfig<CatHomeEntity> = {
+            relations: ['cat'],
+            sortableColumns: ['id', 'name', 'cat.id'],
+        }
+        const query: PaginateQuery = {
+            path: '',
+            sortBy: [['cat.id', 'DESC']],
+        }
+
+        const result = await paginate<CatHomeEntity>(query, catHomeRepo, config)
+        expect(result.meta.sortBy).toStrictEqual([['cat.id', 'DESC']])
+        expect(result.data).toStrictEqual([catHomes[0], catHomes[1]].sort((a, b) => b.cat.id - a.cat.id))
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=cat.id:DESC')
+    })
+
+    it('should return result based on sort and search on many-to-one relation', async () => {
+        const config: PaginateConfig<CatToyEntity> = {
+            relations: ['cat'],
+            sortableColumns: ['id', 'name', 'cat.id'],
+            searchableColumns: ['name', 'cat.name'],
+        }
+        const query: PaginateQuery = {
+            path: '',
+            sortBy: [['cat.id', 'DESC']],
+            search: 'Milo',
+        }
+
+        const result = await paginate<CatToyEntity>(query, catToyRepo, config)
+
+        expect(result.meta.search).toStrictEqual('Milo')
+        expect(result.data).toStrictEqual([catToys[0], catToys[1], catToys[2]].sort((a, b) => b.cat.id - a.cat.id))
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=cat.id:DESC&search=Milo')
+    })
+
+    it('should return result based on sort on one-to-many relation', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            relations: ['toys'],
+            sortableColumns: ['id', 'name', 'toys.id'],
+            searchableColumns: ['name', 'toys.name'],
+        }
+        const query: PaginateQuery = {
+            path: '',
+            sortBy: [['toys.id', 'DESC']],
+            search: 'Mouse',
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        expect(result.meta.search).toStrictEqual('Mouse')
+        const toy1 = clone(catToys[1])
+        delete toy1.cat
+        const toy2 = clone(catToys[2])
+        delete toy2.cat
+        expect(result.data).toStrictEqual([Object.assign(clone(cats[0]), { toys: [toy2, toy1] })])
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=toys.id:DESC&search=Mouse')
+    })
+
+    it('should return result based on sort on one-to-one relation', async () => {
         const config: PaginateConfig<CatHomeEntity> = {
             relations: ['cat'],
             sortableColumns: ['id', 'name'],
@@ -358,7 +419,7 @@ describe('paginate', () => {
         expect(result.meta.filter).toStrictEqual({
             'cat.name': '$not:Milo',
         })
-        expect(result.data).toStrictEqual([catToys[2]])
+        expect(result.data).toStrictEqual([catToys[3]])
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.cat.name=$not:Milo')
     })
 
@@ -383,10 +444,12 @@ describe('paginate', () => {
         const cat2 = clone(cats[1])
         const catToys1 = clone(catToys[0])
         const catToys2 = clone(catToys[2])
+        const catToys3 = clone(catToys[3])
         delete catToys1.cat
         delete catToys2.cat
-        cat1.toys = [catToys1]
-        cat2.toys = [catToys2]
+        delete catToys3.cat
+        cat1.toys = [catToys1, catToys2]
+        cat2.toys = [catToys3]
 
         expect(result.meta.filter).toStrictEqual({
             'toys.name': '$not:Stuffed Mouse',
