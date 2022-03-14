@@ -7,12 +7,12 @@ import {
     isOperator,
     getFilterTokens,
     OperatorSymbolToFunction,
-} from '../index'
-import { PaginateQuery } from '../index'
+} from './paginate'
+import { PaginateQuery } from './decorator'
 import { HttpException } from '@nestjs/common'
-import { CatEntity } from './entity/cat.entity'
-import { CatToyEntity } from './entity/cat-toy.entity'
-import { CatHomeEntity } from './entity/cat-home.entity'
+import { CatEntity } from './__tests__/cat.entity'
+import { CatToyEntity } from './__tests__/cat-toy.entity'
+import { CatHomeEntity } from './__tests__/cat-home.entity'
 import { clone } from 'lodash'
 
 describe('paginate', () => {
@@ -216,6 +216,10 @@ describe('paginate', () => {
         ])
         expect(result.data).toStrictEqual([cats[3], cats[4], cats[1], cats[0], cats[2]])
     })
+
+    /**
+     * search
+     */
 
     it('should return result based on search term', async () => {
         const config: PaginateConfig<CatEntity> = {
