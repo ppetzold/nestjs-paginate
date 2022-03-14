@@ -20,10 +20,7 @@ import { ServiceUnavailableException } from '@nestjs/common'
 import { values, mapKeys } from 'lodash'
 import { stringify } from 'querystring'
 import { WherePredicateOperator } from 'typeorm/query-builder/WhereClause'
-
-type Join<K, P> = K extends string ? (P extends string ? `${K}${'' extends P ? '' : '.'}${P}` : never) : never
-
-type Prev = [never, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, ...0[]]
+import { Join, Prev } from './utils'
 
 type Column<T, D extends number = 2> = [D] extends [never]
     ? never
