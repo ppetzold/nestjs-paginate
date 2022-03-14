@@ -227,7 +227,7 @@ const result = await paginate<CatEntity>(query, queryBuilder, config)
 
 ## Usage with Relations
 
-You can utilize simplified left-join form using `relations`:
+Similar as with repositories, you can utilize `relations` as a simplified left-join form:
 
 ### Example
 
