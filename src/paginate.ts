@@ -20,31 +20,7 @@ import { ServiceUnavailableException } from '@nestjs/common'
 import { values, mapKeys } from 'lodash'
 import { stringify } from 'querystring'
 import { WherePredicateOperator } from 'typeorm/query-builder/WhereClause'
-import { Join, Prev } from './utils'
-
-type Column<T, D extends number = 2> = [D] extends [never]
-    ? never
-    : T extends Record<string, any>
-    ? {
-          [K in keyof T]-?: K extends string
-              ? T[K] extends Date
-                  ? `${K}`
-                  : T[K] extends Array<infer U>
-                  ? `${K}` | Join<K, Column<U, Prev[D]>>
-                  : `${K}` | Join<K, Column<T[K], Prev[D]>>
-              : never
-      }[keyof T]
-    : ''
-
-type RelationColumn<T> = Extract<
-    Column<T>,
-    {
-        [K in Column<T>]: K extends `${infer R}.${string}` ? R : never
-    }[Column<T>]
->
-
-type Order<T> = [Column<T>, 'ASC' | 'DESC']
-type SortBy<T> = Order<T>[]
+import { Column, Order, RelationColumn, SortBy } from './helper'
 
 export class Paginated<T> {
     data: T[]
