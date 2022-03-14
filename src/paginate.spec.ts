@@ -462,7 +462,7 @@ describe('paginate', () => {
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.toys.name=$not:Stuffed Mouse')
     })
 
-    it('should return result based on where config and filter on one-to-one relation', async () => {
+    it('should return result based on filter on one-to-one relation', async () => {
         const config: PaginateConfig<CatHomeEntity> = {
             relations: ['cat'],
             sortableColumns: ['id', 'name'],
@@ -484,6 +484,54 @@ describe('paginate', () => {
         })
         expect(result.data).toStrictEqual([catHomes[0]])
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.cat.name=$not:Garfield')
+    })
+
+    it('should return result based on $in filter on one-to-one relation', async () => {
+        const config: PaginateConfig<CatHomeEntity> = {
+            relations: ['cat'],
+            sortableColumns: ['id', 'name'],
+            filterableColumns: {
+                'cat.age': [FilterOperator.IN],
+            },
+        }
+        const query: PaginateQuery = {
+            path: '',
+            filter: {
+                'cat.age': '$in:4,6',
+            },
+        }
+
+        const result = await paginate<CatHomeEntity>(query, catHomeRepo, config)
+
+        expect(result.meta.filter).toStrictEqual({
+            'cat.age': '$in:4,6',
+        })
+        expect(result.data).toStrictEqual([catHomes[0]])
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.cat.age=$in:4,6')
+    })
+
+    it('should return result based on $btw filter on one-to-one relation', async () => {
+        const config: PaginateConfig<CatHomeEntity> = {
+            relations: ['cat'],
+            sortableColumns: ['id', 'name'],
+            filterableColumns: {
+                'cat.age': [FilterOperator.BTW],
+            },
+        }
+        const query: PaginateQuery = {
+            path: '',
+            filter: {
+                'cat.age': '$btw:6,10',
+            },
+        }
+
+        const result = await paginate<CatHomeEntity>(query, catHomeRepo, config)
+
+        expect(result.meta.filter).toStrictEqual({
+            'cat.age': '$btw:6,10',
+        })
+        expect(result.data).toStrictEqual([catHomes[0]])
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.cat.age=$btw:6,10')
     })
 
     it('should return result based on where array and filter', async () => {

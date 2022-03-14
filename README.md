@@ -200,6 +200,13 @@ const paginateConfig: PaginateConfig<CatEntity> {
    * https://typeorm.io/#/find-options/advanced-options
    */
   filterableColumns: { age: [FilterOperator.EQ, FilterOperator.IN] }
+
+  /**
+   * Required: false
+   * Type: RelationColumn<CatEntity>
+   * Description: Indicates what relations of entity should be loaded.
+   */
+  relations: [],
 }
 ```
 
@@ -214,4 +221,28 @@ const queryBuilder = repo
   .where('cats.owner = :ownerId', { ownerId })
 
 const result = await paginate<CatEntity>(query, queryBuilder, config)
+```
+
+## Usage with Relations
+
+### Example
+
+#### Endpoint
+
+```url
+http://localhost:3000/cats?filter.toys.name=$in:Mouse,String
+```
+
+#### Code
+
+```typescript
+const config: PaginateConfig<CatEntity> = {
+  relations: ['toys'],
+  sortableColumns: ['id', 'name', 'toys.name'],
+  filterableColumns: {
+    'toys.name': [FilterOperator.IN],
+  },
+}
+
+const result = await paginate<CatEntity>(query, catRepo, config)
 ```

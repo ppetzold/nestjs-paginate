@@ -288,10 +288,24 @@ export async function paginate<T>(
                             column,
                             filter[column]
                         ) as WherePredicateOperator
-                        condition.parameters = [`${qb.alias}_${column}`, `:${column}`]
-                        qb.andWhere(qb['createWhereConditionExpression'](condition), {
-                            [column]: filter[column].value,
-                        })
+                        let parameters = { [column]: filter[column].value }
+                        // TODO: refactor below
+                        switch (condition.operator) {
+                            case 'between':
+                                condition.parameters = [`${qb.alias}_${column}`, `:${column}_from`, `:${column}_to`]
+                                parameters = {
+                                    [column + '_from']: filter[column].value[0],
+                                    [column + '_to']: filter[column].value[1],
+                                }
+                                break
+                            case 'in':
+                                condition.parameters = [`${qb.alias}_${column}`, `:...${column}`]
+                                break
+                            default:
+                                condition.parameters = [`${qb.alias}_${column}`, `:${column}`]
+                                break
+                        }
+                        qb.andWhere(qb['createWhereConditionExpression'](condition), parameters)
                     } else {
                         qb.andWhere({
                             [column]: filter[column],
