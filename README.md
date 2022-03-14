@@ -199,7 +199,7 @@ const paginateConfig: PaginateConfig<CatEntity> {
    * Default: None
    * https://typeorm.io/#/find-options/advanced-options
    */
-  filterableColumns: { age: [FilterOperator.EQ, FilterOperator.IN] }
+  filterableColumns: { age: [FilterOperator.EQ, FilterOperator.IN] },
 
   /**
    * Required: false
@@ -211,6 +211,8 @@ const paginateConfig: PaginateConfig<CatEntity> {
 ```
 
 ## Usage with Query Builder
+
+You can paginate custom queries by passing on the query builder:
 
 ### Example
 
@@ -224,6 +226,8 @@ const result = await paginate<CatEntity>(query, queryBuilder, config)
 ```
 
 ## Usage with Relations
+
+You can utilize simplified left-join form using `relations`:
 
 ### Example
 
