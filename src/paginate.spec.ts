@@ -217,10 +217,6 @@ describe('paginate', () => {
         expect(result.data).toStrictEqual([cats[3], cats[4], cats[1], cats[0], cats[2]])
     })
 
-    /**
-     * search
-     */
-
     it('should return result based on search term', async () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id', 'name', 'color'],
