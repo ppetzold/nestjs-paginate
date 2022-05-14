@@ -52,6 +52,7 @@ export interface PaginateConfig<T> {
     defaultLimit?: number
     where?: FindConditions<T> | FindConditions<T>[]
     filterableColumns?: { [key in Column<T>]?: FilterOperator[] }
+    withDeleted?: boolean
 }
 
 export enum FilterOperator {
@@ -225,6 +226,10 @@ export async function paginate<T>(
 
     if (config.where) {
         queryBuilder.andWhere(new Brackets((qb) => qb.andWhere(config.where)))
+    }
+
+    if (config.withDeleted) {
+        queryBuilder.withDeleted()
     }
 
     if (query.search && searchBy.length) {

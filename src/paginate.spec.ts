@@ -815,4 +815,30 @@ describe('paginate', () => {
     ])('should get filter tokens for "$string"', ({ string, tokens }) => {
         expect(getFilterTokens(string)).toStrictEqual(tokens)
     })
+
+    it('should return all items even if deleted', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            withDeleted: true
+        }
+        const query: PaginateQuery = {
+            path: ''
+        }
+        await catRepo.softDelete({ id: cats[0].id })
+        const result = await paginate<CatEntity>(query, catRepo, config)
+        expect(result.meta.totalItems).toBe(cats.length)
+    })
+
+    it('should return only undeleted items', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            withDeleted: false
+        }
+        const query: PaginateQuery = {
+            path: ''
+        }
+        await catRepo.softDelete({ id: cats[0].id })
+        const result = await paginate<CatEntity>(query, catRepo, config)
+        expect(result.meta.totalItems).toBe(cats.length - 1)
+    })
 })
