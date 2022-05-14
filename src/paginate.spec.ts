@@ -36,8 +36,8 @@ describe('paginate', () => {
         catToyRepo = connection.getRepository(CatToyEntity)
         catHomeRepo = connection.getRepository(CatHomeEntity)
         cats = await catRepo.save([
-            catRepo.create({ name: 'Milo', color: 'brown', age: 6 }),
-            catRepo.create({ name: 'Garfield', color: 'ginger', age: 5 }),
+            catRepo.create({ name: 'Milo', color: 'brown', age: 6, createdAt: '2022-01-01' }),
+            catRepo.create({ name: 'Garfield', color: 'ginger', age: 5, createdAt: '2022-01-02' }),
             catRepo.create({ name: 'Shadow', color: 'black', age: 4 }),
             catRepo.create({ name: 'George', color: 'white', age: 3 }),
             catRepo.create({ name: 'Leche', color: 'white', age: null }),
@@ -511,7 +511,7 @@ describe('paginate', () => {
             relations: ['cat'],
             sortableColumns: ['id', 'name'],
             filterableColumns: {
-                'cat.age': [FilterOperator.BTW],
+                createdAt: [FilterOperator.BTW],
             },
         }
         const query: PaginateQuery = {
@@ -526,7 +526,7 @@ describe('paginate', () => {
         expect(result.meta.filter).toStrictEqual({
             'cat.age': '$btw:6,10',
         })
-        expect(result.data).toStrictEqual([catHomes[0]])
+        expect(result.data).toStrictEqual([catHomes[0], catHomes[1]])
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.cat.age=$btw:6,10')
     })
 
