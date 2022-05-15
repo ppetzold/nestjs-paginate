@@ -1,4 +1,13 @@
-import { Column, CreateDateColumn, DeleteDateColumn, Entity, JoinColumn, OneToMany, OneToOne, PrimaryGeneratedColumn } from 'typeorm'
+import {
+    Column,
+    CreateDateColumn,
+    DeleteDateColumn,
+    Entity,
+    JoinColumn,
+    OneToMany,
+    OneToOne,
+    PrimaryGeneratedColumn,
+} from 'typeorm'
 import { CatToyEntity } from './cat-toy.entity'
 import { CatHomeEntity } from './cat-home.entity'
 
@@ -27,5 +36,5 @@ export class CatEntity {
     createdAt: string
 
     @DeleteDateColumn({ nullable: true })
-    deletedAt?: string;
+    deletedAt?: string
 }

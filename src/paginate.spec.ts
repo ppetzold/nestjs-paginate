@@ -819,10 +819,10 @@ describe('paginate', () => {
     it('should return all items even if deleted', async () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id'],
-            withDeleted: true
+            withDeleted: true,
         }
         const query: PaginateQuery = {
-            path: ''
+            path: '',
         }
         await catRepo.softDelete({ id: cats[0].id })
         const result = await paginate<CatEntity>(query, catRepo, config)
@@ -832,10 +832,10 @@ describe('paginate', () => {
     it('should return only undeleted items', async () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id'],
-            withDeleted: false
+            withDeleted: false,
         }
         const query: PaginateQuery = {
-            path: ''
+            path: '',
         }
         await catRepo.softDelete({ id: cats[0].id })
         const result = await paginate<CatEntity>(query, catRepo, config)
