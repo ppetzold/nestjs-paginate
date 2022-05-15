@@ -208,6 +208,14 @@ const paginateConfig: PaginateConfig<CatEntity> {
    * Description: Indicates what relations of entity should be loaded.
    */
   relations: [],
+
+  /**
+   * Required: false
+   * Type: boolean
+   * Description: Disables the global condition of "non-deleted" for the entity with delete date columns.
+   * https://typeorm.io/select-query-builder#querying-deleted-rows
+   */
+  withDeleted: false,
 }
 ```
 
