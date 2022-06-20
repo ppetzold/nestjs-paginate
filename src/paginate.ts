@@ -1,6 +1,5 @@
 import {
     Repository,
-    FindConditions,
     SelectQueryBuilder,
     FindOperator,
     Equal,
@@ -14,6 +13,7 @@ import {
     ILike,
     Brackets,
     Between,
+    FindOptionsWhere,
 } from 'typeorm'
 import { PaginateQuery } from './decorator'
 import { ServiceUnavailableException } from '@nestjs/common'
@@ -50,7 +50,7 @@ export interface PaginateConfig<T> {
     maxLimit?: number
     defaultSortBy?: SortBy<T>
     defaultLimit?: number
-    where?: FindConditions<T> | FindConditions<T>[]
+    where?: FindOptionsWhere<T> | FindOptionsWhere<T>[]
     filterableColumns?: { [key in Column<T>]?: FilterOperator[] }
     withDeleted?: boolean
 }
