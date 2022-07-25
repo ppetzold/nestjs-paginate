@@ -841,4 +841,20 @@ describe('paginate', () => {
         const result = await paginate<CatEntity>(query, catRepo, config)
         expect(result.meta.totalItems).toBe(cats.length - 1)
     })
+
+    it('should return the specified columns only', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            selectableColumns: ['id', 'name'],
+        }
+        const query: PaginateQuery = {
+            path: '',
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        result.data.forEach((cat) => {
+            expect(cat.color).not.toBeDefined()
+        })
+    })
 })

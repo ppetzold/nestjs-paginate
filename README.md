@@ -173,6 +173,14 @@ const paginateConfig: PaginateConfig<CatEntity> {
 
   /**
    * Required: false
+   * Type: (keyof CatEntity)[]
+   * Description: This columns will be selected only.
+   * You could also include relationships colums, like toy.name
+   */
+  selectableColumns: ['name', 'color'],
+
+  /**
+   * Required: false
    * Type: number
    * Default: 100
    * Description: The maximum amount of entities to return per page.
