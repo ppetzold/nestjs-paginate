@@ -173,11 +173,11 @@ const paginateConfig: PaginateConfig<CatEntity> {
 
   /**
    * Required: false
-   * Type: (keyof CatEntity)[]
-   * Description: This columns will be selected only.
-   * You could also include relationships colums, like toy.name
+   * Type: TypeORM partial selection
+   * Default: None
+   * https://typeorm.io/select-query-builder#partial-selection
    */
-  selectableColumns: ['name', 'color'],
+  select: ['name', 'color'],
 
   /**
    * Required: false
