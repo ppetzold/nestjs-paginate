@@ -173,6 +173,14 @@ const paginateConfig: PaginateConfig<CatEntity> {
 
   /**
    * Required: false
+   * Type: TypeORM partial selection
+   * Default: None
+   * https://typeorm.io/select-query-builder#partial-selection
+   */
+  select: ['name', 'color'],
+
+  /**
+   * Required: false
    * Type: number
    * Default: 100
    * Description: The maximum amount of entities to return per page.

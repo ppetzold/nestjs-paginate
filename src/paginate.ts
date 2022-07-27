@@ -47,6 +47,7 @@ export interface PaginateConfig<T> {
     relations?: RelationColumn<T>[]
     sortableColumns: Column<T>[]
     searchableColumns?: Column<T>[]
+    select?: Column<T>[]
     maxLimit?: number
     defaultSortBy?: SortBy<T>
     defaultLimit?: number
@@ -222,6 +223,18 @@ export async function paginate<T>(
         } else {
             queryBuilder.addOrderBy(`${queryBuilder.alias}.${order[0]}`, order[1])
         }
+    }
+
+    if (config.select?.length > 0) {
+        const mappedSelect = config.select.map((col) => {
+            if (col.includes('.')) {
+                const [rel, relCol] = col.split('.')
+                return `${queryBuilder.alias}_${rel}.${relCol}`
+            }
+
+            return `${queryBuilder.alias}.${col}`
+        })
+        queryBuilder.select(mappedSelect)
     }
 
     if (config.where) {

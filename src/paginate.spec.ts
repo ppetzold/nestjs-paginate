@@ -841,4 +841,44 @@ describe('paginate', () => {
         const result = await paginate<CatEntity>(query, catRepo, config)
         expect(result.meta.totalItems).toBe(cats.length - 1)
     })
+
+    it('should return the specified columns only', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            select: ['id', 'name'],
+        }
+        const query: PaginateQuery = {
+            path: '',
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        result.data.forEach((cat) => {
+            expect(cat.color).not.toBeDefined()
+        })
+    })
+
+    it('should return the specified relationship columns only', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['name'],
+            select: ['id', 'name', 'toys.name'],
+            relations: ['toys'],
+        }
+        const query: PaginateQuery = {
+            path: '',
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        result.data.forEach((cat) => {
+            expect(cat.id).toBeDefined()
+            expect(cat.name).toBeDefined()
+            expect(cat.color).not.toBeDefined()
+
+            cat.toys.map((toy) => {
+                expect(toy.name).toBeDefined()
+                expect(toy.id).not.toBeDefined()
+            })
+        })
+    })
 })
