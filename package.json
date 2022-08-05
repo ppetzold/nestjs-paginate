@@ -45,7 +45,7 @@
     "prettier": "^2.7.1",
     "reflect-metadata": "^0.1.13",
     "rxjs": "^7.5.6",
-    "sqlite3": "^5.0.10",
+    "sqlite3": "^5.0.11",
     "ts-jest": "^28.0.7",
     "ts-node": "^10.9.1",
     "typeorm": "^0.3.7",
