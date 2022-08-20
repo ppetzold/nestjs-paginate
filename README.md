@@ -155,6 +155,7 @@ const paginateConfig: PaginateConfig<CatEntity> {
    * Description: These are the columns that are valid to be sorted by.
    */
   sortableColumns: ['id', 'name', 'color'],
+  
   /**
    * Required: false
    * Type: 'first' | 'last'
