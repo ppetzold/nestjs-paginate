@@ -124,6 +124,7 @@ export class CatsService {
   public findAll(query: PaginateQuery): Promise<Paginated<CatEntity>> {
     return paginate(query, this.catsRepository, {
       sortableColumns: ['id', 'name', 'color', 'age'],
+      nullSort: 'last',
       searchableColumns: ['name', 'color', 'age'],
       defaultSortBy: [['id', 'DESC']],
       filterableColumns: {
@@ -154,6 +155,13 @@ const paginateConfig: PaginateConfig<CatEntity> {
    * Description: These are the columns that are valid to be sorted by.
    */
   sortableColumns: ['id', 'name', 'color'],
+  /**
+   * Required: false
+   * Type: 'first' | 'last'
+   * Default: 'last'
+   * Description: Define whether to put null values at the beginning or end of the result set.
+   */
+  nullSort: 'last,
 
   /**
    * Required: false

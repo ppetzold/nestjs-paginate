@@ -46,6 +46,7 @@ export class Paginated<T> {
 export interface PaginateConfig<T> {
     relations?: RelationColumn<T>[]
     sortableColumns: Column<T>[]
+    nullSort?: 'first' | 'last'
     searchableColumns?: Column<T>[]
     select?: Column<T>[]
     maxLimit?: number
@@ -172,6 +173,8 @@ export async function paginate<T>(
 
     if (config.sortableColumns.length < 1) throw new ServiceUnavailableException()
 
+    const NULL_SORT = config.nullSort === 'last' ? 'NULLS LAST' : 'NULLS FIRST'
+
     if (query.sortBy) {
         for (const order of query.sortBy) {
             if (isEntityKey(config.sortableColumns, order[0]) && ['ASC', 'DESC'].includes(order[1])) {
@@ -219,9 +222,9 @@ export async function paginate<T>(
 
     for (const order of sortBy) {
         if (order[0].split('.').length > 1) {
-            queryBuilder.addOrderBy(`${queryBuilder.alias}_${order[0]}`, order[1])
+            queryBuilder.addOrderBy(`${queryBuilder.alias}_${order[0]}`, order[1], NULL_SORT)
         } else {
-            queryBuilder.addOrderBy(`${queryBuilder.alias}.${order[0]}`, order[1])
+            queryBuilder.addOrderBy(`${queryBuilder.alias}.${order[0]}`, order[1], NULL_SORT)
         }
     }
 
