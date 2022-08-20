@@ -196,6 +196,22 @@ describe('paginate', () => {
         expect(result.data).toStrictEqual(cats.slice(0).reverse())
     })
 
+    it('should put null values last when sorting', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['age', 'createdAt'],
+            nullSort: 'last',
+            defaultSortBy: [['age', 'DESC']],
+        }
+        const query: PaginateQuery = {
+            path: '',
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        expect(result.meta.sortBy).toStrictEqual([['age', 'DESC']])
+        expect(result.data).toStrictEqual(cats)
+    })
+
     it('should sort result by multiple columns', async () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['name', 'color'],
