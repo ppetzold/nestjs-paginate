@@ -162,7 +162,7 @@ const paginateConfig: PaginateConfig<CatEntity> {
    * Default: 'last'
    * Description: Define whether to put null values at the beginning or end of the result set.
    */
-  nullSort: 'last,
+  nullSort: 'last',
 
   /**
    * Required: false
