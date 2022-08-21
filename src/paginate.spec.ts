@@ -224,10 +224,10 @@ describe('paginate', () => {
 
         const result = await paginate<CatEntity>(query, catRepo, config)
 
-        const expectedResult = [cats[cats.length - 1], ...cats.slice(0, cats.length - 1)];
+        const expectedResult = [cats[cats.length - 1], ...cats.slice(0, cats.length - 1)]
 
         expect(result.meta.sortBy).toStrictEqual([['age', 'DESC']])
-        expect(result.data).toStrictEqual(expectedResult);
+        expect(result.data).toStrictEqual(expectedResult)
     })
 
     it('should put null values first when nullSort is not specified', async () => {
@@ -241,10 +241,10 @@ describe('paginate', () => {
 
         const result = await paginate<CatEntity>(query, catRepo, config)
 
-        const expectedResult = [cats[cats.length - 1], ...cats.slice(0, cats.length - 1)];
+        const expectedResult = [cats[cats.length - 1], ...cats.slice(0, cats.length - 1)]
 
         expect(result.meta.sortBy).toStrictEqual([['age', 'DESC']])
-        expect(result.data).toStrictEqual(expectedResult);
+        expect(result.data).toStrictEqual(expectedResult)
     })
 
     it('should sort result by multiple columns', async () => {
