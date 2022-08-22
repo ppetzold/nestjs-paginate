@@ -173,7 +173,10 @@ export async function paginate<T>(
 
     if (config.sortableColumns.length < 1) throw new ServiceUnavailableException()
 
-    const NULL_SORT = config.nullSort === 'last' ? 'NULLS LAST' : 'NULLS FIRST'
+    let NULL_SORT: 'NULLS LAST' | 'NULLS FIRST'
+    if (config.nullSort) {
+        NULL_SORT = config.nullSort === 'last' ? 'NULLS LAST' : 'NULLS FIRST'
+    }
 
     if (query.sortBy) {
         for (const order of query.sortBy) {
