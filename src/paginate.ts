@@ -173,11 +173,6 @@ export async function paginate<T>(
 
     if (config.sortableColumns.length < 1) throw new ServiceUnavailableException()
 
-    let NULL_SORT: 'NULLS LAST' | 'NULLS FIRST'
-    if (config.nullSort) {
-        NULL_SORT = config.nullSort === 'last' ? 'NULLS LAST' : 'NULLS FIRST'
-    }
-
     if (query.sortBy) {
         for (const order of query.sortBy) {
             if (isEntityKey(config.sortableColumns, order[0]) && ['ASC', 'DESC'].includes(order[1])) {
@@ -223,11 +218,16 @@ export async function paginate<T>(
         })
     }
 
+    let nullSort: 'NULLS LAST' | 'NULLS FIRST' | undefined = undefined
+    if (config.nullSort) {
+        nullSort = config.nullSort === 'last' ? 'NULLS LAST' : 'NULLS FIRST'
+    }
+
     for (const order of sortBy) {
         if (order[0].split('.').length > 1) {
-            queryBuilder.addOrderBy(`${queryBuilder.alias}_${order[0]}`, order[1], NULL_SORT)
+            queryBuilder.addOrderBy(`${queryBuilder.alias}_${order[0]}`, order[1], nullSort)
         } else {
-            queryBuilder.addOrderBy(`${queryBuilder.alias}.${order[0]}`, order[1], NULL_SORT)
+            queryBuilder.addOrderBy(`${queryBuilder.alias}.${order[0]}`, order[1], nullSort)
         }
     }
 
