@@ -200,7 +200,24 @@ describe('paginate', () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['age', 'createdAt'],
             nullSort: 'last',
-            defaultSortBy: [['age', 'DESC']],
+            defaultSortBy: [['age', 'ASC']],
+        }
+        const query: PaginateQuery = {
+            path: '',
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+        const expectedResult = [...cats.slice(0, -1).reverse(), cats.slice(-1)[0]]
+
+        expect(result.meta.sortBy).toStrictEqual([['age', 'ASC']])
+        expect(result.data).toStrictEqual(expectedResult)
+    })
+
+    it('should put null values first when sorting', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['age', 'createdAt'],
+            nullSort: 'first',
+            defaultSortBy: [['age', 'ASC']],
         }
         const query: PaginateQuery = {
             path: '',
@@ -208,8 +225,27 @@ describe('paginate', () => {
 
         const result = await paginate<CatEntity>(query, catRepo, config)
 
-        expect(result.meta.sortBy).toStrictEqual([['age', 'DESC']])
-        expect(result.data).toStrictEqual(cats)
+        const expectedResult = [cats[cats.length - 1], ...cats.slice(0, cats.length - 1).reverse()]
+
+        expect(result.meta.sortBy).toStrictEqual([['age', 'ASC']])
+        expect(result.data).toStrictEqual(expectedResult)
+    })
+
+    it('should put null values first when nullSort is not specified', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['age', 'createdAt'],
+            defaultSortBy: [['age', 'ASC']],
+        }
+        const query: PaginateQuery = {
+            path: '',
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        const expectedCats = cats.slice()
+
+        expect(result.meta.sortBy).toStrictEqual([['age', 'ASC']])
+        expect(result.data).toStrictEqual(expectedCats.reverse())
     })
 
     it('should sort result by multiple columns', async () => {
