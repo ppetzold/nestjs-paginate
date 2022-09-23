@@ -179,7 +179,7 @@ describe('paginate', () => {
         expect(links.current).toBe('/cats?page=2&limit=2&sortBy=id:ASC')
         expect(links.next).toBe('/cats?page=3&limit=2&sortBy=id:ASC')
         expect(links.last).toBe('/cats?page=3&limit=2&sortBy=id:ASC')
-    });
+    })
 
     it('should return an absolute path', async () => {
         const config: PaginateConfig<CatEntity> = {
@@ -200,13 +200,13 @@ describe('paginate', () => {
         expect(links.current).toBe('http://localhost/cats?page=2&limit=2&sortBy=id:ASC')
         expect(links.next).toBe('http://localhost/cats?page=3&limit=2&sortBy=id:ASC')
         expect(links.last).toBe('http://localhost/cats?page=3&limit=2&sortBy=id:ASC')
-    });
+    })
 
     it('should return an absolute path with new origin', async () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id'],
             relativePath: false,
-            origin: 'http://cats.example'
+            origin: 'http://cats.example',
         }
 
         const query: PaginateQuery = {
@@ -222,7 +222,7 @@ describe('paginate', () => {
         expect(links.current).toBe('http://cats.example/cats?page=2&limit=2&sortBy=id:ASC')
         expect(links.next).toBe('http://cats.example/cats?page=3&limit=2&sortBy=id:ASC')
         expect(links.last).toBe('http://cats.example/cats?page=3&limit=2&sortBy=id:ASC')
-    });
+    })
 
     it('should return only current link if zero results', async () => {
         const config: PaginateConfig<CatEntity> = {

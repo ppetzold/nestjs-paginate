@@ -54,9 +54,9 @@ export interface PaginateConfig<T> {
     defaultLimit?: number
     where?: FindOptionsWhere<T> | FindOptionsWhere<T>[]
     filterableColumns?: { [key in Column<T>]?: FilterOperator[] }
-    withDeleted?: boolean,
-    relativePath?: boolean,
-    origin?: string,
+    withDeleted?: boolean
+    relativePath?: boolean
+    origin?: string
 }
 
 export enum FilterOperator {
@@ -166,26 +166,26 @@ export async function paginate<T>(
     let page = query.page || 1
     const limit = Math.min(query.limit || config.defaultLimit || 20, config.maxLimit || 100)
     const sortBy = [] as SortBy<T>
-    const searchBy: Column<T>[] = [];
-    let path;
+    const searchBy: Column<T>[] = []
+    let path
 
-    const r = new RegExp('^(?:[a-z+]+:)?//', 'i');
-    let queryOrigin = '';
-    let queryPath = '';
-    if(r.test(query.path)){
-        const url = new URL(query.path);
-        queryOrigin = url.origin;
-        queryPath = url.pathname;
+    const r = new RegExp('^(?:[a-z+]+:)?//', 'i')
+    let queryOrigin = ''
+    let queryPath = ''
+    if (r.test(query.path)) {
+        const url = new URL(query.path)
+        queryOrigin = url.origin
+        queryPath = url.pathname
     } else {
-        queryPath = query.path;
+        queryPath = query.path
     }
 
     if (config.relativePath) {
-        path = queryPath;
+        path = queryPath
     } else if (config.origin) {
-        path = config.origin + queryPath;
+        path = config.origin + queryPath
     } else {
-        path = queryOrigin + queryPath;
+        path = queryOrigin + queryPath
     }
 
     function isEntityKey(entityColumns: Column<T>[], column: string): column is Column<T> {
