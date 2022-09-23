@@ -234,6 +234,21 @@ const paginateConfig: PaginateConfig<CatEntity> {
    * https://typeorm.io/select-query-builder#querying-deleted-rows
    */
   withDeleted: false,
+
+  /**
+   * Required: false
+   * Type: boolean
+   * Default: false
+   * Description: Generate relative paths in the resource links.
+   */
+  relativePath: true,
+
+  /**
+   * Required: false
+   * Type: string
+   * Description: Overrides the origin of absolute resource links if set.
+   */
+  origin: 'http://cats.example',
 }
 ```
 
