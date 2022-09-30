@@ -160,6 +160,70 @@ describe('paginate', () => {
         expect(links.last).toBe('?page=3&limit=2&sortBy=id:ASC')
     })
 
+    it('should return a relative path', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            relativePath: true,
+        }
+
+        const query: PaginateQuery = {
+            path: 'http://localhost/cats',
+            page: 2,
+            limit: 2,
+        }
+
+        const { links } = await paginate<CatEntity>(query, catRepo, config)
+
+        expect(links.first).toBe('/cats?page=1&limit=2&sortBy=id:ASC')
+        expect(links.previous).toBe('/cats?page=1&limit=2&sortBy=id:ASC')
+        expect(links.current).toBe('/cats?page=2&limit=2&sortBy=id:ASC')
+        expect(links.next).toBe('/cats?page=3&limit=2&sortBy=id:ASC')
+        expect(links.last).toBe('/cats?page=3&limit=2&sortBy=id:ASC')
+    })
+
+    it('should return an absolute path', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            relativePath: false,
+        }
+
+        const query: PaginateQuery = {
+            path: 'http://localhost/cats',
+            page: 2,
+            limit: 2,
+        }
+
+        const { links } = await paginate<CatEntity>(query, catRepo, config)
+
+        expect(links.first).toBe('http://localhost/cats?page=1&limit=2&sortBy=id:ASC')
+        expect(links.previous).toBe('http://localhost/cats?page=1&limit=2&sortBy=id:ASC')
+        expect(links.current).toBe('http://localhost/cats?page=2&limit=2&sortBy=id:ASC')
+        expect(links.next).toBe('http://localhost/cats?page=3&limit=2&sortBy=id:ASC')
+        expect(links.last).toBe('http://localhost/cats?page=3&limit=2&sortBy=id:ASC')
+    })
+
+    it('should return an absolute path with new origin', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            relativePath: false,
+            origin: 'http://cats.example',
+        }
+
+        const query: PaginateQuery = {
+            path: 'http://localhost/cats',
+            page: 2,
+            limit: 2,
+        }
+
+        const { links } = await paginate<CatEntity>(query, catRepo, config)
+
+        expect(links.first).toBe('http://cats.example/cats?page=1&limit=2&sortBy=id:ASC')
+        expect(links.previous).toBe('http://cats.example/cats?page=1&limit=2&sortBy=id:ASC')
+        expect(links.current).toBe('http://cats.example/cats?page=2&limit=2&sortBy=id:ASC')
+        expect(links.next).toBe('http://cats.example/cats?page=3&limit=2&sortBy=id:ASC')
+        expect(links.last).toBe('http://cats.example/cats?page=3&limit=2&sortBy=id:ASC')
+    })
+
     it('should return only current link if zero results', async () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id'],
