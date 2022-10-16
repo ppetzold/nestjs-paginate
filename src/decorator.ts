@@ -107,33 +107,31 @@ export const PaginateDocs = (entity: EntityTarget<any>) => {
             name: `filter.${key}`,
             required: false,
             type: 'string',
-            description: 'operator($eq, $not, $null, $in, $gt, $gte, $lt, $lte, $btw)',
-            example: '$operator:value',
-            schema: { default: '' },
+            description: 'operator($eq, $not, $null, $in, $gt, $gte, $lt, $lte, $btw)<br>using operator:value',
         })
     })
     return applyDecorators(
         ApiQuery({
             name: 'page',
             required: false,
-            schema: { default: 1, type: 'integer' },
+            type: 'integer',
         }),
         ApiQuery({
             name: 'limit',
             required: false,
-            schema: { default: 20, type: 'integer' },
+            type: 'integer',
         }),
         ApiQuery({
             name: 'sortBy',
             required: false,
-            example: 'field:DESC',
-            schema: { default: [], type: 'array' },
+            description: 'using field:DESC',
+            type: 'array',
         }),
         ApiQuery({
             name: 'searchBy',
             required: false,
-            example: 'field',
-            schema: { examples: ['id'], type: 'array' },
+            description: 'using field',
+            type: 'array',
         }),
         ApiQuery({
             name: 'search',
