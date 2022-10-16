@@ -74,6 +74,7 @@ export const Paginate = createParamDecorator((_data: unknown, ctx: ExecutionCont
     }
 })
 
+/* istanbul ignore next */
 function getEntityTree(entity: EntityTarget<any>, tree: Record<string, ''>, parent?: RelationMetadataArgs) {
     const metadataStorage = getMetadataArgsStorage()
     const relations = metadataStorage.relations.filter((x) => x.target === entity)
@@ -95,6 +96,7 @@ function getEntityTree(entity: EntityTarget<any>, tree: Record<string, ''>, pare
     })
 }
 
+/* istanbul ignore next */
 export const PaginateDocs = (entity: EntityTarget<any>) => {
     const tree: { [name: string]: any } = {}
 
@@ -107,6 +109,7 @@ export const PaginateDocs = (entity: EntityTarget<any>) => {
             type: 'string',
             description: 'operator($eq, $not, $null, $in, $gt, $gte, $lt, $lte, $btw)',
             example: '$operator:value',
+            schema: { default: '' },
         })
     })
     return applyDecorators(
