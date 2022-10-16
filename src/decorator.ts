@@ -1,6 +1,9 @@
-import { createParamDecorator, ExecutionContext } from '@nestjs/common'
+import { applyDecorators, createParamDecorator, ExecutionContext } from '@nestjs/common'
+import { ApiQuery } from '@nestjs/swagger'
 import { Request } from 'express'
 import { pickBy, Dictionary, isString, mapKeys } from 'lodash'
+import { getMetadataArgsStorage, EntityTarget } from 'typeorm'
+import { RelationMetadataArgs } from 'typeorm/metadata-args/RelationMetadataArgs'
 
 export interface PaginateQuery {
     page?: number
@@ -70,3 +73,70 @@ export const Paginate = createParamDecorator((_data: unknown, ctx: ExecutionCont
         path,
     }
 })
+
+function getEntityTree(entity: EntityTarget<any>, tree: Record<string, ''>, parent?: RelationMetadataArgs) {
+    const metadataStorage = getMetadataArgsStorage()
+    const relations = metadataStorage.relations.filter((x) => x.target === entity)
+
+    metadataStorage.columns
+        .filter((x) => x.target === entity)
+        .forEach((column) => {
+            tree[(parent ? `${parent.propertyName}.` : '') + column.propertyName] = ''
+        })
+
+    relations.forEach((relation) => {
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore
+        const relationEntity = relation.type()
+
+        if (!parent || parent.target !== relationEntity) {
+            getEntityTree(relationEntity, tree, relation)
+        }
+    })
+}
+
+export const PaginateDocs = (entity: EntityTarget<any>) => {
+    const tree: { [name: string]: any } = {}
+
+    getEntityTree(entity, tree)
+
+    const filterQueries = Object.keys(tree).map((key) => {
+        return ApiQuery({
+            name: `filter.${key}`,
+            required: false,
+            type: 'string',
+            description: 'operator($eq, $not, $null, $in, $gt, $gte, $lt, $lte, $btw)',
+            example: '$operator:value',
+        })
+    })
+    return applyDecorators(
+        ApiQuery({
+            name: 'page',
+            required: false,
+            schema: { default: 1, type: 'integer' },
+        }),
+        ApiQuery({
+            name: 'limit',
+            required: false,
+            schema: { default: 20, type: 'integer' },
+        }),
+        ApiQuery({
+            name: 'sortBy',
+            required: false,
+            example: 'field:DESC',
+            schema: { default: [], type: 'array' },
+        }),
+        ApiQuery({
+            name: 'searchBy',
+            required: false,
+            example: 'field',
+            schema: { examples: ['id'], type: 'array' },
+        }),
+        ApiQuery({
+            name: 'search',
+            type: 'string',
+            required: false,
+        }),
+        ...filterQueries
+    )
+}
