@@ -292,3 +292,18 @@ const config: PaginateConfig<CatEntity> = {
 
 const result = await paginate<CatEntity>(query, catRepo, config)
 ```
+
+## Usage with Swagger
+you can add query parameters on swagger docs
+### Example
+#### Code
+
+```typescript
+export class Controller {
+    @Get('')
+    @PaginateDocs(Entity)
+    async example(@Paginate() query: PaginateQuery) {
+        return paginate(query, this.userRepo, {...});
+    }
+}
+```
