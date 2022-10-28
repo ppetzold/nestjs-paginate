@@ -245,7 +245,7 @@ export async function paginate<T>(
     }
 
     for (const order of sortBy) {
-        if (order[0].split('.').length > 1) {
+        if (queryBuilder.expressionMap.mainAlias.metadata.hasRelationWithPropertyPath(order[0].split('.')[0])) {
             queryBuilder.addOrderBy(`${queryBuilder.alias}_${order[0]}`, order[1], nullSort)
         } else {
             queryBuilder.addOrderBy(`${queryBuilder.alias}.${order[0]}`, order[1], nullSort)
@@ -278,9 +278,14 @@ export async function paginate<T>(
                 for (const column of searchBy) {
                     const propertyPath = (column as string).split('.')
                     if (propertyPath.length > 1) {
+                        const alias = queryBuilder.expressionMap.mainAlias.metadata.hasRelationWithPropertyPath(
+                            propertyPath[0]
+                        )
+                            ? `${qb.alias}_${column}`
+                            : `${qb.alias}.${column}`
                         const condition: WherePredicateOperator = {
                             operator: 'ilike',
-                            parameters: [`${qb.alias}_${column}`, `:${column}`],
+                            parameters: [alias, `:${column}`],
                         }
                         qb.orWhere(qb['createWhereConditionExpression'](condition), {
                             [column]: `%${query.search}%`,
@@ -308,19 +313,24 @@ export async function paginate<T>(
                         ) as WherePredicateOperator
                         let parameters = { [column]: filter[column].value }
                         // TODO: refactor below
+                        const alias = queryBuilder.expressionMap.mainAlias.metadata.hasRelationWithPropertyPath(
+                            propertyPath[0]
+                        )
+                            ? `${qb.alias}_${column}`
+                            : `${qb.alias}.${column}`
                         switch (condition.operator) {
                             case 'between':
-                                condition.parameters = [`${qb.alias}_${column}`, `:${column}_from`, `:${column}_to`]
+                                condition.parameters = [alias, `:${column}_from`, `:${column}_to`]
                                 parameters = {
                                     [column + '_from']: filter[column].value[0],
                                     [column + '_to']: filter[column].value[1],
                                 }
                                 break
                             case 'in':
-                                condition.parameters = [`${qb.alias}_${column}`, `:...${column}`]
+                                condition.parameters = [alias, `:...${column}`]
                                 break
                             default:
-                                condition.parameters = [`${qb.alias}_${column}`, `:${column}`]
+                                condition.parameters = [alias, `:${column}`]
                                 break
                         }
                         qb.andWhere(qb['createWhereConditionExpression'](condition), parameters)
