@@ -1,5 +1,6 @@
 import { Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm'
 import { CatEntity } from './cat.entity'
+import { SizeEmbed } from './size.embed'
 
 @Entity()
 export class CatToyEntity {
@@ -8,6 +9,9 @@ export class CatToyEntity {
 
     @Column()
     name: string
+
+    @Column(() => SizeEmbed)
+    size: SizeEmbed
 
     @ManyToOne(() => CatEntity, (cat) => cat.toys)
     @JoinColumn()
