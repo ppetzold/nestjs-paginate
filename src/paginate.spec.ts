@@ -682,7 +682,31 @@ describe('paginate', () => {
 
         const result = await paginate<CatEntity>(query, catRepo, config)
 
-        const orderedCats = [cats[3], cats[1], cats[2], cats[0], cats[4]]
+        const copyCats = cats.map((cat: CatEntity) => {
+            const copy = clone(cat)
+            copy.home = null
+            copy.toys = []
+            return copy
+        })
+
+        const copyHomes = catHomes.map((home: CatHomeEntity) => {
+            const copy = clone(home)
+            delete copy.cat
+            return copy
+        })
+        copyCats[0].home = copyHomes[0]
+        copyCats[1].home = copyHomes[1]
+
+        const copyToys = catToys.map((toy: CatToyEntity) => {
+            const copy = clone(toy)
+            delete copy.cat
+            return copy
+        })
+        copyCats[0].toys = [copyToys[0], copyToys[1], copyToys[2]]
+        copyCats[1].toys = [copyToys[3]]
+
+        const orderedCats = [copyCats[3], copyCats[1], copyCats[2], copyCats[0], copyCats[4]]
+
         expect(result.data).toStrictEqual(orderedCats)
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=size.height:DESC&sortBy=size.length:DESC')
     })
@@ -784,7 +808,7 @@ describe('paginate', () => {
         const result = await paginate<CatEntity>(query, catRepo, config)
 
         expect(result.data).toStrictEqual([cats[4]])
-        expect(result.links.current).toBe('?page=1&limit=20&search=10')
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&search=10')
     })
 
     it('should return result based on search term on embedded entity when other relations loaded', async () => {
@@ -799,9 +823,15 @@ describe('paginate', () => {
         }
 
         const result = await paginate<CatEntity>(query, catRepo, config)
+
         expect(result.meta.search).toStrictEqual('10')
-        expect(result.data).toStrictEqual([cats[4]])
-        expect(result.links.current).toBe('?page=1&limit=20&search=10')
+
+        const copyCat = clone(cats[4])
+        copyCat.home = null
+        copyCat.toys = []
+
+        expect(result.data).toStrictEqual([copyCat])
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&search=10')
     })
 
     it('should return result based on search term on embedded entity on many-to-one relation', async () => {
@@ -924,7 +954,13 @@ describe('paginate', () => {
         const home = clone(catHomes[1])
         delete home.cat
 
-        expect(result.data).toStrictEqual([Object.assign(cats[1], { home: home }), cats[3], cats[4]])
+        const copyCats = [
+            Object.assign(clone(cats[1]), { home: home }),
+            Object.assign(clone(cats[3]), { home: null }),
+            Object.assign(clone(cats[4]), { home: null }),
+        ]
+
+        expect(result.data).toStrictEqual(copyCats)
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.size.height=$not:25')
     })
 
