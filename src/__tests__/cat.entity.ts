@@ -10,6 +10,7 @@ import {
 } from 'typeorm'
 import { CatToyEntity } from './cat-toy.entity'
 import { CatHomeEntity } from './cat-home.entity'
+import { SizeEmbed } from './size.embed'
 
 @Entity()
 export class CatEntity {
@@ -24,6 +25,9 @@ export class CatEntity {
 
     @Column({ nullable: true })
     age: number | null
+
+    @Column(() => SizeEmbed)
+    size: SizeEmbed
 
     @OneToMany(() => CatToyEntity, (catToy) => catToy.cat)
     toys: CatToyEntity[]
