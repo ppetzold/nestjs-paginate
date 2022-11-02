@@ -1017,6 +1017,7 @@ describe('paginate', () => {
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.toys.size.height=$eq:1')
     })
 
+
     it('should return result based on filter on embedded on one-to-one relation', async () => {
         const config: PaginateConfig<CatHomeEntity> = {
             relations: ['cat'],
@@ -1144,6 +1145,30 @@ describe('paginate', () => {
         })
         expect(result.data).toStrictEqual([cats[3]])
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.name=$not:Leche&filter.color=white')
+    })
+    
+
+    it('should return result based on $ilike filter', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            filterableColumns: {
+                name: [FilterOperator.ILIKE],
+            },
+        }
+        const query: PaginateQuery = {
+            path: '',
+            filter: {
+                'name': '$ilike:Garf',
+            },
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        expect(result.meta.filter).toStrictEqual({
+            name: '$ilike:Garf',
+        })
+        expect(result.data).toStrictEqual([cats[1]])
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.name=$ilike:Garf')
     })
 
     it('should return result based on filter and search term', async () => {
@@ -1338,6 +1363,7 @@ describe('paginate', () => {
         { operator: '$lte', result: true },
         { operator: '$btw', result: true },
         { operator: '$not', result: true },
+        { operator: '$ilike', result: true },
         { operator: '$fake', result: false },
     ])('should check operator "$operator" valid is $result', ({ operator, result }) => {
         expect(isOperator(operator)).toStrictEqual(result)
@@ -1353,12 +1379,14 @@ describe('paginate', () => {
         { operator: '$lte', name: 'LessThanOrEqual' },
         { operator: '$btw', name: 'Between' },
         { operator: '$not', name: 'Not' },
+        { operator: '$ilike', name: 'ILike' },
     ])('should get operator function $name for "$operator"', ({ operator, name }) => {
         const func = OperatorSymbolToFunction.get(operator as FilterOperator)
         expect(func.name).toStrictEqual(name)
     })
 
     it.each([
+        { string: '$ilike:value', tokens: [null, '$ilike', 'value'] },
         { string: '$eq:value', tokens: [null, '$eq', 'value'] },
         { string: '$eq:val:ue', tokens: [null, '$eq', 'val:ue'] },
         { string: '$in:value1,value2,value3', tokens: [null, '$in', 'value1,value2,value3'] },
