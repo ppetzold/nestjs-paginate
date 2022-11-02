@@ -1017,7 +1017,6 @@ describe('paginate', () => {
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.toys.size.height=$eq:1')
     })
 
-
     it('should return result based on filter on embedded on one-to-one relation', async () => {
         const config: PaginateConfig<CatHomeEntity> = {
             relations: ['cat'],
