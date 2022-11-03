@@ -69,6 +69,7 @@ export enum FilterOperator {
     LTE = '$lte',
     BTW = '$btw',
     NOT = '$not',
+    ILIKE = '$ilike',
 }
 
 export function isOperator(value: unknown): value is FilterOperator {
@@ -85,6 +86,7 @@ export const OperatorSymbolToFunction = new Map<FilterOperator, (...args: any[])
     [FilterOperator.LTE, LessThanOrEqual],
     [FilterOperator.BTW, Between],
     [FilterOperator.NOT, Not],
+    [FilterOperator.ILIKE, ILike],
 ])
 
 export function getFilterTokens(raw: string): string[] {
@@ -144,6 +146,9 @@ function parseFilter<T>(query: PaginateQuery, config: PaginateConfig<T>) {
                         break
                     case FilterOperator.IN:
                         filter[column] = OperatorSymbolToFunction.get(op1)(value.split(','))
+                        break
+                    case FilterOperator.ILIKE:
+                        filter[column] = OperatorSymbolToFunction.get(op1)(`%${value}%`)
                         break
                     default:
                         filter[column] = OperatorSymbolToFunction.get(op1)(value)
