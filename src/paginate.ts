@@ -148,7 +148,7 @@ function parseFilter<T>(query: PaginateQuery, config: PaginateConfig<T>) {
                         filter[column] = OperatorSymbolToFunction.get(op1)(value.split(','))
                         break
                     case FilterOperator.ILIKE:
-                        filter[column] = OperatorSymbolToFunction.get(op1)(`%${value}%`);
+                        filter[column] = OperatorSymbolToFunction.get(op1)(`%${value}%`)
                         break
                     default:
                         filter[column] = OperatorSymbolToFunction.get(op1)(value)

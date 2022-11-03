@@ -1145,7 +1145,6 @@ describe('paginate', () => {
         expect(result.data).toStrictEqual([cats[3]])
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.name=$not:Leche&filter.color=white')
     })
-    
 
     it('should return result based on $ilike filter', async () => {
         const config: PaginateConfig<CatEntity> = {
@@ -1157,7 +1156,7 @@ describe('paginate', () => {
         const query: PaginateQuery = {
             path: '',
             filter: {
-                'name': '$ilike:Garf',
+                name: '$ilike:Garf',
             },
         }
 
