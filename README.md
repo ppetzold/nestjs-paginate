@@ -91,6 +91,12 @@ http://localhost:3000/cats?limit=5&page=2&sortBy=color:DESC&search=i&filter.age=
 }
 ```
 
+Array values for filter operators such as `$in` should be provided as comma-separated values:
+
+```
+http://localhost:3000/cats?filter.name=$in:George,Milo
+```
+
 #### Code
 
 ```ts
@@ -292,3 +298,10 @@ const config: PaginateConfig<CatEntity> = {
 
 const result = await paginate<CatEntity>(query, catRepo, config)
 ```
+
+## Troubleshooting
+
+The package does not report error reasons in the response bodies. They are instead
+reported as `debug` level [logging](https://docs.nestjs.com/techniques/logger#logger).
+
+Common errors include missing `sortableColumns` or `filterableColumns` (the latter only affects filtering).
