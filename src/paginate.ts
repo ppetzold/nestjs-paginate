@@ -22,7 +22,7 @@ import { stringify } from 'querystring'
 import { WherePredicateOperator } from 'typeorm/query-builder/WhereClause'
 import { Column, Order, RelationColumn, SortBy } from './helper'
 
-const logger: Logger = new Logger("nestjs-paginate");
+const logger: Logger = new Logger('nestjs-paginate')
 
 export class Paginated<T> {
     data: T[]
@@ -120,11 +120,11 @@ export function getFilterTokens(raw: string): string[] {
 }
 
 function parseFilter<T>(query: PaginateQuery, config: PaginateConfig<T>) {
-    const filter: { [columnName: string]: FindOperator<string> } = {};
-    let filterableColumns = config.filterableColumns;
+    const filter: { [columnName: string]: FindOperator<string> } = {}
+    let filterableColumns = config.filterableColumns
     if (filterableColumns === undefined) {
-        logger.debug("No 'filterableColumns' given, ignoring filters.");
-        filterableColumns = {};
+        logger.debug("No 'filterableColumns' given, ignoring filters.")
+        filterableColumns = {}
     }
     for (const column of Object.keys(query.filter)) {
         if (!(column in config.filterableColumns)) {
