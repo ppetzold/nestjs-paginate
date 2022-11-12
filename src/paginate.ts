@@ -16,11 +16,13 @@ import {
     FindOptionsWhere,
 } from 'typeorm'
 import { PaginateQuery } from './decorator'
-import { ServiceUnavailableException } from '@nestjs/common'
+import { ServiceUnavailableException, Logger } from '@nestjs/common'
 import { values, mapKeys } from 'lodash'
 import { stringify } from 'querystring'
 import { WherePredicateOperator } from 'typeorm/query-builder/WhereClause'
 import { Column, Order, RelationColumn, SortBy } from './helper'
+
+const logger: Logger = new Logger("nestjs-paginate");
 
 export class Paginated<T> {
     data: T[]
@@ -118,7 +120,12 @@ export function getFilterTokens(raw: string): string[] {
 }
 
 function parseFilter<T>(query: PaginateQuery, config: PaginateConfig<T>) {
-    const filter: { [columnName: string]: FindOperator<string> } = {}
+    const filter: { [columnName: string]: FindOperator<string> } = {};
+    let filterableColumns = config.filterableColumns;
+    if (filterableColumns === undefined) {
+        logger.debug("No 'filterableColumns' given, ignoring filters.");
+        filterableColumns = {};
+    }
     for (const column of Object.keys(query.filter)) {
         if (!(column in config.filterableColumns)) {
             continue
@@ -197,7 +204,10 @@ export async function paginate<T>(
         return !!entityColumns.find((c) => c === column)
     }
 
-    if (config.sortableColumns.length < 1) throw new ServiceUnavailableException()
+    if (config.sortableColumns.length < 1) {
+        logger.debug("Missing required 'sortableColumns' config.")
+        throw new ServiceUnavailableException()
+    }
 
     if (query.sortBy) {
         for (const order of query.sortBy) {
