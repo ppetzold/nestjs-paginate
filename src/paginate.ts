@@ -127,10 +127,10 @@ function parseFilter<T>(query: PaginateQuery, config: PaginateConfig<T>) {
         filterableColumns = {}
     }
     for (const column of Object.keys(query.filter)) {
-        if (!(column in config.filterableColumns)) {
+        if (!(column in filterableColumns)) {
             continue
         }
-        const allowedOperators = config.filterableColumns[column]
+        const allowedOperators = filterableColumns[column]
         const input = query.filter[column]
         const statements = !Array.isArray(input) ? [input] : input
         for (const raw of statements) {
