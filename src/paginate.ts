@@ -14,6 +14,7 @@ import {
     Brackets,
     Between,
     FindOptionsWhere,
+    ObjectLiteral,
 } from 'typeorm'
 import { PaginateQuery } from './decorator'
 import { ServiceUnavailableException } from '@nestjs/common'
@@ -163,7 +164,7 @@ function parseFilter<T>(query: PaginateQuery, config: PaginateConfig<T>) {
     return filter
 }
 
-export async function paginate<T>(
+export async function paginate<T extends ObjectLiteral>(
     query: PaginateQuery,
     repo: Repository<T> | SelectQueryBuilder<T>,
     config: PaginateConfig<T>
