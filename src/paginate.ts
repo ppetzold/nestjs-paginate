@@ -175,9 +175,9 @@ export async function paginate<T extends ObjectLiteral>(
     query: PaginateQuery,
     repo: Repository<T> | SelectQueryBuilder<T>,
     config: PaginateConfig<T>
-): Promise<Paginated<T>> {
+): Promise<Paginated<T> | T[]> {
     let page = query.page || 1
-    const limit = Math.min(query.limit || config.defaultLimit || 20, config.maxLimit || 100)
+    const limit = Math.min((query.limit >= 0 ? query.limit : 0) ?? (config.defaultLimit || 20), config.maxLimit || 100)
     const sortBy = [] as SortBy<T>
     const searchBy: Column<T>[] = []
     let path
@@ -238,15 +238,10 @@ export async function paginate<T extends ObjectLiteral>(
 
     let [items, totalItems]: [T[], number] = [[], 0]
 
-    let queryBuilder: SelectQueryBuilder<T>
+    const queryBuilder = repo instanceof Repository ? repo.createQueryBuilder('e') : repo
 
-    if (repo instanceof Repository) {
-        queryBuilder = repo
-            .createQueryBuilder('e')
-            .take(limit)
-            .skip((page - 1) * limit)
-    } else {
-        queryBuilder = repo.take(limit).skip((page - 1) * limit)
+    if (limit) {
+        queryBuilder.take(limit).skip((page - 1) * limit)
     }
 
     if (config.relations?.length) {
@@ -362,49 +357,53 @@ export async function paginate<T extends ObjectLiteral>(
 
     ;[items, totalItems] = await queryBuilder.getManyAndCount()
 
-    let totalPages = totalItems / limit
-    if (totalItems % limit) totalPages = Math.ceil(totalPages)
+    if (limit) {
+        let totalPages = totalItems / limit
+        if (totalItems % limit) totalPages = Math.ceil(totalPages)
 
-    const sortByQuery = sortBy.map((order) => `&sortBy=${order.join(':')}`).join('')
-    const searchQuery = query.search ? `&search=${query.search}` : ''
+        const sortByQuery = sortBy.map((order) => `&sortBy=${order.join(':')}`).join('')
+        const searchQuery = query.search ? `&search=${query.search}` : ''
 
-    const searchByQuery =
-        query.searchBy && searchBy.length ? searchBy.map((column) => `&searchBy=${column}`).join('') : ''
+        const searchByQuery =
+            query.searchBy && searchBy.length ? searchBy.map((column) => `&searchBy=${column}`).join('') : ''
 
-    const filterQuery = query.filter
-        ? '&' +
-          stringify(
-              mapKeys(query.filter, (_param, name) => 'filter.' + name),
-              '&',
-              '=',
-              { encodeURIComponent: (str) => str }
-          )
-        : ''
+        const filterQuery = query.filter
+            ? '&' +
+              stringify(
+                  mapKeys(query.filter, (_param, name) => 'filter.' + name),
+                  '&',
+                  '=',
+                  { encodeURIComponent: (str) => str }
+              )
+            : ''
 
-    const options = `&limit=${limit}${sortByQuery}${searchQuery}${searchByQuery}${filterQuery}`
+        const options = `&limit=${limit}${sortByQuery}${searchQuery}${searchByQuery}${filterQuery}`
 
-    const buildLink = (p: number): string => path + '?page=' + p + options
+        const buildLink = (p: number): string => path + '?page=' + p + options
 
-    const results: Paginated<T> = {
-        data: items,
-        meta: {
-            itemsPerPage: limit,
-            totalItems,
-            currentPage: page,
-            totalPages: totalPages,
-            sortBy,
-            search: query.search,
-            searchBy: query.search ? searchBy : undefined,
-            filter: query.filter,
-        },
-        links: {
-            first: page == 1 ? undefined : buildLink(1),
-            previous: page - 1 < 1 ? undefined : buildLink(page - 1),
-            current: buildLink(page),
-            next: page + 1 > totalPages ? undefined : buildLink(page + 1),
-            last: page == totalPages || !totalItems ? undefined : buildLink(totalPages),
-        },
+        const results: Paginated<T> = {
+            data: items,
+            meta: {
+                itemsPerPage: limit,
+                totalItems,
+                currentPage: page,
+                totalPages: totalPages,
+                sortBy,
+                search: query.search,
+                searchBy: query.search ? searchBy : undefined,
+                filter: query.filter,
+            },
+            links: {
+                first: page == 1 ? undefined : buildLink(1),
+                previous: page - 1 < 1 ? undefined : buildLink(page - 1),
+                current: buildLink(page),
+                next: page + 1 > totalPages ? undefined : buildLink(page + 1),
+                last: page == totalPages || !totalItems ? undefined : buildLink(totalPages),
+            },
+        }
+
+        return Object.assign(new Paginated<T>(), results)
+    } else {
+        return [...items]
     }
-
-    return Object.assign(new Paginated<T>(), results)
 }
