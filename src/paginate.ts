@@ -175,7 +175,7 @@ export async function paginate<T extends ObjectLiteral>(
     query: PaginateQuery,
     repo: Repository<T> | SelectQueryBuilder<T>,
     config: PaginateConfig<T>
-): Promise<Paginated<T> | T[]> {
+): Promise<Paginated<T>> {
     let page = query.page || 1
     const limit = Math.min(
         (query.limit >= 0 ? query.limit : config.defaultLimit) ?? (config.defaultLimit || 20),
@@ -360,31 +360,33 @@ export async function paginate<T extends ObjectLiteral>(
 
     ;[items, totalItems] = await queryBuilder.getManyAndCount()
 
+    const sortByQuery = sortBy.map((order) => `&sortBy=${order.join(':')}`).join('')
+    const searchQuery = query.search ? `&search=${query.search}` : ''
+
+    const searchByQuery =
+        query.searchBy && searchBy.length ? searchBy.map((column) => `&searchBy=${column}`).join('') : ''
+
+    const filterQuery = query.filter
+        ? '&' +
+          stringify(
+              mapKeys(query.filter, (_param, name) => 'filter.' + name),
+              '&',
+              '=',
+              { encodeURIComponent: (str) => str }
+          )
+        : ''
+
+    const options = `&limit=${limit}${sortByQuery}${searchQuery}${searchByQuery}${filterQuery}`
+
+    const buildLink = (p: number): string => path + '?page=' + p + options
+
+    let results: Paginated<T>
+
     if (limit) {
         let totalPages = totalItems / limit
         if (totalItems % limit) totalPages = Math.ceil(totalPages)
 
-        const sortByQuery = sortBy.map((order) => `&sortBy=${order.join(':')}`).join('')
-        const searchQuery = query.search ? `&search=${query.search}` : ''
-
-        const searchByQuery =
-            query.searchBy && searchBy.length ? searchBy.map((column) => `&searchBy=${column}`).join('') : ''
-
-        const filterQuery = query.filter
-            ? '&' +
-              stringify(
-                  mapKeys(query.filter, (_param, name) => 'filter.' + name),
-                  '&',
-                  '=',
-                  { encodeURIComponent: (str) => str }
-              )
-            : ''
-
-        const options = `&limit=${limit}${sortByQuery}${searchQuery}${searchByQuery}${filterQuery}`
-
-        const buildLink = (p: number): string => path + '?page=' + p + options
-
-        const results: Paginated<T> = {
+        results = {
             data: items,
             meta: {
                 itemsPerPage: limit,
@@ -404,9 +406,28 @@ export async function paginate<T extends ObjectLiteral>(
                 last: page == totalPages || !totalItems ? undefined : buildLink(totalPages),
             },
         }
-
-        return Object.assign(new Paginated<T>(), results)
     } else {
-        return [...items]
+        results = {
+            data: items,
+            meta: {
+                itemsPerPage: items.length,
+                totalItems,
+                currentPage: page,
+                totalPages: items.length,
+                sortBy,
+                search: query.search,
+                searchBy: query.search ? searchBy : undefined,
+                filter: query.filter,
+            },
+            links: {
+                first: undefined,
+                previous: undefined,
+                current: buildLink(page),
+                next: undefined,
+                last: undefined,
+            },
+        }
     }
+
+    return Object.assign(new Paginated<T>(), results)
 }
