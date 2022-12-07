@@ -177,7 +177,10 @@ export async function paginate<T extends ObjectLiteral>(
     config: PaginateConfig<T>
 ): Promise<Paginated<T> | T[]> {
     let page = query.page || 1
-    const limit = Math.min((query.limit >= 0 ? query.limit : 0) ?? (config.defaultLimit || 20), config.maxLimit || 100)
+    const limit = Math.min(
+        (query.limit >= 0 ? query.limit : config.defaultLimit) ?? (config.defaultLimit || 20),
+        config.maxLimit || 100
+    )
     const sortBy = [] as SortBy<T>
     const searchBy: Column<T>[] = []
     let path
