@@ -7,8 +7,6 @@ import {
     isOperator,
     getFilterTokens,
     OperatorSymbolToFunction,
-    DEFAULT_MAX_LIMIT,
-    DEFAULT_LIMIT,
     NO_PAGINATION,
 } from './paginate'
 import { PaginateQuery } from './decorator'
