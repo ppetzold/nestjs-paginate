@@ -171,19 +171,31 @@ function parseFilter<T>(query: PaginateQuery, config: PaginateConfig<T>) {
     return filter
 }
 
+export const DEFAULT_MAX_LIMIT = 100
+export const DEFAULT_LIMIT = 20
+export const NO_PAGINATION = 0
+
+const positiveNumberOrDefault = (value: number | undefined, defaultValue: number, minValue: 0 | 1 = 0) =>
+    value === undefined || value < minValue ? defaultValue : value
+
 export async function paginate<T extends ObjectLiteral>(
     query: PaginateQuery,
     repo: Repository<T> | SelectQueryBuilder<T>,
     config: PaginateConfig<T>
 ): Promise<Paginated<T>> {
-    let page = query.page || 1
-    const limit = Math.min(
-        (query.limit >= 0 ? query.limit : config.defaultLimit) ?? (config.defaultLimit || 20),
-        config.maxLimit || 100
-    )
+    const page = positiveNumberOrDefault(query.page, 1, 1)
+
+    const defaultLimit = config.defaultLimit || DEFAULT_LIMIT
+    const maxLimit = positiveNumberOrDefault(config.maxLimit, DEFAULT_MAX_LIMIT, 0)
+    const qLimit = positiveNumberOrDefault(query.limit, defaultLimit, 0)
+    const limit =
+        qLimit == NO_PAGINATION && maxLimit == NO_PAGINATION
+            ? NO_PAGINATION
+            : Math.min(qLimit || defaultLimit, maxLimit || DEFAULT_MAX_LIMIT)
+
     const sortBy = [] as SortBy<T>
     const searchBy: Column<T>[] = []
-    let path
+    let path: string
 
     const r = new RegExp('^(?:[a-z+]+:)?//', 'i')
     let queryOrigin = ''
@@ -236,8 +248,6 @@ export async function paginate<T extends ObjectLiteral>(
             searchBy.push(...config.searchableColumns)
         }
     }
-
-    if (page < 1) page = 1
 
     let [items, totalItems]: [T[], number] = [[], 0]
 
