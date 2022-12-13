@@ -199,7 +199,8 @@ const paginateConfig: PaginateConfig<CatEntity> {
    * Required: false
    * Type: number
    * Default: 100
-   * Description: The maximum amount of entities to return per page. Set it to 0, in conjunction with limit=0 on query param, to disable pagination.
+   * Description: The maximum amount of entities to return per page.
+   * Set it to 0, in conjunction with limit=0 on query param, to disable pagination.
    */
   maxLimit: 20,
 

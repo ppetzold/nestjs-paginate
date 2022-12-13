@@ -21,7 +21,7 @@ import { ServiceUnavailableException, Logger } from '@nestjs/common'
 import { values, mapKeys } from 'lodash'
 import { stringify } from 'querystring'
 import { WherePredicateOperator } from 'typeorm/query-builder/WhereClause'
-import { Column, Order, RelationColumn, SortBy } from './helper'
+import { Column, Order, positiveNumberOrDefault, RelationColumn, SortBy } from './helper'
 
 const logger: Logger = new Logger('nestjs-paginate')
 
@@ -175,23 +175,17 @@ export const DEFAULT_MAX_LIMIT = 100
 export const DEFAULT_LIMIT = 20
 export const NO_PAGINATION = 0
 
-const positiveNumberOrDefault = (value: number | undefined, defaultValue: number, minValue: 0 | 1 = 0) =>
-    value === undefined || value < minValue ? defaultValue : value
-
 export async function paginate<T extends ObjectLiteral>(
     query: PaginateQuery,
     repo: Repository<T> | SelectQueryBuilder<T>,
     config: PaginateConfig<T>
 ): Promise<Paginated<T>> {
     const page = positiveNumberOrDefault(query.page, 1, 1)
-
     const defaultLimit = config.defaultLimit || DEFAULT_LIMIT
-    const maxLimit = positiveNumberOrDefault(config.maxLimit, DEFAULT_MAX_LIMIT, 0)
-    const qLimit = positiveNumberOrDefault(query.limit, defaultLimit, 0)
-    const limit =
-        qLimit == NO_PAGINATION && maxLimit == NO_PAGINATION
-            ? NO_PAGINATION
-            : Math.min(qLimit || defaultLimit, maxLimit || DEFAULT_MAX_LIMIT)
+    const maxLimit = positiveNumberOrDefault(config.maxLimit, DEFAULT_MAX_LIMIT)
+    const queryLimit = positiveNumberOrDefault(query.limit, defaultLimit)
+    const isPaginated = !(queryLimit === NO_PAGINATION && maxLimit === NO_PAGINATION)
+    const limit = isPaginated ? Math.min(queryLimit || defaultLimit, maxLimit || DEFAULT_MAX_LIMIT) : NO_PAGINATION
 
     const sortBy = [] as SortBy<T>
     const searchBy: Column<T>[] = []
@@ -253,7 +247,7 @@ export async function paginate<T extends ObjectLiteral>(
 
     const queryBuilder = repo instanceof Repository ? repo.createQueryBuilder('e') : repo
 
-    if (limit) {
+    if (isPaginated) {
         queryBuilder.take(limit).skip((page - 1) * limit)
     }
 
@@ -368,7 +362,11 @@ export async function paginate<T extends ObjectLiteral>(
         )
     }
 
-    ;[items, totalItems] = await queryBuilder.getManyAndCount()
+    if (isPaginated) {
+        ;[items, totalItems] = await queryBuilder.getManyAndCount()
+    } else {
+        items = await queryBuilder.getMany()
+    }
 
     const sortByQuery = sortBy.map((order) => `&sortBy=${order.join(':')}`).join('')
     const searchQuery = query.search ? `&search=${query.search}` : ''
@@ -390,54 +388,27 @@ export async function paginate<T extends ObjectLiteral>(
 
     const buildLink = (p: number): string => path + '?page=' + p + options
 
-    let results: Paginated<T>
+    const totalPages = isPaginated ? Math.ceil(totalItems / limit) : items.length
 
-    if (limit) {
-        let totalPages = totalItems / limit
-        if (totalItems % limit) totalPages = Math.ceil(totalPages)
-
-        results = {
-            data: items,
-            meta: {
-                itemsPerPage: limit,
-                totalItems,
-                currentPage: page,
-                totalPages: totalPages,
-                sortBy,
-                search: query.search,
-                searchBy: query.search ? searchBy : undefined,
-                filter: query.filter,
-            },
-            links: {
-                first: page == 1 ? undefined : buildLink(1),
-                previous: page - 1 < 1 ? undefined : buildLink(page - 1),
-                current: buildLink(page),
-                next: page + 1 > totalPages ? undefined : buildLink(page + 1),
-                last: page == totalPages || !totalItems ? undefined : buildLink(totalPages),
-            },
-        }
-    } else {
-        results = {
-            data: items,
-            meta: {
-                itemsPerPage: items.length,
-                totalItems,
-                currentPage: page,
-                totalPages: items.length,
-                sortBy,
-                search: query.search,
-                searchBy: query.search ? searchBy : undefined,
-                filter: query.filter,
-            },
-            links: {
-                first: undefined,
-                previous: undefined,
-                current: buildLink(page),
-                next: undefined,
-                last: undefined,
-            },
-        }
+    const results = {
+        data: items,
+        meta: {
+            itemsPerPage: isPaginated ? limit : items.length,
+            totalItems,
+            currentPage: page,
+            totalPages: isPaginated ? totalPages : 1,
+            sortBy,
+            search: query.search,
+            searchBy: query.search ? searchBy : undefined,
+            filter: query.filter,
+        },
+        links: {
+            first: !isPaginated || page == 1 ? undefined : buildLink(1),
+            previous: !isPaginated || page - 1 < 1 ? undefined : buildLink(page - 1),
+            current: buildLink(page),
+            next: !isPaginated || page + 1 > totalPages ? undefined : buildLink(page + 1),
+            last: !isPaginated || page == totalPages || !totalItems ? undefined : buildLink(totalPages),
+        },
     }
-
     return Object.assign(new Paginated<T>(), results)
 }

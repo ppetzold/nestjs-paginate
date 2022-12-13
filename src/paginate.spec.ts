@@ -137,10 +137,6 @@ describe('paginate', () => {
         }
 
         const result = await paginate<CatEntity>(query, catRepo, config)
-
-        console.log(result.data.length)
-        console.log(cats.slice(0, 1).length)
-
         expect(result.data).toStrictEqual(cats.slice(0, 1))
     })
 

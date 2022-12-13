@@ -2,6 +2,7 @@ type Join<K, P> = K extends string ? (P extends string ? `${K}${'' extends P ? '
 
 type Prev = [never, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, ...0[]]
 
+// TODO: puts some comments here, in this ternary of doom
 export type Column<T, D extends number = 2> = [D] extends [never]
     ? never
     : T extends Record<string, any>
@@ -25,3 +26,6 @@ export type RelationColumn<T> = Extract<
 
 export type Order<T> = [Column<T>, 'ASC' | 'DESC']
 export type SortBy<T> = Order<T>[]
+
+export const positiveNumberOrDefault = (value: number | undefined, defaultValue: number, minValue: 0 | 1 = 0) =>
+    value === undefined || value < minValue ? defaultValue : value
