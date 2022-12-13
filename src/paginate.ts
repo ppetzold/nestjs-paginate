@@ -403,11 +403,11 @@ export async function paginate<T extends ObjectLiteral>(
             filter: query.filter,
         },
         links: {
-            first: !isPaginated || page == 1 ? undefined : buildLink(1),
-            previous: !isPaginated || page - 1 < 1 ? undefined : buildLink(page - 1),
+            first: page == 1 ? undefined : buildLink(1),
+            previous: page - 1 < 1 ? undefined : buildLink(page - 1),
             current: buildLink(page),
-            next: !isPaginated || page + 1 > totalPages ? undefined : buildLink(page + 1),
-            last: !isPaginated || page == totalPages || !totalItems ? undefined : buildLink(totalPages),
+            next: page + 1 > totalPages ? undefined : buildLink(page + 1),
+            last: page == totalPages || !totalItems ? undefined : buildLink(totalPages),
         },
     }
     return Object.assign(new Paginated<T>(), results)
