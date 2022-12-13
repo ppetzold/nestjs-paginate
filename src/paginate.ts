@@ -390,7 +390,7 @@ export async function paginate<T extends ObjectLiteral>(
 
     const totalPages = isPaginated ? Math.ceil(totalItems / limit) : items.length
 
-    const results = {
+    const results: Paginated<T> = {
         data: items,
         meta: {
             itemsPerPage: isPaginated ? limit : items.length,
