@@ -388,7 +388,7 @@ export async function paginate<T extends ObjectLiteral>(
 
     const buildLink = (p: number): string => path + '?page=' + p + options
 
-    const totalPages = isPaginated ? Math.ceil(totalItems / limit) : items.length
+    const totalPages = isPaginated ? Math.ceil(totalItems / limit) : 1
 
     const results: Paginated<T> = {
         data: items,
@@ -396,7 +396,7 @@ export async function paginate<T extends ObjectLiteral>(
             itemsPerPage: isPaginated ? limit : items.length,
             totalItems,
             currentPage: page,
-            totalPages: isPaginated ? totalPages : 1,
+            totalPages,
             sortBy,
             search: query.search,
             searchBy: query.search ? searchBy : undefined,
