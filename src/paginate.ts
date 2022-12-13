@@ -181,13 +181,13 @@ export async function paginate<T extends ObjectLiteral>(
     config: PaginateConfig<T>
 ): Promise<Paginated<T>> {
     const page = positiveNumberOrDefault(query.page, 1, 1)
-    
+
     const defaultLimit = config.defaultLimit || DEFAULT_LIMIT
     const maxLimit = positiveNumberOrDefault(config.maxLimit, DEFAULT_MAX_LIMIT)
     const queryLimit = positiveNumberOrDefault(query.limit, defaultLimit)
-    
+
     const isPaginated = !(queryLimit === NO_PAGINATION && maxLimit === NO_PAGINATION)
-    
+
     const limit = isPaginated ? Math.min(queryLimit || defaultLimit, maxLimit || DEFAULT_MAX_LIMIT) : NO_PAGINATION
 
     const sortBy = [] as SortBy<T>
@@ -413,6 +413,6 @@ export async function paginate<T extends ObjectLiteral>(
             last: page == totalPages || !totalItems ? undefined : buildLink(totalPages),
         },
     }
-    
+
     return Object.assign(new Paginated<T>(), results)
 }
