@@ -7,6 +7,7 @@ import {
     isOperator,
     getFilterTokens,
     OperatorSymbolToFunction,
+    NO_PAGINATION,
 } from './paginate'
 import { PaginateQuery } from './decorator'
 import { HttpException } from '@nestjs/common'
@@ -121,6 +122,68 @@ describe('paginate', () => {
         const result = await paginate<CatEntity>(query, catRepo, config)
 
         expect(result.meta.currentPage).toBe(1)
+        expect(result.data).toStrictEqual(cats.slice(0, 1))
+    })
+
+    it('should default to limit maxLimit, if maxLimit is not 0', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            maxLimit: 1,
+            defaultLimit: 1,
+        }
+        const query: PaginateQuery = {
+            path: '',
+            limit: NO_PAGINATION,
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+        expect(result.data).toStrictEqual(cats.slice(0, 1))
+    })
+
+    it('should return all cats', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            maxLimit: NO_PAGINATION,
+            defaultLimit: 1,
+        }
+        const query: PaginateQuery = {
+            path: '',
+            limit: NO_PAGINATION,
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        expect(result.data).toStrictEqual(cats)
+    })
+
+    it('should limit to defaultLimit, if limit is negative', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            maxLimit: NO_PAGINATION,
+            defaultLimit: 1,
+        }
+        const query: PaginateQuery = {
+            path: '',
+            limit: -1,
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        expect(result.data).toStrictEqual(cats.slice(0, 1))
+    })
+
+    it('should default to limit defaultLimit, if maxLimit is 0', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            maxLimit: NO_PAGINATION,
+            defaultLimit: 1,
+        }
+        const query: PaginateQuery = {
+            path: '',
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
         expect(result.data).toStrictEqual(cats.slice(0, 1))
     })
 

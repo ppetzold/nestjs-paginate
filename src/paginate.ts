@@ -21,7 +21,7 @@ import { ServiceUnavailableException, Logger } from '@nestjs/common'
 import { values, mapKeys } from 'lodash'
 import { stringify } from 'querystring'
 import { WherePredicateOperator } from 'typeorm/query-builder/WhereClause'
-import { Column, Order, RelationColumn, SortBy } from './helper'
+import { Column, Order, positiveNumberOrDefault, RelationColumn, SortBy } from './helper'
 
 const logger: Logger = new Logger('nestjs-paginate')
 
@@ -171,16 +171,28 @@ function parseFilter<T>(query: PaginateQuery, config: PaginateConfig<T>) {
     return filter
 }
 
+export const DEFAULT_MAX_LIMIT = 100
+export const DEFAULT_LIMIT = 20
+export const NO_PAGINATION = 0
+
 export async function paginate<T extends ObjectLiteral>(
     query: PaginateQuery,
     repo: Repository<T> | SelectQueryBuilder<T>,
     config: PaginateConfig<T>
 ): Promise<Paginated<T>> {
-    let page = query.page || 1
-    const limit = Math.min(query.limit || config.defaultLimit || 20, config.maxLimit || 100)
+    const page = positiveNumberOrDefault(query.page, 1, 1)
+
+    const defaultLimit = config.defaultLimit || DEFAULT_LIMIT
+    const maxLimit = positiveNumberOrDefault(config.maxLimit, DEFAULT_MAX_LIMIT)
+    const queryLimit = positiveNumberOrDefault(query.limit, defaultLimit)
+
+    const isPaginated = !(queryLimit === NO_PAGINATION && maxLimit === NO_PAGINATION)
+
+    const limit = isPaginated ? Math.min(queryLimit || defaultLimit, maxLimit || DEFAULT_MAX_LIMIT) : NO_PAGINATION
+
     const sortBy = [] as SortBy<T>
     const searchBy: Column<T>[] = []
-    let path
+    let path: string
 
     const r = new RegExp('^(?:[a-z+]+:)?//', 'i')
     let queryOrigin = ''
@@ -234,19 +246,12 @@ export async function paginate<T extends ObjectLiteral>(
         }
     }
 
-    if (page < 1) page = 1
-
     let [items, totalItems]: [T[], number] = [[], 0]
 
-    let queryBuilder: SelectQueryBuilder<T>
+    const queryBuilder = repo instanceof Repository ? repo.createQueryBuilder('e') : repo
 
-    if (repo instanceof Repository) {
-        queryBuilder = repo
-            .createQueryBuilder('e')
-            .take(limit)
-            .skip((page - 1) * limit)
-    } else {
-        queryBuilder = repo.take(limit).skip((page - 1) * limit)
+    if (isPaginated) {
+        queryBuilder.take(limit).skip((page - 1) * limit)
     }
 
     if (config.relations?.length) {
@@ -360,10 +365,11 @@ export async function paginate<T extends ObjectLiteral>(
         )
     }
 
-    ;[items, totalItems] = await queryBuilder.getManyAndCount()
-
-    let totalPages = totalItems / limit
-    if (totalItems % limit) totalPages = Math.ceil(totalPages)
+    if (isPaginated) {
+        ;[items, totalItems] = await queryBuilder.getManyAndCount()
+    } else {
+        items = await queryBuilder.getMany()
+    }
 
     const sortByQuery = sortBy.map((order) => `&sortBy=${order.join(':')}`).join('')
     const searchQuery = query.search ? `&search=${query.search}` : ''
@@ -385,13 +391,15 @@ export async function paginate<T extends ObjectLiteral>(
 
     const buildLink = (p: number): string => path + '?page=' + p + options
 
+    const totalPages = isPaginated ? Math.ceil(totalItems / limit) : 1
+
     const results: Paginated<T> = {
         data: items,
         meta: {
-            itemsPerPage: limit,
+            itemsPerPage: isPaginated ? limit : items.length,
             totalItems,
             currentPage: page,
-            totalPages: totalPages,
+            totalPages,
             sortBy,
             search: query.search,
             searchBy: query.search ? searchBy : undefined,

@@ -3,3 +3,4 @@ lib/
 coverage/
 .DS_Store
 npm-debug.log
+.history
