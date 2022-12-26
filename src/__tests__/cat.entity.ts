@@ -26,6 +26,9 @@ export class CatEntity {
     @Column({ nullable: true })
     age: number | null
 
+    @Column({ nullable: true })
+    lastVetVisit: Date | null
+
     @Column(() => SizeEmbed)
     size: SizeEmbed
 
