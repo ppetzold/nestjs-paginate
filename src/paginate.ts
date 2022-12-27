@@ -397,7 +397,7 @@ export async function paginate<T extends ObjectLiteral>(
         data: items,
         meta: {
             itemsPerPage: isPaginated ? limit : items.length,
-            totalItems,
+            totalItems: isPaginated ? totalItems : items.length,
             currentPage: page,
             totalPages,
             sortBy,
