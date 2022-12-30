@@ -328,17 +328,20 @@ export async function paginate<T extends ObjectLiteral>(
                 for (const column in filter) {
                     const propertyPath = (column as string).split('.')
                     if (propertyPath.length > 1) {
-                        const condition = qb['getWherePredicateCondition'](
-                            column,
-                            filter[column]
-                        ) as WherePredicateOperator
                         let parameters = { [column]: filter[column].value }
                         // TODO: refactor below
-                        const alias = queryBuilder.expressionMap.mainAlias.metadata.hasRelationWithPropertyPath(
+                        const isRelation = queryBuilder.expressionMap.mainAlias.metadata.hasRelationWithPropertyPath(
                             propertyPath[0]
                         )
-                            ? `${qb.alias}_${column}`
-                            : `${qb.alias}.${column}`
+                        const alias = isRelation ? `${qb.alias}_${column}` : `${qb.alias}.${column}`
+
+                        const condition = qb['getWherePredicateCondition'](
+                            alias,
+                            filter[column]
+                        ) as WherePredicateOperator
+
+                        console.log(condition)
+
                         switch (condition.operator) {
                             case 'between':
                                 condition.parameters = [alias, `:${column}_from`, `:${column}_to`]

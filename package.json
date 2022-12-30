@@ -21,6 +21,7 @@
   "scripts": {
     "prebuild": "rimraf lib",
     "build": "tsc",
+    "dev": "watch 'npm run build && yalc push' src",
     "format": "prettier --write \"src/**/*.ts\"",
     "format:ci": "prettier --list-different \"src/**/*.ts\"",
     "lint": "eslint -c .eslintrc.json --ext .ts --max-warnings 0 src",
