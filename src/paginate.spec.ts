@@ -1385,7 +1385,7 @@ describe('paginate', () => {
             filterableColumns: {
                 'home.name': [FilterOperator.NOT, FilterOperator.NULL],
             },
-            relations: ['toys'],
+            relations: ['home'],
         }
         const query: PaginateQuery = {
             path: '',
@@ -1406,7 +1406,7 @@ describe('paginate', () => {
             filterableColumns: {
                 'home.name': [FilterOperator.NOT, FilterOperator.NULL],
             },
-            relations: ['toys'],
+            relations: ['home'],
         }
         const query: PaginateQuery = {
             path: '',
@@ -1417,7 +1417,7 @@ describe('paginate', () => {
 
         const result = await paginate<CatEntity>(query, catRepo, config)
 
-        expect(result.data).toStrictEqual([cats[0], cats[1], cats[2], cats[3]])
+        expect(result.data).toStrictEqual([cats[2], cats[3], cats[4]])
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.home.name=$null')
     })
 
