@@ -401,15 +401,15 @@ export async function paginate<T extends ObjectLiteral>(
                                 break
                         }
 
-                        //console.log('column', column)
-                        //console.log('propertyPath[0]', propertyPath[0])
-                        //console.log('isVirtualProperty', isVirtualProperty)
-                        //console.log('isRelation', isRelation)
-                        //console.log('qb.alias', qb.alias)
-                        //console.log('alias', alias)
-                        //console.log('condition', condition)
-                        //console.log('parameters', parameters)
-                        //console.log('query', query ? query(qb.alias) : undefined)
+                        // console.log('column', column)
+                        // console.log('propertyPath[0]', propertyPath[0])
+                        // console.log('isVirtualProperty', isVirtualProperty)
+                        // console.log('isRelation', isRelation)
+                        // console.log('qb.alias', qb.alias)
+                        // console.log('alias', alias)
+                        // console.log('condition', condition)
+                        // console.log('parameters', parameters)
+                        // console.log('query', query ? query(qb.alias) : undefined)
 
                         qb.andWhere(qb['createWhereConditionExpression'](condition), parameters)
                     } else {

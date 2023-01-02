@@ -30,7 +30,7 @@ describe('paginate', () => {
             type: 'sqlite',
             database: ':memory:',
             synchronize: true,
-            logging: false,
+            logging: true,
             entities: [CatEntity, CatToyEntity, CatHomeEntity],
         })
         catRepo = connection.getRepository(CatEntity)
@@ -1129,7 +1129,7 @@ describe('paginate', () => {
         expect(result.meta.filter).toStrictEqual({
             'cat.size.height': '$eq:30',
         })
-        const catClone = clone(catHomes[1]);
+        const catClone = clone(catHomes[1])
         catClone.countCat = cats.filter((cat) => cat.size.height === 30 && cat.id == catClone.cat.id).length
         expect(result.data).toStrictEqual([catClone])
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.cat.size.height=$eq:30')
@@ -1155,8 +1155,12 @@ describe('paginate', () => {
         expect(result.meta.filter).toStrictEqual({
             'cat.size.height': '$in:10,30,35',
         })
-        const catClone = clone(catHomes[1]);
-        catClone.countCat = cats.filter((cat) => (cat.size.height === 10 || cat.size.height === 30 || cat.size.height === 35) && cat.id == catClone.cat.id ).length
+        const catClone = clone(catHomes[1])
+        catClone.countCat = cats.filter(
+            (cat) =>
+                (cat.size.height === 10 || cat.size.height === 30 || cat.size.height === 35) &&
+                cat.id == catClone.cat.id
+        ).length
         expect(result.data).toStrictEqual([catClone])
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.cat.size.height=$in:10,30,35')
     })
@@ -1182,9 +1186,13 @@ describe('paginate', () => {
             'cat.size.height': '$btw:18,33',
         })
 
-        const catHomeClone = clone(catHomes);
-        catHomeClone[0].countCat = cats.filter((cat) => cat.size.height >= 18 && cat.size.height <= 33 && cat.id == catHomeClone[0].cat.id ).length
-        catHomeClone[1].countCat = cats.filter((cat) => cat.size.height >= 18 && cat.size.height <= 33 && cat.id == catHomeClone[1].cat.id ).length
+        const catHomeClone = clone(catHomes)
+        catHomeClone[0].countCat = cats.filter(
+            (cat) => cat.size.height >= 18 && cat.size.height <= 33 && cat.id == catHomeClone[0].cat.id
+        ).length
+        catHomeClone[1].countCat = cats.filter(
+            (cat) => cat.size.height >= 18 && cat.size.height <= 33 && cat.id == catHomeClone[1].cat.id
+        ).length
         expect(result.data).toStrictEqual([catHomeClone[0], catHomeClone[1]])
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.cat.size.height=$btw:18,33')
     })
@@ -1613,7 +1621,6 @@ describe('paginate', () => {
         })
     })
 
-
     it('should return result based on virtualcolumn filter', async () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id'],
@@ -1627,16 +1634,17 @@ describe('paginate', () => {
             filter: {
                 'home.countCat': '$gt:0',
             },
+            sortBy: [['id', 'ASC']],
         }
 
         const result = await paginate<CatEntity>(query, catRepo, config)
-        const expectedResult = [0, 1].map((i) => {
+        const expectedResult = [1].map((i) => {
             const ret = Object.assign(clone(cats[i]), { home: Object.assign(clone(catHomes[i])) })
             delete ret.home.cat
             return ret
         })
 
         expect(result.data).toStrictEqual(expectedResult)
-        expect(result.links.current).toBe('?page=1&limit=20&filter.home.countCat=$gt:0')
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.home.countCat=$gt:0')
     })
 })

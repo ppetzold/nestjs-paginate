@@ -15,6 +15,8 @@ export class CatHomeEntity {
     @CreateDateColumn()
     createdAt: string
 
-    @VirtualColumn({ query: (alias) => `SELECT COUNT(*) FROM "cat" WHERE "cat"."homeId" = ${alias}.id` })
+    @VirtualColumn({
+        query: (alias) => `SELECT CAST(COUNT(*) AS INT)  FROM "cat" WHERE "cat"."homeId" = ${alias}.id`,
+    })
     countCat: number
 }
