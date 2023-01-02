@@ -1,4 +1,5 @@
 import {
+    AfterLoad,
     Column,
     CreateDateColumn,
     DeleteDateColumn,
@@ -12,7 +13,7 @@ import { CatToyEntity } from './cat-toy.entity'
 import { CatHomeEntity } from './cat-home.entity'
 import { SizeEmbed } from './size.embed'
 
-@Entity()
+@Entity({ name: 'cat' })
 export class CatEntity {
     @PrimaryGeneratedColumn()
     id: number
@@ -41,4 +42,13 @@ export class CatEntity {
 
     @DeleteDateColumn({ nullable: true })
     deletedAt?: string
+
+    @AfterLoad()
+    // Fix due to typeorm bug that doesn't set entity to null
+    // when the reletated entity have only the virtual column property with a value different from null
+    private afterLoad() {
+        if (this.home && !this.home?.id) {
+            this.home = null
+        }
+    }
 }

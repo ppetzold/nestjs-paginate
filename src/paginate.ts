@@ -15,6 +15,7 @@ import {
     Between,
     FindOptionsWhere,
     ObjectLiteral,
+    QueryBuilder,
 } from 'typeorm'
 import { PaginateQuery } from './decorator'
 import { ServiceUnavailableException, Logger } from '@nestjs/common'
@@ -22,6 +23,7 @@ import { values, mapKeys } from 'lodash'
 import { stringify } from 'querystring'
 import { WherePredicateOperator } from 'typeorm/query-builder/WhereClause'
 import { Column, Order, positiveNumberOrDefault, RelationColumn, SortBy } from './helper'
+import { ColumnMetadata } from 'typeorm/metadata/ColumnMetadata'
 
 const logger: Logger = new Logger('nestjs-paginate')
 
@@ -175,6 +177,25 @@ export const DEFAULT_MAX_LIMIT = 100
 export const DEFAULT_LIMIT = 20
 export const NO_PAGINATION = 0
 
+export function extractVirtualProperty(
+    qb: SelectQueryBuilder<unknown>,
+    propertyPath: string,
+    propertyName: string
+): { isVirtualProperty: boolean; query?: ColumnMetadata['query'] } {
+    return (
+        qb?.expressionMap?.mainAlias?.metadata
+            ?.findColumnWithPropertyPath(propertyPath)
+            ?.referencedColumn?.entityMetadata?.columns?.find((column) => column.propertyName === propertyName) || {
+            isVirtualProperty: false,
+            query: undefined,
+        }
+    )
+}
+
+export function checkIsRelation(qb: SelectQueryBuilder<unknown>, propertyPath: string): boolean {
+    return !!qb?.expressionMap?.mainAlias?.metadata?.hasRelationWithPropertyPath(propertyPath)
+}
+
 export async function paginate<T extends ObjectLiteral>(
     query: PaginateQuery,
     repo: Repository<T> | SelectQueryBuilder<T>,
@@ -251,7 +272,11 @@ export async function paginate<T extends ObjectLiteral>(
     const queryBuilder = repo instanceof Repository ? repo.createQueryBuilder('e') : repo
 
     if (isPaginated) {
-        queryBuilder.take(limit).skip((page - 1) * limit)
+        // Switch from take and skip to limit and offset
+        // due to this problem https://github.com/typeorm/typeorm/issues/5670
+        // (anyway this create more clean query without double dinstict)
+        queryBuilder.limit(limit).offset((page - 1) * limit)
+        // queryBuilder.take(limit).skip((page - 1) * limit)
     }
 
     if (config.relations?.length) {
@@ -266,9 +291,22 @@ export async function paginate<T extends ObjectLiteral>(
     }
 
     for (const order of sortBy) {
-        if (queryBuilder.expressionMap.mainAlias.metadata.hasRelationWithPropertyPath(order[0].split('.')[0])) {
-            queryBuilder.addOrderBy(`${queryBuilder.alias}_${order[0]}`, order[1], nullSort)
+        const propertyPath = order[0].split('.')
+        if (checkIsRelation(queryBuilder, propertyPath[0])) {
+            //console.log('order', order)
+            const { isVirtualProperty } = extractVirtualProperty(queryBuilder, propertyPath[0], propertyPath[1])
+            if (isVirtualProperty) {
+                queryBuilder.addOrderBy(
+                    `${queryBuilder.alias}_${propertyPath[0]}_${propertyPath[1]}`,
+                    order[1],
+                    nullSort
+                )
+            } else {
+                queryBuilder.addOrderBy(`${queryBuilder.alias}_${order[0]}`, order[1], nullSort)
+            }
         } else {
+            // TODO: handle virtual properties
+            //console.log('order', order)
             queryBuilder.addOrderBy(`${queryBuilder.alias}.${order[0]}`, order[1], nullSort)
         }
     }
@@ -299,9 +337,7 @@ export async function paginate<T extends ObjectLiteral>(
                 for (const column of searchBy) {
                     const propertyPath = (column as string).split('.')
                     if (propertyPath.length > 1) {
-                        const alias = queryBuilder.expressionMap.mainAlias.metadata.hasRelationWithPropertyPath(
-                            propertyPath[0]
-                        )
+                        const alias = checkIsRelation(queryBuilder, propertyPath[0])
                             ? `${qb.alias}_${column}`
                             : `${qb.alias}.${column}`
                         const condition: WherePredicateOperator = {
@@ -328,17 +364,27 @@ export async function paginate<T extends ObjectLiteral>(
                 for (const column in filter) {
                     const propertyPath = (column as string).split('.')
                     if (propertyPath.length > 1) {
-                        const condition = qb['getWherePredicateCondition'](
-                            column,
-                            filter[column]
-                        ) as WherePredicateOperator
                         let parameters = { [column]: filter[column].value }
                         // TODO: refactor below
-                        const alias = queryBuilder.expressionMap.mainAlias.metadata.hasRelationWithPropertyPath(
-                            propertyPath[0]
+                        const isRelation = checkIsRelation(queryBuilder, propertyPath[0])
+
+                        const { isVirtualProperty, query } = extractVirtualProperty(
+                            queryBuilder,
+                            propertyPath[0],
+                            propertyPath[1]
                         )
-                            ? `${qb.alias}_${column}`
-                            : `${qb.alias}.${column}`
+
+                        const alias = isRelation
+                            ? isVirtualProperty
+                                ? `(${query(`${qb.alias}_${propertyPath[0]}`)})` // () is needed to avoid parameter conflict
+                                : `${qb.alias}_${column}`
+                            : `${qb.alias}.${column}` // is embeded
+
+                        const condition = qb['getWherePredicateCondition'](
+                            isVirtualProperty ? column : alias,
+                            filter[column]
+                        ) as WherePredicateOperator
+
                         switch (condition.operator) {
                             case 'between':
                                 condition.parameters = [alias, `:${column}_from`, `:${column}_to`]
@@ -354,8 +400,20 @@ export async function paginate<T extends ObjectLiteral>(
                                 condition.parameters = [alias, `:${column}`]
                                 break
                         }
+
+                        //console.log('column', column)
+                        //console.log('propertyPath[0]', propertyPath[0])
+                        //console.log('isVirtualProperty', isVirtualProperty)
+                        //console.log('isRelation', isRelation)
+                        //console.log('qb.alias', qb.alias)
+                        //console.log('alias', alias)
+                        //console.log('condition', condition)
+                        //console.log('parameters', parameters)
+                        //console.log('query', query ? query(qb.alias) : undefined)
+
                         qb.andWhere(qb['createWhereConditionExpression'](condition), parameters)
                     } else {
+                        // TODO: handle virtual properties
                         qb.andWhere({
                             [column]: filter[column],
                         })
@@ -366,6 +424,7 @@ export async function paginate<T extends ObjectLiteral>(
     }
 
     if (isPaginated) {
+        //console.log(queryBuilder.getQuery())
         ;[items, totalItems] = await queryBuilder.getManyAndCount()
     } else {
         items = await queryBuilder.getMany()
