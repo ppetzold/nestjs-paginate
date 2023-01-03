@@ -30,7 +30,7 @@ describe('paginate', () => {
             type: 'sqlite',
             database: ':memory:',
             synchronize: true,
-            logging: true,
+            logging: false,
             entities: [CatEntity, CatToyEntity, CatHomeEntity],
         })
         catRepo = connection.getRepository(CatEntity)
@@ -1555,6 +1555,63 @@ describe('paginate', () => {
         expect(getFilterTokens(string)).toStrictEqual(tokens)
     })
 
+
+
+    it('should return result based on virtualcolumn filter', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            filterableColumns: {
+                'home.countCat': [FilterOperator.GT],
+            },
+            relations: ['home'],
+        }
+        const query: PaginateQuery = {
+            path: '',
+            filter: {
+                'home.countCat': '$gt:0',
+            },
+            sortBy: [['id', 'ASC']],
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+        const expectedResult = [0,1].map((i) => {
+            const ret = Object.assign(clone(cats[i]), { home: Object.assign(clone(catHomes[i])) })
+            delete ret.home.cat
+            return ret
+        })
+
+        expect(result.data).toStrictEqual(expectedResult)
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.home.countCat=$gt:0')
+    })
+
+
+    it('should return result sorted by a virtualcolumn', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['home.countCat'],
+            relations: ['home'],
+        }
+        const query: PaginateQuery = {
+            path: '',
+            sortBy: [['home.countCat', 'ASC']],
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+        const expectedResult = [2,3,4,0,1].map((i) => {
+            const ret = clone(cats[i])
+            if (i == 0 || i == 1) {
+                ret.home = clone(catHomes[i])
+                ret.home.countCat = cats.filter((cat) => cat.id === ret.home.cat.id).length
+                delete ret.home.cat
+            } else {
+                ret.home = null
+            }
+            return ret
+        })
+
+        expect(result.data).toStrictEqual(expectedResult)
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=home.countCat:ASC')
+    })
+
     it('should return all items even if deleted', async () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id'],
@@ -1619,32 +1676,5 @@ describe('paginate', () => {
                 expect(toy.id).not.toBeDefined()
             })
         })
-    })
-
-    it('should return result based on virtualcolumn filter', async () => {
-        const config: PaginateConfig<CatEntity> = {
-            sortableColumns: ['id'],
-            filterableColumns: {
-                'home.countCat': [FilterOperator.GT],
-            },
-            relations: ['home'],
-        }
-        const query: PaginateQuery = {
-            path: '',
-            filter: {
-                'home.countCat': '$gt:0',
-            },
-            sortBy: [['id', 'ASC']],
-        }
-
-        const result = await paginate<CatEntity>(query, catRepo, config)
-        const expectedResult = [1].map((i) => {
-            const ret = Object.assign(clone(cats[i]), { home: Object.assign(clone(catHomes[i])) })
-            delete ret.home.cat
-            return ret
-        })
-
-        expect(result.data).toStrictEqual(expectedResult)
-        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.home.countCat=$gt:0')
     })
 })
