@@ -141,6 +141,10 @@ function parseFilter<T>(query: PaginateQuery, config: PaginateConfig<T>) {
             }
             const [op2, op1, value] = tokens
 
+            console.log('op2', op2)
+            console.log('op1', op1)
+            console.log('value', value)
+
             if (!isOperator(op1) || !allowedOperators.includes(op1)) {
                 continue
             }
