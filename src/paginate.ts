@@ -15,7 +15,6 @@ import {
     Between,
     FindOptionsWhere,
     ObjectLiteral,
-    QueryBuilder,
 } from 'typeorm'
 import { PaginateQuery } from './decorator'
 import { ServiceUnavailableException, Logger } from '@nestjs/common'
