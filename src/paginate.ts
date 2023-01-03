@@ -18,7 +18,7 @@ import {
 } from 'typeorm'
 import { PaginateQuery } from './decorator'
 import { ServiceUnavailableException, Logger } from '@nestjs/common'
-import { values, mapKeys } from 'lodash'
+import { values, mapKeys, isArray } from 'lodash'
 import { stringify } from 'querystring'
 import { WherePredicateOperator } from 'typeorm/query-builder/WhereClause'
 import { Column, Order, positiveNumberOrDefault, RelationColumn, SortBy } from './helper'
@@ -121,7 +121,7 @@ export function getFilterTokens(raw: string): string[] {
 }
 
 function parseFilter<T>(query: PaginateQuery, config: PaginateConfig<T>) {
-    const filter: { [columnName: string]: FindOperator<string> } = {}
+    const filter: { [columnName: string]: FindOperator<string>[] } = {}
     let filterableColumns = config.filterableColumns
     if (filterableColumns === undefined) {
         logger.debug("No 'filterableColumns' given, ignoring filters.")
@@ -154,24 +154,31 @@ function parseFilter<T>(query: PaginateQuery, config: PaginateConfig<T>) {
             if (isOperator(op1)) {
                 switch (op1) {
                     case FilterOperator.BTW:
-                        filter[column] = OperatorSymbolToFunction.get(op1)(...value.split(','))
+                        filter[column] = [OperatorSymbolToFunction.get(op1)(...value.split(','))].concat(
+                            filter[column] || []
+                        )
                         break
                     case FilterOperator.IN:
-                        filter[column] = OperatorSymbolToFunction.get(op1)(value.split(','))
+                        filter[column] = [OperatorSymbolToFunction.get(op1)(value.split(','))].concat(
+                            filter[column] || []
+                        )
                         break
                     case FilterOperator.ILIKE:
-                        filter[column] = OperatorSymbolToFunction.get(op1)(`%${value}%`)
+                        filter[column] = [OperatorSymbolToFunction.get(op1)(`%${value}%`)].concat(filter[column] || [])
                         break
                     default:
-                        filter[column] = OperatorSymbolToFunction.get(op1)(value)
+                        filter[column] = [OperatorSymbolToFunction.get(op1)(value)].concat(filter[column] || [])
                         break
                 }
             }
             if (isOperator(op2)) {
-                filter[column] = OperatorSymbolToFunction.get(op2)(filter[column])
+                filter[column][filter[column].length - 1] = OperatorSymbolToFunction.get(op2)(
+                    filter[column][filter[column].length - 1]
+                )
             }
         }
     }
+    console.log('filter', filter)
     return filter
 }
 
@@ -330,40 +337,46 @@ export async function paginate<T extends ObjectLiteral>(
         queryBuilder.andWhere(
             new Brackets((qb: SelectQueryBuilder<T>) => {
                 for (const column in filter) {
-                    const propertyPath = (column as string).split('.')
-                    if (propertyPath.length > 1) {
-                        let parameters = { [column]: filter[column].value }
-                        // TODO: refactor below
-                        const isRelation = queryBuilder.expressionMap.mainAlias.metadata.hasRelationWithPropertyPath(
-                            propertyPath[0]
-                        )
-                        const alias = isRelation ? `${qb.alias}_${column}` : `${qb.alias}.${column}`
+                    for (const cFilter in filter[column]) {
+                        const propertyPath = (column as string).split('.')
+                        if (propertyPath.length > 1) {
+                            let parameters = {
+                                [column]: cFilter,
+                            }
+                            // TODO: refactor below
+                            const isRelation =
+                                queryBuilder.expressionMap.mainAlias.metadata.hasRelationWithPropertyPath(
+                                    propertyPath[0]
+                                )
+                            const alias = isRelation ? `${qb.alias}_${column}` : `${qb.alias}.${column}`
 
-                        const condition = qb['getWherePredicateCondition'](
-                            alias,
-                            filter[column]
-                        ) as WherePredicateOperator
+                            const condition = qb['getWherePredicateCondition'](
+                                alias,
+                                filter[column]
+                            ) as WherePredicateOperator
 
-                        switch (condition.operator) {
-                            case 'between':
-                                condition.parameters = [alias, `:${column}_from`, `:${column}_to`]
-                                parameters = {
-                                    [column + '_from']: filter[column].value[0],
-                                    [column + '_to']: filter[column].value[1],
-                                }
-                                break
-                            case 'in':
-                                condition.parameters = [alias, `:...${column}`]
-                                break
-                            default:
-                                condition.parameters = [alias, `:${column}`]
-                                break
+                            switch (condition.operator) {
+                                case 'between':
+                                    condition.parameters = [alias, `:${column}_from`, `:${column}_to`]
+                                    parameters = {
+                                        [column + '_from']: cFilter[0],
+                                        [column + '_to']: cFilter[1],
+                                    }
+                                    break
+                                case 'in':
+                                    condition.parameters = [alias, `:...${column}`]
+                                    break
+                                default:
+                                    condition.parameters = [alias, `:${column}`]
+                                    break
+                            }
+
+                            qb.andWhere(qb['createWhereConditionExpression'](condition), parameters)
+                        } else {
+                            qb.andWhere({
+                                [column]: filter[column],
+                            })
                         }
-                        qb.andWhere(qb['createWhereConditionExpression'](condition), parameters)
-                    } else {
-                        qb.andWhere({
-                            [column]: filter[column],
-                        })
                     }
                 }
             })
