@@ -1420,7 +1420,7 @@ describe('paginate', () => {
         }
 
         const result = await paginate<CatEntity>(query, catRepo, config)
-        const expectedResult = [0,1].map((i) => {
+        const expectedResult = [0, 1].map((i) => {
             const ret = Object.assign(clone(cats[i]), { home: Object.assign(clone(catHomes[i])) })
             delete ret.home.cat
             return ret
@@ -1535,8 +1535,6 @@ describe('paginate', () => {
         expect(getFilterTokens(string)).toStrictEqual(tokens)
     })
 
-
-
     it('should return result based on virtualcolumn filter', async () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id'],
@@ -1554,7 +1552,7 @@ describe('paginate', () => {
         }
 
         const result = await paginate<CatEntity>(query, catRepo, config)
-        const expectedResult = [0,1].map((i) => {
+        const expectedResult = [0, 1].map((i) => {
             const ret = Object.assign(clone(cats[i]), { home: Object.assign(clone(catHomes[i])) })
             delete ret.home.cat
             return ret
@@ -1563,7 +1561,6 @@ describe('paginate', () => {
         expect(result.data).toStrictEqual(expectedResult)
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.home.countCat=$gt:0')
     })
-
 
     it('should return result sorted by a virtualcolumn', async () => {
         const config: PaginateConfig<CatEntity> = {
@@ -1576,7 +1573,7 @@ describe('paginate', () => {
         }
 
         const result = await paginate<CatEntity>(query, catRepo, config)
-        const expectedResult = [2,3,4,0,1].map((i) => {
+        const expectedResult = [2, 3, 4, 0, 1].map((i) => {
             const ret = clone(cats[i])
             if (i == 0 || i == 1) {
                 ret.home = clone(catHomes[i])
