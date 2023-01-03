@@ -1359,6 +1359,52 @@ describe('paginate', () => {
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.age=$not:$null')
     })
 
+    it('should return result based on not null query', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            filterableColumns: {
+                age: [FilterOperator.NOT, FilterOperator.NULL],
+            },
+        }
+        const query: PaginateQuery = {
+            path: '',
+            filter: {
+                age: '$not:$null',
+            },
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        expect(result.data).toStrictEqual([cats[0], cats[1], cats[2], cats[3]])
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.age=$not:$null')
+    })
+
+    it('should return result based on not null query on relation', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            filterableColumns: {
+                'home.name': [FilterOperator.NOT, FilterOperator.NULL],
+            },
+            relations: ['home'],
+        }
+        const query: PaginateQuery = {
+            path: '',
+            filter: {
+                'home.name': '$not:$null',
+            },
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+        const expectedResult = [0, 1].map((i) => {
+            const ret = Object.assign(clone(cats[i]), { home: Object.assign(clone(catHomes[i])) })
+            delete ret.home.cat
+            return ret
+        })
+
+        expect(result.data).toStrictEqual(expectedResult)
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.home.name=$not:$null')
+    })
+
     it('should ignore filterable column which is not configured', async () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id'],
