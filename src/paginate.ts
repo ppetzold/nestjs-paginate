@@ -340,8 +340,6 @@ export async function paginate<T extends ObjectLiteral>(
                             filter[column]
                         ) as WherePredicateOperator
 
-                        // console.log(condition)
-
                         switch (condition.operator) {
                             case 'between':
                                 condition.parameters = [alias, `:${column}_from`, `:${column}_to`]
