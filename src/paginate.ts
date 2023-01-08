@@ -120,300 +120,396 @@ export function getFilterTokens(raw: string): string[] {
     return tokens
 }
 
-function parseFilter<T>(query: PaginateQuery, config: PaginateConfig<T>) {
-    const filter: { [columnName: string]: FindOperator<string> } = {}
-    let filterableColumns = config.filterableColumns
-    if (filterableColumns === undefined) {
-        logger.debug("No 'filterableColumns' given, ignoring filters.")
-        filterableColumns = {}
-    }
-    for (const column of Object.keys(query.filter)) {
-        if (!(column in filterableColumns)) {
-            continue
-        }
-        const allowedOperators = filterableColumns[column]
-        const input = query.filter[column]
-        const statements = !Array.isArray(input) ? [input] : input
-        for (const raw of statements) {
-            const tokens = getFilterTokens(raw)
-            if (tokens.length === 0) {
-                continue
-            }
-            const [op2, op1, value] = tokens
-
-            if (!isOperator(op1) || !allowedOperators.includes(op1)) {
-                continue
-            }
-            if (isOperator(op2) && !allowedOperators.includes(op2)) {
-                continue
-            }
-            if (isOperator(op1)) {
-                switch (op1) {
-                    case FilterOperator.BTW:
-                        filter[column] = OperatorSymbolToFunction.get(op1)(...value.split(','))
-                        break
-                    case FilterOperator.IN:
-                        filter[column] = OperatorSymbolToFunction.get(op1)(value.split(','))
-                        break
-                    case FilterOperator.ILIKE:
-                        filter[column] = OperatorSymbolToFunction.get(op1)(`%${value}%`)
-                        break
-                    default:
-                        filter[column] = OperatorSymbolToFunction.get(op1)(value)
-                        break
-                }
-            }
-            if (isOperator(op2)) {
-                filter[column] = OperatorSymbolToFunction.get(op2)(filter[column])
-            }
-        }
-    }
-    return filter
-}
-
 export const DEFAULT_MAX_LIMIT = 100
 export const DEFAULT_LIMIT = 20
 export const NO_PAGINATION = 0
+
+interface QueryData<T> {
+    path: string
+    page: number
+    limit: number
+    sortBy: SortBy<T>
+    searchBy: Column<T>[]
+    isPaginated: boolean
+}
 
 export async function paginate<T extends ObjectLiteral>(
     query: PaginateQuery,
     repo: Repository<T> | SelectQueryBuilder<T>,
     config: PaginateConfig<T>
 ): Promise<Paginated<T>> {
-    const page = positiveNumberOrDefault(query.page, 1, 1)
+    // prepares the data that is required to process the query
+    const queryData = prepareQueryData(query, config)
 
-    const defaultLimit = config.defaultLimit || DEFAULT_LIMIT
-    const maxLimit = positiveNumberOrDefault(config.maxLimit, DEFAULT_MAX_LIMIT)
-    const queryLimit = positiveNumberOrDefault(query.limit, defaultLimit)
+    // builds the query and does the actual request to the database through typeorm
+    const { items, totalItems } = await processQuery(query, config, repo, queryData)
 
-    const isPaginated = !(queryLimit === NO_PAGINATION && maxLimit === NO_PAGINATION)
+    // creates the paginated result that conforms to JSON:API
+    return Object.assign(new Paginated<T>(), createPaginateResults(query, items, totalItems, queryData))
 
-    const limit = isPaginated ? Math.min(queryLimit || defaultLimit, maxLimit || DEFAULT_MAX_LIMIT) : NO_PAGINATION
+    function prepareQueryData(query: PaginateQuery, config: PaginateConfig<T>): QueryData<T> {
+        const path = getPath(query, config)
+        const page = positiveNumberOrDefault(query.page, 1, 1)
 
-    const sortBy = [] as SortBy<T>
-    const searchBy: Column<T>[] = []
-    let path: string
+        const defaultLimit = config.defaultLimit || DEFAULT_LIMIT
+        const maxLimit = positiveNumberOrDefault(config.maxLimit, DEFAULT_MAX_LIMIT)
+        const queryLimit = positiveNumberOrDefault(query.limit, defaultLimit)
 
-    const r = new RegExp('^(?:[a-z+]+:)?//', 'i')
-    let queryOrigin = ''
-    let queryPath = ''
-    if (r.test(query.path)) {
-        const url = new URL(query.path)
-        queryOrigin = url.origin
-        queryPath = url.pathname
-    } else {
-        queryPath = query.path
-    }
+        const isPaginated = !(queryLimit === NO_PAGINATION && maxLimit === NO_PAGINATION)
 
-    if (config.relativePath) {
-        path = queryPath
-    } else if (config.origin) {
-        path = config.origin + queryPath
-    } else {
-        path = queryOrigin + queryPath
-    }
+        const limit = isPaginated ? Math.min(queryLimit || defaultLimit, maxLimit || DEFAULT_MAX_LIMIT) : NO_PAGINATION
 
-    function isEntityKey(entityColumns: Column<T>[], column: string): column is Column<T> {
-        return !!entityColumns.find((c) => c === column)
-    }
+        const sortBy = prepareSortBy(query, config)
+        const searchBy = prepareSearchBy(query, config)
 
-    if (config.sortableColumns.length < 1) {
-        logger.debug("Missing required 'sortableColumns' config.")
-        throw new ServiceUnavailableException()
-    }
+        return { path: path, page: page, limit: limit, sortBy: sortBy, searchBy: searchBy, isPaginated: isPaginated }
 
-    if (query.sortBy) {
-        for (const order of query.sortBy) {
-            if (isEntityKey(config.sortableColumns, order[0]) && ['ASC', 'DESC'].includes(order[1])) {
-                sortBy.push(order as Order<T>)
-            }
-        }
-    }
-
-    if (!sortBy.length) {
-        sortBy.push(...(config.defaultSortBy || [[config.sortableColumns[0], 'ASC']]))
-    }
-
-    if (config.searchableColumns) {
-        if (query.searchBy) {
-            for (const column of query.searchBy) {
-                if (isEntityKey(config.searchableColumns, column)) {
-                    searchBy.push(column)
+        function prepareSearchBy(query: PaginateQuery, config: PaginateConfig<T>): Column<T>[] {
+            const searchBy: Column<T>[] = []
+            if (config.searchableColumns) {
+                if (query.searchBy) {
+                    for (const column of query.searchBy) {
+                        if (isEntityKey(config.searchableColumns, column)) {
+                            searchBy.push(column)
+                        }
+                    }
+                } else {
+                    searchBy.push(...config.searchableColumns)
                 }
             }
-        } else {
-            searchBy.push(...config.searchableColumns)
+
+            return searchBy
         }
-    }
 
-    let [items, totalItems]: [T[], number] = [[], 0]
+        function prepareSortBy(query: PaginateQuery, config: PaginateConfig<T>): SortBy<T> {
+            const sortBy = [] as SortBy<T>
 
-    const queryBuilder = repo instanceof Repository ? repo.createQueryBuilder('e') : repo
-
-    if (isPaginated) {
-        queryBuilder.take(limit).skip((page - 1) * limit)
-    }
-
-    if (config.relations?.length) {
-        config.relations.forEach((relation) => {
-            queryBuilder.leftJoinAndSelect(`${queryBuilder.alias}.${relation}`, `${queryBuilder.alias}_${relation}`)
-        })
-    }
-
-    let nullSort: 'NULLS LAST' | 'NULLS FIRST' | undefined = undefined
-    if (config.nullSort) {
-        nullSort = config.nullSort === 'last' ? 'NULLS LAST' : 'NULLS FIRST'
-    }
-
-    for (const order of sortBy) {
-        if (queryBuilder.expressionMap.mainAlias.metadata.hasRelationWithPropertyPath(order[0].split('.')[0])) {
-            queryBuilder.addOrderBy(`${queryBuilder.alias}_${order[0]}`, order[1], nullSort)
-        } else {
-            queryBuilder.addOrderBy(`${queryBuilder.alias}.${order[0]}`, order[1], nullSort)
-        }
-    }
-
-    if (config.select?.length > 0) {
-        const mappedSelect = config.select.map((col) => {
-            if (col.includes('.')) {
-                const [rel, relCol] = col.split('.')
-                return `${queryBuilder.alias}_${rel}.${relCol}`
+            if (config.sortableColumns.length < 1) {
+                logger.debug("Missing required 'sortableColumns' config.")
+                throw new ServiceUnavailableException()
             }
 
-            return `${queryBuilder.alias}.${col}`
-        })
-        queryBuilder.select(mappedSelect)
-    }
-
-    if (config.where) {
-        queryBuilder.andWhere(new Brackets((qb) => qb.andWhere(config.where)))
-    }
-
-    if (config.withDeleted) {
-        queryBuilder.withDeleted()
-    }
-
-    if (query.search && searchBy.length) {
-        queryBuilder.andWhere(
-            new Brackets((qb: SelectQueryBuilder<T>) => {
-                for (const column of searchBy) {
-                    const propertyPath = (column as string).split('.')
-                    if (propertyPath.length > 1) {
-                        const alias = queryBuilder.expressionMap.mainAlias.metadata.hasRelationWithPropertyPath(
-                            propertyPath[0]
-                        )
-                            ? `${qb.alias}_${column}`
-                            : `${qb.alias}.${column}`
-                        const condition: WherePredicateOperator = {
-                            operator: 'ilike',
-                            parameters: [alias, `:${column}`],
-                        }
-                        qb.orWhere(qb['createWhereConditionExpression'](condition), {
-                            [column]: `%${query.search}%`,
-                        })
-                    } else {
-                        qb.orWhere({
-                            [column]: ILike(`%${query.search}%`),
-                        })
+            if (query.sortBy) {
+                for (const order of query.sortBy) {
+                    if (isEntityKey(config.sortableColumns, order[0]) && ['ASC', 'DESC'].includes(order[1])) {
+                        sortBy.push(order as Order<T>)
                     }
                 }
-            })
-        )
+            }
+
+            if (!sortBy.length) {
+                sortBy.push(...(config.defaultSortBy || [[config.sortableColumns[0], 'ASC']]))
+            }
+            return sortBy
+        }
+
+        function getPath(query: PaginateQuery, config: PaginateConfig<T>): string {
+            const r = new RegExp('^(?:[a-z+]+:)?//', 'i')
+            let queryOrigin = ''
+            let queryPath = ''
+            if (r.test(query.path)) {
+                const url = new URL(query.path)
+                queryOrigin = url.origin
+                queryPath = url.pathname
+            } else {
+                queryPath = query.path
+            }
+
+            if (config.relativePath) {
+                return queryPath
+            } else if (config.origin) {
+                return config.origin + queryPath
+            } else {
+                return queryOrigin + queryPath
+            }
+        }
+
+        function isEntityKey(entityColumns: Column<T>[], column: string): column is Column<T> {
+            return !!entityColumns.find((c) => c === column)
+        }
     }
 
-    if (query.filter) {
-        const filter = parseFilter(query, config)
-        queryBuilder.andWhere(
-            new Brackets((qb: SelectQueryBuilder<T>) => {
-                for (const column in filter) {
-                    const propertyPath = (column as string).split('.')
-                    if (propertyPath.length > 1) {
-                        let parameters = { [column]: filter[column].value }
-                        // TODO: refactor below
-                        const isRelation = queryBuilder.expressionMap.mainAlias.metadata.hasRelationWithPropertyPath(
-                            propertyPath[0]
-                        )
-                        const alias = isRelation ? `${qb.alias}_${column}` : `${qb.alias}.${column}`
+    async function processQuery(
+        query: PaginateQuery,
+        config: PaginateConfig<T>,
+        repo: Repository<T> | SelectQueryBuilder<T>,
+        queryData: QueryData<T>
+    ): Promise<{ items: T[]; totalItems: number }> {
+        let [items, totalItems]: [T[], number] = [[], 0]
+        let queryBuilder = repo instanceof Repository ? repo.createQueryBuilder('e') : repo
+        const { isPaginated, limit, page, searchBy, sortBy } = queryData
 
-                        const condition = qb['getWherePredicateCondition'](
-                            alias,
-                            filter[column]
-                        ) as WherePredicateOperator
+        if (isPaginated) {
+            queryBuilder.take(limit).skip((page - 1) * limit)
+        }
 
-                        switch (condition.operator) {
-                            case 'between':
-                                condition.parameters = [alias, `:${column}_from`, `:${column}_to`]
-                                parameters = {
-                                    [column + '_from']: filter[column].value[0],
-                                    [column + '_to']: filter[column].value[1],
+        queryBuilder = processOrderByQuery(queryBuilder, config, sortBy)
+
+        queryBuilder = processConfigForQuery(queryBuilder, config)
+
+        queryBuilder = processSearchByQuery(queryBuilder, query, searchBy)
+
+        queryBuilder = processFilterQuery(queryBuilder, query, config)
+
+        if (isPaginated) {
+            ;[items, totalItems] = await queryBuilder.getManyAndCount()
+        } else {
+            items = await queryBuilder.getMany()
+        }
+
+        return { items: items, totalItems: totalItems }
+
+        function processFilterQuery(
+            queryBuilder: SelectQueryBuilder<T>,
+            query: PaginateQuery,
+            config: PaginateConfig<T>
+        ): SelectQueryBuilder<T> {
+            if (query.filter) {
+                const filter = parseFilter(query, config)
+                queryBuilder.andWhere(
+                    new Brackets((qb: SelectQueryBuilder<T>) => {
+                        for (const column in filter) {
+                            const propertyPath = (column as string).split('.')
+                            if (propertyPath.length > 1) {
+                                let parameters = { [column]: filter[column].value }
+                                // TODO: refactor below
+                                const isRelation =
+                                    queryBuilder.expressionMap.mainAlias.metadata.hasRelationWithPropertyPath(
+                                        propertyPath[0]
+                                    )
+                                const alias = isRelation ? `${qb.alias}_${column}` : `${qb.alias}.${column}`
+
+                                const condition = qb['getWherePredicateCondition'](
+                                    alias,
+                                    filter[column]
+                                ) as WherePredicateOperator
+
+                                switch (condition.operator) {
+                                    case 'between':
+                                        condition.parameters = [alias, `:${column}_from`, `:${column}_to`]
+                                        parameters = {
+                                            [column + '_from']: filter[column].value[0],
+                                            [column + '_to']: filter[column].value[1],
+                                        }
+                                        break
+                                    case 'in':
+                                        condition.parameters = [alias, `:...${column}`]
+                                        break
+                                    default:
+                                        condition.parameters = [alias, `:${column}`]
+                                        break
                                 }
-                                break
-                            case 'in':
-                                condition.parameters = [alias, `:...${column}`]
-                                break
-                            default:
-                                condition.parameters = [alias, `:${column}`]
-                                break
+                                qb.andWhere(qb['createWhereConditionExpression'](condition), parameters)
+                            } else {
+                                qb.andWhere({
+                                    [column]: filter[column],
+                                })
+                            }
                         }
-                        qb.andWhere(qb['createWhereConditionExpression'](condition), parameters)
-                    } else {
-                        qb.andWhere({
-                            [column]: filter[column],
-                        })
+                    })
+                )
+            }
+
+            return queryBuilder
+
+            function parseFilter<T>(query: PaginateQuery, config: PaginateConfig<T>) {
+                const filter: { [columnName: string]: FindOperator<string> } = {}
+                let filterableColumns = config.filterableColumns
+                if (filterableColumns === undefined) {
+                    logger.debug("No 'filterableColumns' given, ignoring filters.")
+                    filterableColumns = {}
+                }
+                for (const column of Object.keys(query.filter)) {
+                    if (!(column in filterableColumns)) {
+                        continue
+                    }
+                    const allowedOperators = filterableColumns[column]
+                    const input = query.filter[column]
+                    const statements = !Array.isArray(input) ? [input] : input
+                    for (const raw of statements) {
+                        const tokens = getFilterTokens(raw)
+                        if (tokens.length === 0) {
+                            continue
+                        }
+                        const [op2, op1, value] = tokens
+
+                        if (!isOperator(op1) || !allowedOperators.includes(op1)) {
+                            continue
+                        }
+                        if (isOperator(op2) && !allowedOperators.includes(op2)) {
+                            continue
+                        }
+                        if (isOperator(op1)) {
+                            switch (op1) {
+                                case FilterOperator.BTW:
+                                    filter[column] = OperatorSymbolToFunction.get(op1)(...value.split(','))
+                                    break
+                                case FilterOperator.IN:
+                                    filter[column] = OperatorSymbolToFunction.get(op1)(value.split(','))
+                                    break
+                                case FilterOperator.ILIKE:
+                                    filter[column] = OperatorSymbolToFunction.get(op1)(`%${value}%`)
+                                    break
+                                default:
+                                    filter[column] = OperatorSymbolToFunction.get(op1)(value)
+                                    break
+                            }
+                        }
+                        if (isOperator(op2)) {
+                            filter[column] = OperatorSymbolToFunction.get(op2)(filter[column])
+                        }
                     }
                 }
-            })
-        )
+                return filter
+            }
+        }
+
+        function processSearchByQuery(
+            queryBuilder: SelectQueryBuilder<T>,
+            query: PaginateQuery,
+            searchBy: Column<T>[]
+        ): SelectQueryBuilder<T> {
+            if (query.search && searchBy.length) {
+                queryBuilder.andWhere(
+                    new Brackets((qb: SelectQueryBuilder<T>) => {
+                        for (const column of searchBy) {
+                            const propertyPath = (column as string).split('.')
+                            if (propertyPath.length > 1) {
+                                const alias = queryBuilder.expressionMap.mainAlias.metadata.hasRelationWithPropertyPath(
+                                    propertyPath[0]
+                                )
+                                    ? `${qb.alias}_${column}`
+                                    : `${qb.alias}.${column}`
+                                const condition: WherePredicateOperator = {
+                                    operator: 'ilike',
+                                    parameters: [alias, `:${column}`],
+                                }
+                                qb.orWhere(qb['createWhereConditionExpression'](condition), {
+                                    [column]: `%${query.search}%`,
+                                })
+                            } else {
+                                qb.orWhere({
+                                    [column]: ILike(`%${query.search}%`),
+                                })
+                            }
+                        }
+                    })
+                )
+            }
+
+            return queryBuilder
+        }
+
+        function processConfigForQuery(
+            queryBuilder: SelectQueryBuilder<T>,
+            config: PaginateConfig<T>
+        ): SelectQueryBuilder<T> {
+            // relations
+            if (config.relations?.length) {
+                config.relations.forEach((relation) => {
+                    queryBuilder.leftJoinAndSelect(
+                        `${queryBuilder.alias}.${relation}`,
+                        `${queryBuilder.alias}_${relation}`
+                    )
+                })
+            }
+
+            // select
+            if (config.select?.length > 0) {
+                const mappedSelect = config.select.map((col) => {
+                    if (col.includes('.')) {
+                        const [rel, relCol] = col.split('.')
+                        return `${queryBuilder.alias}_${rel}.${relCol}`
+                    }
+
+                    return `${queryBuilder.alias}.${col}`
+                })
+                queryBuilder.select(mappedSelect)
+            }
+
+            // where
+            if (config.where) {
+                queryBuilder.andWhere(new Brackets((qb) => qb.andWhere(config.where)))
+            }
+
+            // withDeleted
+            if (config.withDeleted) {
+                queryBuilder.withDeleted()
+            }
+
+            return queryBuilder
+        }
+
+        function processOrderByQuery(
+            queryBuilder: SelectQueryBuilder<T>,
+            config: PaginateConfig<T>,
+            sortBy: SortBy<T>
+        ): SelectQueryBuilder<T> {
+            let nullSort: 'NULLS LAST' | 'NULLS FIRST' | undefined = undefined
+            if (config.nullSort) {
+                nullSort = config.nullSort === 'last' ? 'NULLS LAST' : 'NULLS FIRST'
+            }
+
+            for (const order of sortBy) {
+                if (queryBuilder.expressionMap.mainAlias.metadata.hasRelationWithPropertyPath(order[0].split('.')[0])) {
+                    queryBuilder.addOrderBy(`${queryBuilder.alias}_${order[0]}`, order[1], nullSort)
+                } else {
+                    queryBuilder.addOrderBy(`${queryBuilder.alias}.${order[0]}`, order[1], nullSort)
+                }
+            }
+
+            return queryBuilder
+        }
     }
 
-    if (isPaginated) {
-        ;[items, totalItems] = await queryBuilder.getManyAndCount()
-    } else {
-        items = await queryBuilder.getMany()
+    function createPaginateResults(
+        query: PaginateQuery,
+        items: T[],
+        totalItems: number,
+        queryData: QueryData<T>
+    ): Paginated<T> {
+        const { sortBy, searchBy, limit, path, isPaginated, page } = queryData
+
+        const sortByQuery = sortBy.map((order) => `&sortBy=${order.join(':')}`).join('')
+        const searchQuery = query.search ? `&search=${query.search}` : ''
+        const searchByQuery =
+            query.searchBy && searchBy.length ? searchBy.map((column) => `&searchBy=${column}`).join('') : ''
+        const filterQuery = query.filter
+            ? '&' +
+              stringify(
+                  mapKeys(query.filter, (_param, name) => 'filter.' + name),
+                  '&',
+                  '=',
+                  { encodeURIComponent: (str) => str }
+              )
+            : ''
+
+        const options = `&limit=${limit}${sortByQuery}${searchQuery}${searchByQuery}${filterQuery}`
+
+        const buildLink = (p: number): string => path + '?page=' + p + options
+
+        const totalPages = isPaginated ? Math.ceil(totalItems / limit) : 1
+
+        const results: Paginated<T> = {
+            data: items,
+            meta: {
+                itemsPerPage: isPaginated ? limit : items.length,
+                totalItems: isPaginated ? totalItems : items.length,
+                currentPage: page,
+                totalPages,
+                sortBy,
+                search: query.search,
+                searchBy: query.search ? searchBy : undefined,
+                filter: query.filter,
+            },
+            links: {
+                first: page == 1 ? undefined : buildLink(1),
+                previous: page - 1 < 1 ? undefined : buildLink(page - 1),
+                current: buildLink(page),
+                next: page + 1 > totalPages ? undefined : buildLink(page + 1),
+                last: page == totalPages || !totalItems ? undefined : buildLink(totalPages),
+            },
+        }
+        return results
     }
-
-    const sortByQuery = sortBy.map((order) => `&sortBy=${order.join(':')}`).join('')
-    const searchQuery = query.search ? `&search=${query.search}` : ''
-
-    const searchByQuery =
-        query.searchBy && searchBy.length ? searchBy.map((column) => `&searchBy=${column}`).join('') : ''
-
-    const filterQuery = query.filter
-        ? '&' +
-          stringify(
-              mapKeys(query.filter, (_param, name) => 'filter.' + name),
-              '&',
-              '=',
-              { encodeURIComponent: (str) => str }
-          )
-        : ''
-
-    const options = `&limit=${limit}${sortByQuery}${searchQuery}${searchByQuery}${filterQuery}`
-
-    const buildLink = (p: number): string => path + '?page=' + p + options
-
-    const totalPages = isPaginated ? Math.ceil(totalItems / limit) : 1
-
-    const results: Paginated<T> = {
-        data: items,
-        meta: {
-            itemsPerPage: isPaginated ? limit : items.length,
-            totalItems: isPaginated ? totalItems : items.length,
-            currentPage: page,
-            totalPages,
-            sortBy,
-            search: query.search,
-            searchBy: query.search ? searchBy : undefined,
-            filter: query.filter,
-        },
-        links: {
-            first: page == 1 ? undefined : buildLink(1),
-            previous: page - 1 < 1 ? undefined : buildLink(page - 1),
-            current: buildLink(page),
-            next: page + 1 > totalPages ? undefined : buildLink(page + 1),
-            last: page == totalPages || !totalItems ? undefined : buildLink(totalPages),
-        },
-    }
-
-    return Object.assign(new Paginated<T>(), results)
 }
