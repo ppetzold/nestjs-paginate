@@ -374,18 +374,23 @@ export async function paginate<T extends ObjectLiteral>(
                     new Brackets((qb: SelectQueryBuilder<T>) => {
                         for (const column of searchBy) {
                             const propertyPath = (column as string).split('.')
-                            const hasRelation =
-                                propertyPath.length > 1 &&
-                                queryBuilder.expressionMap.mainAlias.metadata.hasRelationWithPropertyPath(
+                            if (propertyPath.length > 1) {
+                                const alias = queryBuilder.expressionMap.mainAlias.metadata.hasRelationWithPropertyPath(
                                     propertyPath[0]
                                 )
-
-                            const aliasColumn = hasRelation ? `${qb.alias}_${column}` : `${qb.alias}.${column}`
-
-                            if (['postgres', 'cockroachdb'].includes(queryBuilder.connection.options.type)) {
-                                qb.orWhere(`${aliasColumn}::text ILIKE '%${query.search}%'`)
+                                    ? `${qb.alias}_${column}`
+                                    : `${qb.alias}.${column}`
+                                const condition: WherePredicateOperator = {
+                                    operator: 'ilike',
+                                    parameters: [alias, `:${column}`],
+                                }
+                                qb.orWhere(qb['createWhereConditionExpression'](condition), {
+                                    [column]: `%${query.search}%`,
+                                })
                             } else {
-                                qb.orWhere(`UPPER(${aliasColumn}) LIKE UPPER('%${query.search}%')`)
+                                qb.orWhere({
+                                    [column]: ILike(`%${query.search}%`),
+                                })
                             }
                         }
                     })
