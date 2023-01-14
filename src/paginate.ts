@@ -302,13 +302,20 @@ export async function paginate<T extends ObjectLiteral>(
                         propertyPath.length > 1 &&
                         queryBuilder.expressionMap.mainAlias.metadata.hasRelationWithPropertyPath(propertyPath[0])
 
-                    const aliasColumn = hasRelation ? `${qb.alias}_${column}` : `${qb.alias}.${column}`
+                        if (['postgres', 'cockroachdb'].includes(queryBuilder.connection.options.type)) {
+                            const alias = hasRelation ? `"${qb.alias}"_` : `"${qb.alias}".`
+                            let columns = ''
 
-                    if (['postgres', 'cockroachdb'].includes(queryBuilder.connection.options.type)) {
-                        qb.orWhere(`${aliasColumn}::text ILIKE '%${query.search}%'`)
-                    } else {
-                        qb.orWhere(`UPPER(${aliasColumn}) LIKE UPPER('%${query.search}%')`)
-                    }
+                            for (const property of propertyPath) {
+                                columns += `"${property}".`
+                            }
+                            const aliasColumn = alias + columns.substring(0, columns.length - 1)
+
+                            qb.orWhere(`${aliasColumn}::text ILIKE '%${query.search}%'`)
+                        } else {
+                            const aliasColumn = hasRelation ? `${qb.alias}_${column}` : `${qb.alias}.${column}`
+                            qb.orWhere(`UPPER(${aliasColumn}) LIKE UPPER('%${query.search}%')`)
+                        }
                 }
             })
         )
