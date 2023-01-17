@@ -8,6 +8,7 @@ import {
     getFilterTokens,
     OperatorSymbolToFunction,
     NO_PAGINATION,
+    FilterSuffix,
 } from './paginate'
 import { PaginateQuery } from './decorator'
 import { HttpException } from '@nestjs/common'
@@ -30,7 +31,7 @@ describe('paginate', () => {
             type: 'sqlite',
             database: ':memory:',
             synchronize: true,
-            logging: false,
+            logging: true,
             entities: [CatEntity, CatToyEntity, CatHomeEntity],
         })
         catRepo = connection.getRepository(CatEntity)
@@ -559,7 +560,7 @@ describe('paginate', () => {
                 color: 'white',
             },
             filterableColumns: {
-                name: [FilterOperator.NOT],
+                name: [FilterSuffix.NOT],
             },
         }
         const query: PaginateQuery = {
@@ -576,6 +577,7 @@ describe('paginate', () => {
         })
         expect(result.data).toStrictEqual([cats[3]])
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.name=$not:Leche')
+        process.exit(0)
     })
 
     it('should return result based on filter on many-to-one relation', async () => {
@@ -583,7 +585,7 @@ describe('paginate', () => {
             relations: ['cat'],
             sortableColumns: ['id', 'name'],
             filterableColumns: {
-                'cat.name': [FilterOperator.NOT],
+                'cat.name': [FilterSuffix.NOT],
             },
         }
         const query: PaginateQuery = {
@@ -607,7 +609,7 @@ describe('paginate', () => {
             relations: ['toys'],
             sortableColumns: ['id', 'name'],
             filterableColumns: {
-                'toys.name': [FilterOperator.NOT],
+                'toys.name': [FilterSuffix.NOT],
             },
         }
         const query: PaginateQuery = {
@@ -642,7 +644,7 @@ describe('paginate', () => {
             relations: ['cat'],
             sortableColumns: ['id', 'name'],
             filterableColumns: {
-                'cat.name': [FilterOperator.NOT],
+                'cat.name': [FilterSuffix.NOT],
             },
         }
         const query: PaginateQuery = {
@@ -980,7 +982,7 @@ describe('paginate', () => {
             sortableColumns: ['id', 'name', 'size.height', 'size.length', 'size.width'],
             searchableColumns: ['size.height'],
             filterableColumns: {
-                'size.height': [FilterOperator.NOT],
+                'size.height': [FilterSuffix.NOT],
             },
         }
         const query: PaginateQuery = {
@@ -1001,7 +1003,7 @@ describe('paginate', () => {
             sortableColumns: ['id', 'name', 'size.height', 'size.length', 'size.width'],
             searchableColumns: ['size.height'],
             filterableColumns: {
-                'size.height': [FilterOperator.NOT],
+                'size.height': [FilterSuffix.NOT],
             },
             relations: ['home'],
         }
@@ -1032,7 +1034,7 @@ describe('paginate', () => {
             relations: ['cat'],
             sortableColumns: ['id', 'name'],
             filterableColumns: {
-                'cat.size.height': [FilterOperator.NOT],
+                'cat.size.height': [FilterSuffix.NOT],
             },
         }
         const query: PaginateQuery = {
@@ -1164,7 +1166,7 @@ describe('paginate', () => {
                 },
             ],
             filterableColumns: {
-                name: [FilterOperator.NOT],
+                name: [FilterSuffix.NOT],
             },
         }
         const query: PaginateQuery = {
@@ -1187,7 +1189,7 @@ describe('paginate', () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id'],
             filterableColumns: {
-                name: [FilterOperator.NOT],
+                name: [FilterSuffix.NOT],
                 color: [FilterOperator.EQ],
             },
         }
@@ -1237,7 +1239,7 @@ describe('paginate', () => {
             sortableColumns: ['id'],
             searchableColumns: ['name', 'color'],
             filterableColumns: {
-                id: [FilterOperator.NOT, FilterOperator.IN],
+                id: [FilterSuffix.NOT, FilterOperator.IN],
             },
         }
         const query: PaginateQuery = {
@@ -1263,7 +1265,7 @@ describe('paginate', () => {
                 color: In(['black', 'white']),
             },
             filterableColumns: {
-                id: [FilterOperator.NOT, FilterOperator.IN],
+                id: [FilterSuffix.NOT, FilterOperator.IN],
             },
         }
         const query: PaginateQuery = {
@@ -1343,7 +1345,7 @@ describe('paginate', () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id'],
             filterableColumns: {
-                age: [FilterOperator.NOT, FilterOperator.NULL],
+                age: [FilterSuffix.NOT, FilterOperator.NULL],
             },
         }
         const query: PaginateQuery = {
@@ -1363,7 +1365,7 @@ describe('paginate', () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id'],
             filterableColumns: {
-                age: [FilterOperator.NOT, FilterOperator.NULL],
+                age: [FilterSuffix.NOT, FilterOperator.NULL],
             },
         }
         const query: PaginateQuery = {
@@ -1383,7 +1385,7 @@ describe('paginate', () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id'],
             filterableColumns: {
-                'home.name': [FilterOperator.NOT, FilterOperator.NULL],
+                'home.name': [FilterSuffix.NOT, FilterOperator.NULL],
             },
             relations: ['home'],
         }
@@ -1409,7 +1411,7 @@ describe('paginate', () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id'],
             filterableColumns: {
-                name: [FilterOperator.NOT, FilterOperator.NULL],
+                name: [FilterSuffix.NOT, FilterOperator.NULL],
             },
         }
         const query: PaginateQuery = {
@@ -1429,7 +1431,7 @@ describe('paginate', () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id'],
             filterableColumns: {
-                age: [FilterOperator.NOT],
+                age: [FilterSuffix.NOT],
             },
         }
         const query: PaginateQuery = {

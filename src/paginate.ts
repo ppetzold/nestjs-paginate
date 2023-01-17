@@ -56,10 +56,21 @@ export interface PaginateConfig<T> {
     defaultSortBy?: SortBy<T>
     defaultLimit?: number
     where?: FindOptionsWhere<T> | FindOptionsWhere<T>[]
-    filterableColumns?: { [key in Column<T>]?: FilterOperator[] }
+    filterableColumns?: {
+        [key in Column<T>]?: (FilterOperator | FilterSuffix)[]
+    }
     withDeleted?: boolean
     relativePath?: boolean
     origin?: string
+}
+
+export enum FilterComparator {
+    AND = '$and',
+    OR = '$or',
+}
+
+export function isComparator(value: unknown): value is FilterComparator {
+    return values(FilterComparator).includes(value as any)
 }
 
 export enum FilterOperator {
@@ -71,7 +82,6 @@ export enum FilterOperator {
     LT = '$lt',
     LTE = '$lte',
     BTW = '$btw',
-    NOT = '$not',
     ILIKE = '$ilike',
 }
 
@@ -79,7 +89,18 @@ export function isOperator(value: unknown): value is FilterOperator {
     return values(FilterOperator).includes(value as any)
 }
 
-export const OperatorSymbolToFunction = new Map<FilterOperator, (...args: any[]) => FindOperator<string>>([
+export enum FilterSuffix {
+    NOT = '$not',
+}
+
+export function isSuffix(value: unknown): value is FilterComparator {
+    return values(FilterSuffix).includes(value as any)
+}
+
+export const OperatorSymbolToFunction = new Map<
+    FilterOperator | FilterSuffix,
+    (...args: any[]) => FindOperator<string>
+>([
     [FilterOperator.EQ, Equal],
     [FilterOperator.GT, MoreThan],
     [FilterOperator.GTE, MoreThanOrEqual],
@@ -88,40 +109,77 @@ export const OperatorSymbolToFunction = new Map<FilterOperator, (...args: any[])
     [FilterOperator.LT, LessThan],
     [FilterOperator.LTE, LessThanOrEqual],
     [FilterOperator.BTW, Between],
-    [FilterOperator.NOT, Not],
     [FilterOperator.ILIKE, ILike],
+    [FilterSuffix.NOT, Not],
 ])
 
-export function getFilterTokens(raw: string): string[] {
-    const tokens = []
+export interface FilterToken {
+    comparator: FilterComparator
+    suffix?: FilterOperator
+    operator: FilterOperator
+    value: string
+}
+
+function extractOperand(matches: string[], index: number, checkFunction: (x: string) => boolean): string | null {
+    const rawOperand = matches[index].substring(0, matches[index].length - 1)
+    return checkFunction(rawOperand) ? rawOperand : null
+}
+
+export function getFilterTokens(raw?: string): FilterToken | null {
+    if (raw === undefined || raw === null) {
+        return null
+    }
+
+    const token: FilterToken = {
+        comparator: FilterComparator.AND,
+        suffix: undefined,
+        operator: FilterOperator.EQ,
+        value: undefined,
+    }
+
     const matches = raw.match(/(\$\w+):/g)
 
     if (matches) {
-        const value = raw.replace(matches.join(''), '')
-        tokens.push(...matches.map((token) => token.substring(0, token.length - 1)), value)
+        token.value = raw.replace(matches.join(''), '')
+        if (matches.length === 1) {
+            if (token.value === FilterOperator.NULL) {
+                // $not:$null case
+                token.comparator =
+                    (extractOperand(matches, 0, isComparator) as FilterComparator) || FilterComparator.AND
+                token.suffix = extractOperand(matches, 0, isSuffix) as FilterOperator
+                token.operator = FilterOperator.NULL
+            } else {
+                token.suffix = extractOperand(matches, 0, isSuffix) as FilterOperator // $not:1 case
+                token.operator = (extractOperand(matches, 0, isOperator) as FilterOperator) || FilterOperator.EQ
+            }
+        } else if (matches.length === 2) {
+            token.comparator = (extractOperand(matches, 0, isComparator) as FilterComparator) || FilterComparator.AND
+            if (token.value === FilterOperator.NULL) {
+                // $or:$not:$null case
+                token.suffix = extractOperand(matches, 1, isSuffix) as FilterOperator
+                token.operator = FilterOperator.NULL
+            } else {
+                token.suffix = extractOperand(matches, 0, isSuffix) as FilterOperator
+                token.operator = (extractOperand(matches, 1, isOperator) as FilterOperator) || FilterOperator.EQ
+            }
+        } else if (matches.length === 3) {
+            token.comparator = (extractOperand(matches, 0, isComparator) as FilterComparator) || FilterComparator.AND
+            token.suffix = extractOperand(matches, 1, isSuffix) as FilterOperator
+            token.operator = (extractOperand(matches, 2, isOperator) as FilterOperator) || FilterOperator.EQ
+        }
     } else {
-        tokens.push(raw)
+        if (raw === FilterOperator.NULL) {
+            // $null
+            token.operator = FilterOperator.NULL
+        }
+        token.value = raw
     }
 
-    if (tokens.length === 0 || tokens.length > 3) {
-        return []
-    } else if (tokens.length === 2) {
-        if (tokens[1] !== FilterOperator.NULL) {
-            tokens.unshift(null)
-        }
-    } else if (tokens.length === 1) {
-        if (tokens[0] === FilterOperator.NULL) {
-            tokens.unshift(null)
-        } else {
-            tokens.unshift(null, FilterOperator.EQ)
-        }
-    }
-
-    return tokens
+    return token
 }
 
 function parseFilter<T>(query: PaginateQuery, config: PaginateConfig<T>) {
-    const filter: { [columnName: string]: FindOperator<string>[] } = {}
+    const filter: { [columnName: string]: { comparator: FilterComparator; findOperator: FindOperator<string> }[] } = {}
     let filterableColumns = config.filterableColumns
     if (filterableColumns === undefined) {
         logger.debug("No 'filterableColumns' given, ignoring filters.")
@@ -135,50 +193,49 @@ function parseFilter<T>(query: PaginateQuery, config: PaginateConfig<T>) {
         const input = query.filter[column]
         const statements = !Array.isArray(input) ? [input] : input
         for (const raw of statements) {
-            const tokens = getFilterTokens(raw)
-            if (tokens.length === 0) {
-                continue
-            }
-            const [op2, op1, value] = tokens
+            const token = getFilterTokens(raw)
 
-            console.log('op2', op2)
-            console.log('op1', op1)
-            console.log('value', value)
+            //  console.log('token', JSON.stringify(token))
 
-            if (!isOperator(op1) || !allowedOperators.includes(op1)) {
+            if (
+                !token ||
+                !allowedOperators.includes(token.operator) ||
+                (token.suffix && !allowedOperators.includes(token.suffix))
+            ) {
                 continue
             }
-            if (isOperator(op2) && !allowedOperators.includes(op2)) {
-                continue
+
+            const params: typeof filter[0][0] = {
+                comparator: token.comparator,
+                findOperator: undefined,
             }
-            if (isOperator(op1)) {
-                switch (op1) {
-                    case FilterOperator.BTW:
-                        filter[column] = [OperatorSymbolToFunction.get(op1)(...value.split(','))].concat(
-                            filter[column] || []
-                        )
-                        break
-                    case FilterOperator.IN:
-                        filter[column] = [OperatorSymbolToFunction.get(op1)(value.split(','))].concat(
-                            filter[column] || []
-                        )
-                        break
-                    case FilterOperator.ILIKE:
-                        filter[column] = [OperatorSymbolToFunction.get(op1)(`%${value}%`)].concat(filter[column] || [])
-                        break
-                    default:
-                        filter[column] = [OperatorSymbolToFunction.get(op1)(value)].concat(filter[column] || [])
-                        break
-                }
+
+            if (token.operator === FilterOperator.BTW) {
+                params.findOperator = OperatorSymbolToFunction.get(token.operator)(...token.value.split(','))
+            } else if (token.operator === FilterOperator.IN) {
+                params.findOperator = OperatorSymbolToFunction.get(token.operator)(token.value.split(','))
+            } else if (token.operator === FilterOperator.ILIKE) {
+                params.findOperator = OperatorSymbolToFunction.get(token.operator)(`%${token.value}%`)
+            } else {
+                params.findOperator = OperatorSymbolToFunction.get(token.operator)(token.value)
             }
-            if (isOperator(op2)) {
-                filter[column][filter[column].length - 1] = OperatorSymbolToFunction.get(op2)(
-                    filter[column][filter[column].length - 1]
+
+            //  console.log('params', JSON.stringify(params))
+
+            filter[column] = [...(filter[column] || []), params]
+
+            //  console.log('filter[column]', JSON.stringify(filter[column]))
+
+            if (token.suffix) {
+                const lastFilterElement = filter[column].length - 1
+                filter[column][lastFilterElement].findOperator = OperatorSymbolToFunction.get(token.suffix)(
+                    filter[column][lastFilterElement].findOperator
                 )
+                //  console.log('filter[column]', JSON.stringify(filter[column]))
             }
         }
     }
-    console.log('filter', filter)
+    //  console.log('filter', JSON.stringify(filter))
     return filter
 }
 
@@ -334,53 +391,74 @@ export async function paginate<T extends ObjectLiteral>(
 
     if (query.filter) {
         const filter = parseFilter(query, config)
-        queryBuilder.andWhere(
-            new Brackets((qb: SelectQueryBuilder<T>) => {
-                for (const column in filter) {
-                    for (const cFilter in filter[column]) {
-                        const propertyPath = (column as string).split('.')
+        //  console.log(filter)
+        for (const column in filter) {
+            const propertyPath = (column as string).split('.')
+            queryBuilder.andWhere(
+                new Brackets((qb: SelectQueryBuilder<T>) => {
+                    //  console.log(filter[column])
+                    filter[column].forEach((cFilter, index) => {
                         if (propertyPath.length > 1) {
+                            const columnNamePerIteration = `${column}${index}`
+
                             let parameters = {
-                                [column]: cFilter,
+                                [columnNamePerIteration]: cFilter.findOperator.value,
                             }
                             // TODO: refactor below
-                            const isRelation =
-                                queryBuilder.expressionMap.mainAlias.metadata.hasRelationWithPropertyPath(
-                                    propertyPath[0]
-                                )
+                            const isRelation = qb.expressionMap.mainAlias.metadata.hasRelationWithPropertyPath(
+                                propertyPath[0]
+                            )
                             const alias = isRelation ? `${qb.alias}_${column}` : `${qb.alias}.${column}`
 
                             const condition = qb['getWherePredicateCondition'](
                                 alias,
-                                filter[column]
+                                cFilter.findOperator
                             ) as WherePredicateOperator
 
-                            switch (condition.operator) {
-                                case 'between':
-                                    condition.parameters = [alias, `:${column}_from`, `:${column}_to`]
-                                    parameters = {
-                                        [column + '_from']: cFilter[0],
-                                        [column + '_to']: cFilter[1],
-                                    }
-                                    break
-                                case 'in':
-                                    condition.parameters = [alias, `:...${column}`]
-                                    break
-                                default:
-                                    condition.parameters = [alias, `:${column}`]
-                                    break
+                            if (condition.operator === 'between') {
+                                condition.parameters = [
+                                    alias,
+                                    `:${columnNamePerIteration}_from`,
+                                    `:${columnNamePerIteration}_to`,
+                                ]
+                                parameters = {
+                                    [`${columnNamePerIteration}_from`]: cFilter.findOperator.value[0],
+                                    [`${columnNamePerIteration}_to`]: cFilter.findOperator.value[1],
+                                }
+                            } else if (condition.operator === 'in') {
+                                condition.parameters = [alias, `:...${columnNamePerIteration}`]
+                            } else {
+                                condition.parameters = [alias, `:${columnNamePerIteration}`]
                             }
 
-                            qb.andWhere(qb['createWhereConditionExpression'](condition), parameters)
+                            //  console.log('cFilter', cFilter)
+                            //  console.log('filter[column]', filter[column])
+                            //  console.log('condition', condition)
+                            //  console.log('parameters', parameters)
+                            //  console.log('------------------')
+
+                            if (cFilter.comparator === FilterComparator.OR) {
+                                qb.orWhere(qb['createWhereConditionExpression'](condition), parameters)
+                            } else {
+                                qb.andWhere(qb['createWhereConditionExpression'](condition), parameters)
+                            }
                         } else {
-                            qb.andWhere({
-                                [column]: filter[column],
-                            })
+                            //  console.log('cFilter', cFilter)
+                            //  console.log('------------------')
+                            if (cFilter.comparator === FilterComparator.OR) {
+                                qb.orWhere({
+                                    [column]: cFilter.findOperator,
+                                })
+                            } else {
+                                qb.andWhere({
+                                    [column]: cFilter.findOperator,
+                                })
+                            }
                         }
-                    }
-                }
-            })
-        )
+                    })
+                })
+            )
+        }
     }
 
     if (isPaginated) {
