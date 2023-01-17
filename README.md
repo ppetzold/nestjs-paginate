@@ -312,7 +312,7 @@ Filter operators must be whitelisted per column in `PaginateConfig`.
 
 `?filter.id=$not:$in:2,5,7` where column `id` is **not** `2`, `5` or `7`
 
-`?filter.summary=$not:$ilike:term` where column `summary` does not contain `term`
+`?filter.summary=$not:$ilike:term` where column `summary` does **not** contain `term`
 
 `?filter.seenAt=$null` where column `seenAt` is `NULL`
 
