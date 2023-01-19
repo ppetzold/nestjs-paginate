@@ -300,6 +300,26 @@ const config: PaginateConfig<CatEntity> = {
 const result = await paginate<CatEntity>(query, catRepo, config)
 ```
 
+## Filters
+
+Filter operators must be whitelisted per column in `PaginateConfig`.
+
+### Examples
+
+`?filter.name=$eq:Milo` is equivalent with `?filter.name=Milo`
+
+`?filter.age=$btw:4,6` where column `age` is between `4` and `6`
+
+`?filter.id=$not:$in:2,5,7` where column `id` is **not** `2`, `5` or `7`
+
+`?filter.summary=$not:$ilike:term` where column `summary` does **not** contain `term`
+
+`?filter.seenAt=$null` where column `seenAt` is `NULL`
+
+`?filter.seenAt=$not:$null` where column `seenAt` is **not** `NULL`
+
+`?filter.createdAt=$btw:2022-02-02,2022-02-10` where column `createdAt` is between the dates `2022-02-02` and `2022-02-10`
+
 ## Troubleshooting
 
 The package does not report error reasons in the response bodies. They are instead
