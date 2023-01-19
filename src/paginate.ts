@@ -301,7 +301,7 @@ function generatePredicateCondition(
     ) as WherePredicateOperator
 }
 
-function addWhereCondition(
+function addWhereConditionWithRelationVirtualEmbedded(
     qb: SelectQueryBuilder<unknown>,
     column: string,
     filter: Filter,
@@ -497,7 +497,7 @@ export async function paginate<T extends ObjectLiteral>(
                         columnProperties
                     )
                     if (columnProperties.propertyPath || isVirtualProperty) {
-                        addWhereCondition(
+                        addWhereConditionWithRelationVirtualEmbedded(
                             qb,
                             column,
                             filter,
