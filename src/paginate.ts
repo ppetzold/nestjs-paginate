@@ -268,7 +268,7 @@ function fixQueryParam(
     return params
 }
 
-// This function is used to fix the column alias when using relation, embeded or virtual properties
+// This function is used to fix the column alias when using relation, embedded or virtual properties
 function fixColumnAlias(
     properties: ColumnProperties,
     alias: string,
@@ -307,13 +307,13 @@ function generatePredicateCondition(
 function addWhereCondition(
     qb: SelectQueryBuilder<unknown>,
     column: string,
-    propiertes: ColumnProperties,
+    properties: ColumnProperties,
     filter: Filter,
     isRelation: boolean,
     isVirtualProperty: boolean,
     query?: ColumnMetadata['query']
 ) {
-    const alias = fixColumnAlias(propiertes, qb.alias, isRelation, isVirtualProperty, query)
+    const alias = fixColumnAlias(properties, qb.alias, isRelation, isVirtualProperty, query)
     const condition = generatePredicateCondition(qb, column, filter, alias, isVirtualProperty)
 
     const parameters = fixQueryParam(alias, column, filter, condition, {
@@ -401,7 +401,7 @@ export async function paginate<T extends ObjectLiteral>(
     if (isPaginated) {
         // Switch from take and skip to limit and offset
         // due to this problem https://github.com/typeorm/typeorm/issues/5670
-        // (anyway this create more clean query without double dinstict)
+        // (anyway this creates more clean query without double dinstict)
         queryBuilder.limit(limit).offset((page - 1) * limit)
         // queryBuilder.take(limit).skip((page - 1) * limit)
     }
