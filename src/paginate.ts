@@ -183,7 +183,10 @@ type ColumnProperties = { propertyPath?: string; propertyName: string }
 function getPropertiesByColumnName(column: string): ColumnProperties {
     const propertyPath = column.split('.')
     return propertyPath.length > 1
-        ? { propertyPath: propertyPath[0], propertyName: propertyPath[1] }
+        ? {
+              propertyPath: propertyPath[0],
+              propertyName: propertyPath.slice(1).join('.'), // the join is in case of an embedded entity
+          }
         : { propertyName: propertyPath[0] }
 }
 
@@ -276,13 +279,15 @@ function fixColumnAlias(
     if (isRelation) {
         if (isVirtualProperty && query) {
             return `(${query(`${alias}_${properties.propertyPath}`)})` // () is needed to avoid parameter conflict
+        } else if (isVirtualProperty && !query) {
+            return `${alias}_${properties.propertyPath}_${properties.propertyName}`
         } else {
-            return `${alias}_${properties.propertyPath}.${properties.propertyName}`
+            return `${alias}_${properties.propertyPath}.${properties.propertyName}` // include embeded property and relation property
         }
     } else if (isVirtualProperty) {
         return query ? `(${query(`${alias}`)})` : `${alias}_${properties.propertyName}`
     } else {
-        return `${alias}.${properties.propertyName}` // is embeded property
+        return `${alias}.${properties.propertyName}` //
     }
 }
 
@@ -456,12 +461,6 @@ export async function paginate<T extends ObjectLiteral>(
                         parameters: [alias, `:${column}`],
                     }
 
-                    console.log(property)
-                    console.log(qb.alias)
-                    console.log(column)
-                    console.log(isRelation)
-                    console.log(alias)
-
                     qb.orWhere(qb['createWhereConditionExpression'](condition), {
                         [column]: `%${query.search}%`,
                     })
@@ -485,9 +484,7 @@ export async function paginate<T extends ObjectLiteral>(
                         column,
                         columnProperties,
                         filter,
-                        columnProperties.propertyPath
-                            ? checkIsRelation(queryBuilder, columnProperties.propertyPath)
-                            : false,
+                        checkIsRelation(queryBuilder, columnProperties.propertyPath),
                         isVirtualProperty,
                         virtualQuery
                     )
