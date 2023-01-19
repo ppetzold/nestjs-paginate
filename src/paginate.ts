@@ -367,11 +367,7 @@ export async function paginate<T extends ObjectLiteral>(
             //console.log('order', order)
             const { isVirtualProperty } = extractVirtualProperty(queryBuilder, propertyPath[0])
             if (isVirtualProperty) {
-                queryBuilder.addOrderBy(
-                    `${queryBuilder.alias}_${propertyPath[0]}_${propertyPath[1]}`,
-                    order[1],
-                    nullSort
-                )
+                queryBuilder.addOrderBy(`${queryBuilder.alias}_${propertyPath[0]}`, order[1], nullSort)
             } else {
                 queryBuilder.addOrderBy(`${queryBuilder.alias}.${order[0]}`, order[1], nullSort)
             }
@@ -404,6 +400,7 @@ export async function paginate<T extends ObjectLiteral>(
                 for (const column of searchBy) {
                     const propertyPath = (column as string).split('.')
                     if (propertyPath.length > 1) {
+                        // on relation on embeded
                         const alias = checkIsRelation(queryBuilder, propertyPath[0])
                             ? `${qb.alias}_${column}`
                             : `${qb.alias}.${column}`
