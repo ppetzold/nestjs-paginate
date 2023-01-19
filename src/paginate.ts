@@ -204,6 +204,9 @@ function extractVirtualProperty(
 }
 
 function checkIsRelation(qb: SelectQueryBuilder<unknown>, propertyPath: string): boolean {
+    if (!qb || !propertyPath) {
+        return false
+    }
     return !!qb?.expressionMap?.mainAlias?.metadata?.hasRelationWithPropertyPath(propertyPath)
 }
 
@@ -264,27 +267,22 @@ function fixQueryParam(
 
 // This function is used to fix the column alias when using relation, embeded or virtual properties
 function fixColumnAlias(
-    column: string,
-    propertyPath: string,
+    properties: ColumnProperties,
     alias: string,
     isRelation = false,
     isVirtualProperty = false,
     query?: ColumnMetadata['query']
 ): string {
-    if (isVirtualProperty && !query) {
-        throw new Error('Must set query param.')
-    }
-
     if (isRelation) {
-        if (isVirtualProperty) {
-            return `(${query(`${alias}_${propertyPath}`)})` // () is needed to avoid parameter conflict
+        if (isVirtualProperty && query) {
+            return `(${query(`${alias}_${properties.propertyPath}`)})` // () is needed to avoid parameter conflict
         } else {
-            return `${alias}_${column}`
+            return `${alias}_${properties.propertyPath}.${properties.propertyName}`
         }
     } else if (isVirtualProperty) {
-        return `(${query(`${alias}`)})`
+        return query ? `(${query(`${alias}`)})` : `${alias}_${properties.propertyName}`
     } else {
-        return `${alias}.${column}` // is embeded property
+        return `${alias}.${properties.propertyName}` // is embeded property
     }
 }
 
@@ -301,16 +299,16 @@ function generatePredicateCondition(
     ) as WherePredicateOperator
 }
 
-function addWhereConditionWithRelationVirtualEmbedded(
+function addWhereCondition(
     qb: SelectQueryBuilder<unknown>,
     column: string,
+    propiertes: ColumnProperties,
     filter: Filter,
-    propertyPath: string,
     isRelation: boolean,
     isVirtualProperty: boolean,
     query?: ColumnMetadata['query']
 ) {
-    const alias = fixColumnAlias(column, propertyPath, qb.alias, isRelation, isVirtualProperty, query)
+    const alias = fixColumnAlias(propiertes, qb.alias, isRelation, isVirtualProperty, query)
     const condition = generatePredicateCondition(qb, column, filter, alias, isVirtualProperty)
 
     const parameters = fixQueryParam(alias, column, filter, condition, {
@@ -418,17 +416,10 @@ export async function paginate<T extends ObjectLiteral>(
         const columnProperties = getPropertiesByColumnName(order[0])
         const { isVirtualProperty } = extractVirtualProperty(queryBuilder, columnProperties)
         const isRelation = checkIsRelation(queryBuilder, columnProperties.propertyPath)
-        if (isRelation && isVirtualProperty) {
-            queryBuilder.addOrderBy(
-                `${queryBuilder.alias}_${columnProperties.propertyPath}_${columnProperties.propertyName}`,
-                order[1],
-                nullSort
-            )
-        } else if (isRelation || isVirtualProperty) {
-            queryBuilder.addOrderBy(`${queryBuilder.alias}_${columnProperties.propertyName}`, order[1], nullSort)
-        } else {
-            queryBuilder.addOrderBy(`${queryBuilder.alias}.${columnProperties.propertyName}`, order[1], nullSort)
-        }
+
+        const alias = fixColumnAlias(columnProperties, queryBuilder.alias, isRelation, isVirtualProperty)
+
+        queryBuilder.addOrderBy(alias, order[1], nullSort)
     }
 
     if (config.select?.length > 0) {
@@ -459,28 +450,21 @@ export async function paginate<T extends ObjectLiteral>(
                     const { isVirtualProperty, query: virtualQuery } = extractVirtualProperty(qb, property)
                     const isRelation = checkIsRelation(qb, property.propertyPath)
 
-                    if (isRelation || isVirtualProperty) {
-                        // on relation on embeded
-                        const alias = fixColumnAlias(
-                            column,
-                            property.propertyPath,
-                            qb.alias,
-                            isRelation,
-                            isVirtualProperty,
-                            virtualQuery
-                        )
-                        const condition: WherePredicateOperator = {
-                            operator: 'ilike',
-                            parameters: [alias, `:${column}`],
-                        }
-                        qb.orWhere(qb['createWhereConditionExpression'](condition), {
-                            [column]: `%${query.search}%`,
-                        })
-                    } else {
-                        qb.orWhere({
-                            [column]: ILike(`%${query.search}%`),
-                        })
+                    const alias = fixColumnAlias(property, qb.alias, isRelation, isVirtualProperty, virtualQuery)
+                    const condition: WherePredicateOperator = {
+                        operator: 'ilike',
+                        parameters: [alias, `:${column}`],
                     }
+
+                    console.log(property)
+                    console.log(qb.alias)
+                    console.log(column)
+                    console.log(isRelation)
+                    console.log(alias)
+
+                    qb.orWhere(qb['createWhereConditionExpression'](condition), {
+                        [column]: `%${query.search}%`,
+                    })
                 }
             })
         )
@@ -496,23 +480,17 @@ export async function paginate<T extends ObjectLiteral>(
                         queryBuilder,
                         columnProperties
                     )
-                    if (columnProperties.propertyPath || isVirtualProperty) {
-                        addWhereConditionWithRelationVirtualEmbedded(
-                            qb,
-                            column,
-                            filter,
-                            columnProperties.propertyPath || columnProperties.propertyName,
-                            columnProperties.propertyPath
-                                ? checkIsRelation(queryBuilder, columnProperties.propertyPath)
-                                : false,
-                            isVirtualProperty,
-                            virtualQuery
-                        )
-                    } else {
-                        qb.andWhere({
-                            [column]: filter[column],
-                        })
-                    }
+                    addWhereCondition(
+                        qb,
+                        column,
+                        columnProperties,
+                        filter,
+                        columnProperties.propertyPath
+                            ? checkIsRelation(queryBuilder, columnProperties.propertyPath)
+                            : false,
+                        isVirtualProperty,
+                        virtualQuery
+                    )
                 }
             })
         )
