@@ -298,23 +298,23 @@ export async function paginate<T extends ObjectLiteral>(
             new Brackets((qb: SelectQueryBuilder<T>) => {
                 for (const column of searchBy) {
                     const propertyPath = (column as string).split('.')
-                    if (propertyPath.length > 1) {
-                        const alias = queryBuilder.expressionMap.mainAlias.metadata.hasRelationWithPropertyPath(
-                            propertyPath[0]
-                        )
-                            ? `${qb.alias}_${column}`
-                            : `${qb.alias}.${column}`
-                        const condition: WherePredicateOperator = {
-                            operator: 'ilike',
-                            parameters: [alias, `:${column}`],
+                    const hasRelation =
+                        propertyPath.length > 1 &&
+                        queryBuilder.expressionMap.mainAlias.metadata.hasRelationWithPropertyPath(propertyPath[0])
+
+                    if (['postgres', 'cockroachdb'].includes(queryBuilder.connection.options.type)) {
+                        const alias = hasRelation ? `"${qb.alias}"_` : `"${qb.alias}".`
+                        let columns = ''
+
+                        for (const property of propertyPath) {
+                            columns += `"${property}".`
                         }
-                        qb.orWhere(qb['createWhereConditionExpression'](condition), {
-                            [column]: `%${query.search}%`,
-                        })
+                        const aliasColumn = alias + columns.substring(0, columns.length - 1)
+
+                        qb.orWhere(`${aliasColumn}::text ILIKE '%${query.search}%'`)
                     } else {
-                        qb.orWhere({
-                            [column]: ILike(`%${query.search}%`),
-                        })
+                        const aliasColumn = hasRelation ? `${qb.alias}_${column}` : `${qb.alias}.${column}`
+                        qb.orWhere(`UPPER(${aliasColumn}) LIKE UPPER('%${query.search}%')`)
                     }
                 }
             })
