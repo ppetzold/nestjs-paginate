@@ -494,7 +494,6 @@ export async function paginate<T extends ObjectLiteral>(
     }
 
     if (isPaginated) {
-        //console.log(queryBuilder.getQuery())
         ;[items, totalItems] = await queryBuilder.getManyAndCount()
     } else {
         items = await queryBuilder.getMany()

@@ -30,7 +30,7 @@ describe('paginate', () => {
             type: 'sqlite',
             database: ':memory:',
             synchronize: true,
-            logging: true,
+            logging: false,
             entities: [CatEntity, CatToyEntity, CatHomeEntity],
         })
         catRepo = connection.getRepository(CatEntity)
@@ -423,8 +423,6 @@ describe('paginate', () => {
             path: '',
             search: 'Milo',
         }
-
-        console.log('AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA')
 
         const result = await paginate<CatToyEntity>(query, catToyRepo, config)
 
