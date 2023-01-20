@@ -1,4 +1,4 @@
-import { Column, CreateDateColumn, Entity, OneToOne, PrimaryGeneratedColumn } from 'typeorm'
+import { Column, CreateDateColumn, Entity, OneToOne, PrimaryGeneratedColumn, VirtualColumn } from 'typeorm'
 import { CatEntity } from './cat.entity'
 
 @Entity()
@@ -14,4 +14,9 @@ export class CatHomeEntity {
 
     @CreateDateColumn()
     createdAt: string
+
+    @VirtualColumn({
+        query: (alias) => `SELECT CAST(COUNT(*) AS INT)  FROM "cat" WHERE "cat"."homeId" = ${alias}.id`,
+    })
+    countCat: number
 }
