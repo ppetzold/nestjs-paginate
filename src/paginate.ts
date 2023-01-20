@@ -304,22 +304,15 @@ function generatePredicateCondition(
     ) as WherePredicateOperator
 }
 
-function addWhereCondition(
-    qb: SelectQueryBuilder<unknown>,
-    column: string,
-    properties: ColumnProperties,
-    filter: Filter,
-    isRelation: boolean,
-    isVirtualProperty: boolean,
-    query?: ColumnMetadata['query']
-) {
-    const alias = fixColumnAlias(properties, qb.alias, isRelation, isVirtualProperty, query)
+function addWhereCondition(qb: SelectQueryBuilder<unknown>, column: string, filter: Filter) {
+    const columnProperties = getPropertiesByColumnName(column)
+    const { isVirtualProperty, query: virtualQuery } = extractVirtualProperty(qb, columnProperties)
+    const isRelation = checkIsRelation(qb, columnProperties.propertyPath)
+    const alias = fixColumnAlias(columnProperties, qb.alias, isRelation, isVirtualProperty, virtualQuery)
     const condition = generatePredicateCondition(qb, column, filter, alias, isVirtualProperty)
-
     const parameters = fixQueryParam(alias, column, filter, condition, {
         [column]: filter[column].value,
     })
-
     qb.andWhere(qb['createWhereConditionExpression'](condition), parameters)
 }
 
@@ -474,20 +467,7 @@ export async function paginate<T extends ObjectLiteral>(
         queryBuilder.andWhere(
             new Brackets((qb: SelectQueryBuilder<T>) => {
                 for (const column in filter) {
-                    const columnProperties = getPropertiesByColumnName(column)
-                    const { isVirtualProperty, query: virtualQuery } = extractVirtualProperty(
-                        queryBuilder,
-                        columnProperties
-                    )
-                    addWhereCondition(
-                        qb,
-                        column,
-                        columnProperties,
-                        filter,
-                        checkIsRelation(queryBuilder, columnProperties.propertyPath),
-                        isVirtualProperty,
-                        virtualQuery
-                    )
+                    addWhereCondition(qb, column, filter)
                 }
             })
         )
