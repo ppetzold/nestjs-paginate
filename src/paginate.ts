@@ -18,7 +18,7 @@ import {
 } from 'typeorm'
 import { PaginateQuery } from './decorator'
 import { ServiceUnavailableException, Logger } from '@nestjs/common'
-import { values, mapKeys, isArray } from 'lodash'
+import { values, mapKeys } from 'lodash'
 import { stringify } from 'querystring'
 import { WherePredicateOperator } from 'typeorm/query-builder/WhereClause'
 import { Column, Order, positiveNumberOrDefault, RelationColumn, SortBy } from './helper'
@@ -199,7 +199,7 @@ function parseFilter<T>(query: PaginateQuery, config: PaginateConfig<T>): Column
         for (const raw of statements) {
             const token = getFilterTokens(raw)
 
-            //  console.log('token', JSON.stringify(token))
+            console.log('token', JSON.stringify(token))
 
             if (
                 !token ||
@@ -224,22 +224,22 @@ function parseFilter<T>(query: PaginateQuery, config: PaginateConfig<T>): Column
                 params.findOperator = OperatorSymbolToFunction.get(token.operator)(token.value)
             }
 
-            //  console.log('params', JSON.stringify(params))
+            console.log('params', JSON.stringify(params))
 
             filter[column] = [...(filter[column] || []), params]
 
-            //  console.log('filter[column]', JSON.stringify(filter[column]))
+            console.log('filter[column]', JSON.stringify(filter[column]))
 
             if (token.suffix) {
                 const lastFilterElement = filter[column].length - 1
                 filter[column][lastFilterElement].findOperator = OperatorSymbolToFunction.get(token.suffix)(
                     filter[column][lastFilterElement].findOperator
                 )
-                //  console.log('filter[column]', JSON.stringify(filter[column]))
+                console.log('filter[column]', JSON.stringify(filter[column]))
             }
         }
     }
-    //  console.log('filter', JSON.stringify(filter))
+    console.log('filter', JSON.stringify(filter))
     return filter
 }
 
@@ -387,8 +387,12 @@ function addWhereCondition(
         const alias = fixColumnAlias(properties, qb.alias, isRelation, isVirtualProperty, query)
         const condition = generatePredicateCondition(qb, column, cFilter, alias, isVirtualProperty)
         const parameters = fixQueryParam(alias, columnNamePerIteration, cFilter, condition, {
-            [column]: cFilter.findOperator.value,
+            [columnNamePerIteration]: cFilter.findOperator.value,
         })
+        console.log('columnNamePerIteration', columnNamePerIteration)
+        console.log('alias', alias)
+        console.log('condition', condition)
+        console.log('parameters', parameters)
         if (cFilter.comparator === FilterComparator.OR) {
             qb.orWhere(qb['createWhereConditionExpression'](condition), parameters)
         } else {
