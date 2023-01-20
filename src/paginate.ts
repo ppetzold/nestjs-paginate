@@ -199,8 +199,6 @@ function parseFilter<T>(query: PaginateQuery, config: PaginateConfig<T>): Column
         for (const raw of statements) {
             const token = getFilterTokens(raw)
 
-            console.log('token', JSON.stringify(token))
-
             if (
                 !token ||
                 !allowedOperators.includes(token.operator) ||
@@ -224,22 +222,17 @@ function parseFilter<T>(query: PaginateQuery, config: PaginateConfig<T>): Column
                 params.findOperator = OperatorSymbolToFunction.get(token.operator)(token.value)
             }
 
-            console.log('params', JSON.stringify(params))
-
             filter[column] = [...(filter[column] || []), params]
-
-            console.log('filter[column]', JSON.stringify(filter[column]))
 
             if (token.suffix) {
                 const lastFilterElement = filter[column].length - 1
                 filter[column][lastFilterElement].findOperator = OperatorSymbolToFunction.get(token.suffix)(
                     filter[column][lastFilterElement].findOperator
                 )
-                console.log('filter[column]', JSON.stringify(filter[column]))
             }
         }
     }
-    console.log('filter', JSON.stringify(filter))
+
     return filter
 }
 
@@ -384,10 +377,6 @@ function addWhereCondition(qb: SelectQueryBuilder<unknown>, column: string, filt
         const parameters = fixQueryParam(alias, columnNamePerIteration, columnFilter, condition, {
             [columnNamePerIteration]: columnFilter.findOperator.value,
         })
-        console.log('columnNamePerIteration', columnNamePerIteration)
-        console.log('alias', alias)
-        console.log('condition', condition)
-        console.log('parameters', parameters)
         if (columnFilter.comparator === FilterComparator.OR) {
             qb.orWhere(qb['createWhereConditionExpression'](condition), parameters)
         } else {
