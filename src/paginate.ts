@@ -373,22 +373,22 @@ function generatePredicateCondition(
     ) as WherePredicateOperator
 }
 
-function addWhereCondition(qb: SelectQueryBuilder<unknown>, column: string, filter: Filter) {
+function addWhereCondition(qb: SelectQueryBuilder<unknown>, column: string, filter: ColumnsFilters) {
     const columnProperties = getPropertiesByColumnName(column)
     const { isVirtualProperty, query: virtualQuery } = extractVirtualProperty(qb, columnProperties)
     const isRelation = checkIsRelation(qb, columnProperties.propertyPath)
-    filter[column].forEach((cFilter: Filter, index: number) => {
+    filter[column].forEach((columnFilter: Filter, index: number) => {
         const columnNamePerIteration = `${column}${index}`
         const alias = fixColumnAlias(columnProperties, qb.alias, isRelation, isVirtualProperty, virtualQuery)
-        const condition = generatePredicateCondition(qb, column, cFilter, alias, isVirtualProperty)
-        const parameters = fixQueryParam(alias, columnNamePerIteration, cFilter, condition, {
-            [columnNamePerIteration]: cFilter.findOperator.value,
+        const condition = generatePredicateCondition(qb, column, columnFilter, alias, isVirtualProperty)
+        const parameters = fixQueryParam(alias, columnNamePerIteration, columnFilter, condition, {
+            [columnNamePerIteration]: columnFilter.findOperator.value,
         })
         console.log('columnNamePerIteration', columnNamePerIteration)
         console.log('alias', alias)
         console.log('condition', condition)
         console.log('parameters', parameters)
-        if (cFilter.comparator === FilterComparator.OR) {
+        if (columnFilter.comparator === FilterComparator.OR) {
             qb.orWhere(qb['createWhereConditionExpression'](condition), parameters)
         } else {
             qb.andWhere(qb['createWhereConditionExpression'](condition), parameters)
