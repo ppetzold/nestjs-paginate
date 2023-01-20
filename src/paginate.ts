@@ -373,18 +373,13 @@ function generatePredicateCondition(
     ) as WherePredicateOperator
 }
 
-function addWhereCondition(
-    qb: SelectQueryBuilder<unknown>,
-    column: string,
-    properties: ColumnProperties,
-    filter: ColumnsFilters,
-    isRelation: boolean,
-    isVirtualProperty: boolean,
-    query?: ColumnMetadata['query']
-) {
-    filter[column].forEach((cFilter, index) => {
+function addWhereCondition(qb: SelectQueryBuilder<unknown>, column: string, filter: Filter) {
+    const columnProperties = getPropertiesByColumnName(column)
+    const { isVirtualProperty, query: virtualQuery } = extractVirtualProperty(qb, columnProperties)
+    const isRelation = checkIsRelation(qb, columnProperties.propertyPath)
+    filter[column].forEach((cFilter: Filter, index: number) => {
         const columnNamePerIteration = `${column}${index}`
-        const alias = fixColumnAlias(properties, qb.alias, isRelation, isVirtualProperty, query)
+        const alias = fixColumnAlias(columnProperties, qb.alias, isRelation, isVirtualProperty, virtualQuery)
         const condition = generatePredicateCondition(qb, column, cFilter, alias, isVirtualProperty)
         const parameters = fixQueryParam(alias, columnNamePerIteration, cFilter, condition, {
             [columnNamePerIteration]: cFilter.findOperator.value,
@@ -549,23 +544,13 @@ export async function paginate<T extends ObjectLiteral>(
 
     if (query.filter) {
         const filter = parseFilter(query, config)
-        for (const column in filter) {
-            const columnProperties = getPropertiesByColumnName(column)
-            const { isVirtualProperty, query: virtualQuery } = extractVirtualProperty(queryBuilder, columnProperties)
-            queryBuilder.andWhere(
-                new Brackets((qb: SelectQueryBuilder<T>) => {
-                    addWhereCondition(
-                        qb,
-                        column,
-                        columnProperties,
-                        filter,
-                        checkIsRelation(queryBuilder, columnProperties.propertyPath),
-                        isVirtualProperty,
-                        virtualQuery
-                    )
-                })
-            )
-        }
+        queryBuilder.andWhere(
+            new Brackets((qb: SelectQueryBuilder<T>) => {
+                for (const column in filter) {
+                    addWhereCondition(qb, column, filter)
+                }
+            })
+        )
     }
 
     if (isPaginated) {
