@@ -1,4 +1,4 @@
-import { Repository, In, DataSource} from 'typeorm'
+import { Repository, In, DataSource } from 'typeorm'
 import {
     Paginated,
     paginate,
@@ -32,8 +32,8 @@ describe('paginate', () => {
             synchronize: true,
             logging: false,
             entities: [CatEntity, CatToyEntity, CatHomeEntity],
-        });
-        await dataSource.initialize();
+        })
+        await dataSource.initialize()
         catRepo = dataSource.getRepository(CatEntity)
         catToyRepo = dataSource.getRepository(CatToyEntity)
         catHomeRepo = dataSource.getRepository(CatHomeEntity)
