@@ -133,8 +133,10 @@ export function getFilterTokens(raw?: string): FilterToken | null {
         value: raw,
     }
 
-    const matches = raw.split(':')
     const MAX_OPERTATOR = 4 // max 4 operator es: $and:$not:$eq:$null
+    const OPERAND_SEPARATOR = ':'
+
+    const matches = raw.split(OPERAND_SEPARATOR)
     const maxOperandCount = matches.length > MAX_OPERTATOR ? MAX_OPERTATOR : matches.length
     const notValue: (FilterOperator | FilterSuffix | FilterComparator)[] = []
 
@@ -154,7 +156,7 @@ export function getFilterTokens(raw?: string): FilterToken | null {
 
     if (notValue.length) {
         const isLastOperandNull = notValue[notValue.length - 1] === FilterOperator.NULL
-        const filterStr = `${notValue.join(':')}${isLastOperandNull ? '' : ':'}`
+        const filterStr = `${notValue.join(OPERAND_SEPARATOR)}${isLastOperandNull ? '' : OPERAND_SEPARATOR}`
         const tokenValue = raw.replace(filterStr, '')
         token.value = isLastOperandNull ? undefined : tokenValue
     }
