@@ -9,9 +9,11 @@ import {
     OperatorSymbolToFunction,
     NO_PAGINATION,
     FilterSuffix,
+    isComparator,
+    isSuffix,
 } from './paginate'
 import { PaginateQuery } from './decorator'
-import { HttpException } from '@nestjs/common'
+import { HttpException, Logger } from '@nestjs/common'
 import { CatEntity } from './__tests__/cat.entity'
 import { CatToyEntity } from './__tests__/cat-toy.entity'
 import { CatHomeEntity } from './__tests__/cat-home.entity'
@@ -585,9 +587,9 @@ describe('paginate', () => {
         expect(result.meta.filter).toStrictEqual({
             name: '$not:Leche',
         })
+
         expect(result.data).toStrictEqual([cats[3]])
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.name=$not:Leche')
-        process.exit(0)
     })
 
     it('should return result based on filter on many-to-one relation', async () => {
@@ -1496,12 +1498,18 @@ describe('paginate', () => {
         { operator: '$lt', result: true },
         { operator: '$lte', result: true },
         { operator: '$btw', result: true },
-        { operator: '$not', result: true },
         { operator: '$ilike', result: true },
         { operator: '$fake', result: false },
     ])('should check operator "$operator" valid is $result', ({ operator, result }) => {
         expect(isOperator(operator)).toStrictEqual(result)
     })
+
+    it.each([{ suffix: '$not', result: true }])(
+        'should check suffix "$suffix" valid is $result',
+        ({ suffix, result }) => {
+            expect(isSuffix(suffix)).toStrictEqual(result)
+        }
+    )
 
     it.each([
         { operator: '$eq', name: 'Equal' },
@@ -1520,19 +1528,31 @@ describe('paginate', () => {
     })
 
     it.each([
-        { string: '$ilike:value', tokens: [null, '$ilike', 'value'] },
-        { string: '$eq:value', tokens: [null, '$eq', 'value'] },
-        { string: '$eq:val:ue', tokens: [null, '$eq', 'val:ue'] },
-        { string: '$in:value1,value2,value3', tokens: [null, '$in', 'value1,value2,value3'] },
-        { string: '$not:$in:value1:a,value2:b,value3:c', tokens: ['$not', '$in', 'value1:a,value2:b,value3:c'] },
-        { string: 'value', tokens: [null, '$eq', 'value'] },
-        { string: 'val:ue', tokens: [null, '$eq', 'val:ue'] },
-        { string: '$not:value', tokens: [null, '$not', 'value'] },
-        { string: '$eq:$not:value', tokens: ['$eq', '$not', 'value'] },
-        { string: '$eq:$null', tokens: ['$eq', '$null'] },
-        { string: '$null', tokens: [null, '$null'] },
-        { string: '', tokens: [null, '$eq', ''] },
-        { string: '$eq:$not:$in:value', tokens: [] },
+        {
+            string: '$ilike:value',
+            tokens: { comparator: '$and', operator: '$ilike', suffix: undefined, value: 'value' },
+        },
+        { string: '$eq:value', tokens: { comparator: '$and', operator: '$eq', suffix: undefined, value: 'value' } },
+        { string: '$eq:val:ue', tokens: { comparator: '$and', operator: '$eq', suffix: undefined, value: 'val:ue' } },
+        {
+            string: '$in:value1,value2,value3',
+            tokens: { comparator: '$and', operator: '$in', suffix: undefined, value: 'value1,value2,value3' },
+        },
+        {
+            string: '$not:$in:value1:a,value2:b,value3:c',
+            tokens: { comparator: '$and', operator: '$in', suffix: '$not', value: 'value1:a,value2:b,value3:c' },
+        },
+        { string: 'value', tokens: { comparator: '$and', operator: '$eq', suffix: undefined, value: 'value' } },
+        { string: 'val:ue', tokens: { comparator: '$and', operator: '$eq', suffix: undefined, value: 'val:ue' } },
+        { string: '$not:value', tokens: { comparator: '$and', operator: '$eq', suffix: '$not', value: 'value' } },
+        { string: '$eq:$not:value', tokens: { comparator: '$and', operator: '$eq', suffix: '$not', value: 'value' } },
+        { string: '$eq:$null', tokens: { comparator: '$and', operator: '$null', suffix: undefined, value: undefined } },
+        { string: '$null', tokens: { comparator: '$and', operator: '$null', suffix: undefined, value: undefined } },
+        { string: '', tokens: { comparator: '$and', operator: '$eq', suffix: undefined, value: '' } },
+        {
+            string: '$eq:$not:$in:value',
+            tokens: { comparator: '$and', operator: '$in', suffix: '$not', value: 'value' },
+        },
     ])('should get filter tokens for "$string"', ({ string, tokens }) => {
         expect(getFilterTokens(string)).toStrictEqual(tokens)
     })

@@ -94,7 +94,7 @@ export enum FilterSuffix {
     NOT = '$not',
 }
 
-export function isSuffix(value: unknown): value is FilterComparator {
+export function isSuffix(value: unknown): value is FilterSuffix {
     return values(FilterSuffix).includes(value as any)
 }
 
@@ -116,14 +116,9 @@ export const OperatorSymbolToFunction = new Map<
 
 export interface FilterToken {
     comparator: FilterComparator
-    suffix?: FilterOperator
+    suffix?: FilterSuffix
     operator: FilterOperator
     value: string
-}
-
-function extractOperand(matches: string[], index: number, checkFunction: (x: string) => boolean): string | null {
-    const rawOperand = matches[index].substring(0, matches[index].length - 1)
-    return checkFunction(rawOperand) ? rawOperand : null
 }
 
 export function getFilterTokens(raw?: string): FilterToken | null {
@@ -135,45 +130,33 @@ export function getFilterTokens(raw?: string): FilterToken | null {
         comparator: FilterComparator.AND,
         suffix: undefined,
         operator: FilterOperator.EQ,
-        value: undefined,
+        value: raw,
     }
 
-    const matches = raw.match(/(\$\w+):/g)
+    const matches = raw.split(':')
+    const MAX_OPERTATOR = 4 // max 4 operator es: $and:$not:$eq:$null
+    const maxOperandCount = matches.length > MAX_OPERTATOR ? MAX_OPERTATOR : matches.length
+    const notValue: (FilterOperator | FilterSuffix | FilterComparator)[] = []
 
-    if (matches) {
-        token.value = raw.replace(matches.join(''), '')
-        if (matches.length === 1) {
-            if (token.value === FilterOperator.NULL) {
-                // $not:$null case
-                token.comparator =
-                    (extractOperand(matches, 0, isComparator) as FilterComparator) || FilterComparator.AND
-                token.suffix = extractOperand(matches, 0, isSuffix) as FilterOperator
-                token.operator = FilterOperator.NULL
-            } else {
-                token.suffix = extractOperand(matches, 0, isSuffix) as FilterOperator // $not:1 case
-                token.operator = (extractOperand(matches, 0, isOperator) as FilterOperator) || FilterOperator.EQ
-            }
-        } else if (matches.length === 2) {
-            token.comparator = (extractOperand(matches, 0, isComparator) as FilterComparator) || FilterComparator.AND
-            if (token.value === FilterOperator.NULL) {
-                // $or:$not:$null case
-                token.suffix = extractOperand(matches, 1, isSuffix) as FilterOperator
-                token.operator = FilterOperator.NULL
-            } else {
-                token.suffix = extractOperand(matches, 0, isSuffix) as FilterOperator
-                token.operator = (extractOperand(matches, 1, isOperator) as FilterOperator) || FilterOperator.EQ
-            }
-        } else if (matches.length === 3) {
-            token.comparator = (extractOperand(matches, 0, isComparator) as FilterComparator) || FilterComparator.AND
-            token.suffix = extractOperand(matches, 1, isSuffix) as FilterOperator
-            token.operator = (extractOperand(matches, 2, isOperator) as FilterOperator) || FilterOperator.EQ
+    for (let i = 0; i < maxOperandCount; i++) {
+        const match = matches[i]
+        if (isComparator(match)) {
+            token.comparator = match
+        } else if (isSuffix(match)) {
+            token.suffix = match
+        } else if (isOperator(match)) {
+            token.operator = match
+        } else {
+            continue
         }
-    } else {
-        if (raw === FilterOperator.NULL) {
-            // $null
-            token.operator = FilterOperator.NULL
-        }
-        token.value = raw
+        notValue.push(match)
+    }
+
+    if (notValue.length) {
+        const isLastOperandNull = notValue[notValue.length - 1] === FilterOperator.NULL
+        const filterStr = `${notValue.join(':')}${isLastOperandNull ? '' : ':'}`
+        const tokenValue = raw.replace(filterStr, '')
+        token.value = isLastOperandNull ? undefined : tokenValue
     }
 
     return token
@@ -198,11 +181,17 @@ function parseFilter<T>(query: PaginateQuery, config: PaginateConfig<T>): Column
         const statements = !Array.isArray(input) ? [input] : input
         for (const raw of statements) {
             const token = getFilterTokens(raw)
-
             if (
                 !token ||
-                !allowedOperators.includes(token.operator) ||
-                (token.suffix && !allowedOperators.includes(token.suffix))
+                !(
+                    allowedOperators.includes(token.operator) ||
+                    (token.suffix === FilterSuffix.NOT &&
+                        allowedOperators.includes(token.suffix) &&
+                        token.operator === FilterOperator.EQ) ||
+                    (token.suffix &&
+                        allowedOperators.includes(token.suffix) &&
+                        allowedOperators.includes(token.operator))
+                )
             ) {
                 continue
             }
