@@ -100,7 +100,7 @@ describe('paginate', () => {
             path: '',
         }
 
-        const queryBuilder = await connection
+        const queryBuilder = await dataSource
             .createQueryBuilder()
             .select('cats')
             .from(CatEntity, 'cats')
