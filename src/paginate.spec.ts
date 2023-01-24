@@ -1589,6 +1589,28 @@ describe('paginate', () => {
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=home.countCat:ASC')
     })
 
+    it('should return result sorted and filter by a virtualcolumn in main entity', async () => {
+        const config: PaginateConfig<CatHomeEntity> = {
+            sortableColumns: ['countCat'],
+            relations: ['cat'],
+            filterableColumns: {
+                countCat: [FilterOperator.GT],
+            },
+        }
+        const query: PaginateQuery = {
+            path: '',
+            filter: {
+                countCat: '$gt:0',
+            },
+            sortBy: [['countCat', 'ASC']],
+        }
+
+        const result = await paginate<CatHomeEntity>(query, catHomeRepo, config)
+
+        expect(result.data).toStrictEqual([catHomes[0], catHomes[1]])
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=countCat:ASC&filter.countCat=$gt:0')
+    })
+
     it('should return all items even if deleted', async () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id'],
