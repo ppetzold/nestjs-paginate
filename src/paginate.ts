@@ -149,16 +149,16 @@ export function getFilterTokens(raw?: string): FilterToken | null {
         } else if (isOperator(match)) {
             token.operator = match
         } else {
-            continue
+            break
         }
         notValue.push(match)
     }
 
     if (notValue.length) {
-        const isLastOperandNull = notValue[notValue.length - 1] === FilterOperator.NULL
-        const filterStr = `${notValue.join(OPERAND_SEPARATOR)}${isLastOperandNull ? '' : OPERAND_SEPARATOR}`
-        const tokenValue = raw.replace(filterStr, '')
-        token.value = isLastOperandNull ? undefined : tokenValue
+        token.value =
+            token.operator === FilterOperator.NULL
+                ? undefined
+                : raw.replace(`${notValue.join(OPERAND_SEPARATOR)}${OPERAND_SEPARATOR}`, '')
     }
 
     return token
@@ -167,12 +167,14 @@ export function getFilterTokens(raw?: string): FilterToken | null {
 type Filter = { comparator: FilterComparator; findOperator: FindOperator<string> }
 type ColumnsFilters = { [columnName: string]: Filter[] }
 
-function parseFilter<T>(query: PaginateQuery, config: PaginateConfig<T>): ColumnsFilters {
+function parseFilter<T>(
+    query: PaginateQuery,
+    filterableColumns?: PaginateConfig<T>['filterableColumns']
+): ColumnsFilters {
     const filter: ColumnsFilters = {}
-    let filterableColumns = config.filterableColumns
-    if (filterableColumns === undefined) {
-        logger.debug("No 'filterableColumns' given, ignoring filters.")
-        filterableColumns = {}
+    if (!filterableColumns || !query.filter) {
+        logger.debug("No 'filterableColumns' or 'query.filter' given, ignoring filters.")
+        return {}
     }
     for (const column of Object.keys(query.filter)) {
         if (!(column in filterableColumns)) {
@@ -357,7 +359,7 @@ function generatePredicateCondition(
     ) as WherePredicateOperator
 }
 
-function addWhereCondition(qb: SelectQueryBuilder<unknown>, column: string, filter: ColumnsFilters) {
+function addWhereCondition<T>(qb: SelectQueryBuilder<T>, column: string, filter: ColumnsFilters) {
     const columnProperties = getPropertiesByColumnName(column)
     const { isVirtualProperty, query: virtualQuery } = extractVirtualProperty(qb, columnProperties)
     const isRelation = checkIsRelation(qb, columnProperties.propertyPath)
@@ -374,6 +376,21 @@ function addWhereCondition(qb: SelectQueryBuilder<unknown>, column: string, filt
             qb.andWhere(qb['createWhereConditionExpression'](condition), parameters)
         }
     })
+}
+
+export function addFilter<T>(
+    qb: SelectQueryBuilder<T>,
+    query: PaginateQuery,
+    filterableColumns?: PaginateConfig<T>['filterableColumns']
+): SelectQueryBuilder<T> {
+    const filter = parseFilter(query, filterableColumns)
+    return qb.andWhere(
+        new Brackets((qb: SelectQueryBuilder<T>) => {
+            for (const column in filter) {
+                addWhereCondition(qb, column, filter)
+            }
+        })
+    )
 }
 
 export async function paginate<T extends ObjectLiteral>(
@@ -523,14 +540,7 @@ export async function paginate<T extends ObjectLiteral>(
     }
 
     if (query.filter) {
-        const filter = parseFilter(query, config)
-        queryBuilder.andWhere(
-            new Brackets((qb: SelectQueryBuilder<T>) => {
-                for (const column in filter) {
-                    addWhereCondition(qb, column, filter)
-                }
-            })
-        )
+        addFilter(queryBuilder, query, config.filterableColumns)
     }
 
     if (isPaginated) {

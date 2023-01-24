@@ -9,8 +9,8 @@ import {
     OperatorSymbolToFunction,
     NO_PAGINATION,
     FilterSuffix,
-    isComparator,
     isSuffix,
+    FilterComparator,
 } from './paginate'
 import { PaginateQuery } from './decorator'
 import { HttpException, Logger } from '@nestjs/common'
@@ -1527,35 +1527,56 @@ describe('paginate', () => {
         expect(func.name).toStrictEqual(name)
     })
 
-    it.each([
-        {
-            string: '$ilike:value',
-            tokens: { comparator: '$and', operator: '$ilike', suffix: undefined, value: 'value' },
-        },
-        { string: '$eq:value', tokens: { comparator: '$and', operator: '$eq', suffix: undefined, value: 'value' } },
-        { string: '$eq:val:ue', tokens: { comparator: '$and', operator: '$eq', suffix: undefined, value: 'val:ue' } },
-        {
-            string: '$in:value1,value2,value3',
-            tokens: { comparator: '$and', operator: '$in', suffix: undefined, value: 'value1,value2,value3' },
-        },
-        {
-            string: '$not:$in:value1:a,value2:b,value3:c',
-            tokens: { comparator: '$and', operator: '$in', suffix: '$not', value: 'value1:a,value2:b,value3:c' },
-        },
-        { string: 'value', tokens: { comparator: '$and', operator: '$eq', suffix: undefined, value: 'value' } },
-        { string: 'val:ue', tokens: { comparator: '$and', operator: '$eq', suffix: undefined, value: 'val:ue' } },
-        { string: '$not:value', tokens: { comparator: '$and', operator: '$eq', suffix: '$not', value: 'value' } },
-        { string: '$eq:$not:value', tokens: { comparator: '$and', operator: '$eq', suffix: '$not', value: 'value' } },
-        { string: '$eq:$null', tokens: { comparator: '$and', operator: '$null', suffix: undefined, value: undefined } },
-        { string: '$null', tokens: { comparator: '$and', operator: '$null', suffix: undefined, value: undefined } },
-        { string: '', tokens: { comparator: '$and', operator: '$eq', suffix: undefined, value: '' } },
-        {
-            string: '$eq:$not:$in:value',
-            tokens: { comparator: '$and', operator: '$in', suffix: '$not', value: 'value' },
-        },
-    ])('should get filter tokens for "$string"', ({ string, tokens }) => {
-        expect(getFilterTokens(string)).toStrictEqual(tokens)
-    })
+    for (const cc of [FilterComparator.AND, FilterComparator.OR, '']) {
+        const comparator = cc === '' ? FilterComparator.AND : cc
+        const cSrt = cc === '' ? cc : `${comparator}:`
+        it.each([
+            {
+                string: cSrt + '$ilike:value',
+                tokens: { comparator, operator: '$ilike', suffix: undefined, value: 'value' },
+            },
+            { string: cSrt + '$eq:value', tokens: { comparator, operator: '$eq', suffix: undefined, value: 'value' } },
+            {
+                string: cSrt + '$eq:val:ue',
+                tokens: { comparator, operator: '$eq', suffix: undefined, value: 'val:ue' },
+            },
+            {
+                string: cSrt + '$in:value1,value2,value3',
+                tokens: { comparator, operator: '$in', suffix: undefined, value: 'value1,value2,value3' },
+            },
+            {
+                string: cSrt + '$not:$in:value1:a,value2:b,value3:c',
+                tokens: { comparator, operator: '$in', suffix: '$not', value: 'value1:a,value2:b,value3:c' },
+            },
+            { string: cSrt + 'value', tokens: { comparator, operator: '$eq', suffix: undefined, value: 'value' } },
+            { string: cSrt + 'val:ue', tokens: { comparator, operator: '$eq', suffix: undefined, value: 'val:ue' } },
+            { string: cSrt + '$not:value', tokens: { comparator, operator: '$eq', suffix: '$not', value: 'value' } },
+            {
+                string: cSrt + '$eq:$not:value',
+                tokens: { comparator, operator: '$eq', suffix: '$not', value: 'value' },
+            },
+            {
+                string: cSrt + '$eq:$null',
+                tokens: { comparator, operator: '$null', suffix: undefined, value: undefined },
+            },
+            { string: cSrt + '$null', tokens: { comparator, operator: '$null', suffix: undefined, value: undefined } },
+            { string: cSrt + '', tokens: { comparator, operator: '$eq', suffix: undefined, value: '' } },
+            {
+                string: cSrt + '$eq:$not:$in:value',
+                tokens: { comparator, operator: '$in', suffix: '$not', value: 'value' },
+            },
+            {
+                string: cSrt + '$eq:$not:value:$in',
+                tokens: { comparator, operator: '$eq', suffix: '$not', value: 'value:$in' },
+            },
+            {
+                string: cSrt + '$eq:$not:$null:value:$in',
+                tokens: { comparator, operator: '$null', suffix: '$not', value: undefined },
+            },
+        ])('should get filter tokens for "$string"', ({ string, tokens }) => {
+            expect(getFilterTokens(string)).toStrictEqual(tokens)
+        })
+    }
 
     it('should return result based on virtualcolumn filter', async () => {
         const config: PaginateConfig<CatEntity> = {
@@ -1609,6 +1630,46 @@ describe('paginate', () => {
 
         expect(result.data).toStrictEqual(expectedResult)
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=home.countCat:ASC')
+    })
+
+    it('should return result based on or between range filter', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            filterableColumns: {
+                age: [FilterOperator.BTW],
+            },
+        }
+        const query: PaginateQuery = {
+            path: '',
+            filter: {
+                age: ['$btw:4,5', '$or:$btw:5,6'],
+            },
+        }
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        expect(result.data).toStrictEqual([cats[0], cats[1], cats[2]])
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.age=$btw:4,5&filter.age=$or:$btw:5,6')
+    })
+
+    it('should return result based on or with all cats', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            filterableColumns: {
+                age: [FilterOperator.BTW],
+            },
+        }
+        const query: PaginateQuery = {
+            path: '',
+            filter: {
+                age: ['$null', '$or:$not:$eq:$null'],
+            },
+        }
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        expect(result.data).toStrictEqual([...cats])
+        expect(result.links.current).toBe(
+            '?page=1&limit=20&sortBy=id:ASC&filter.age=$null&filter.age=$or:$not:$eq:$null'
+        )
     })
 
     it('should return all items even if deleted', async () => {
