@@ -13,7 +13,7 @@ import {
     FilterComparator,
 } from './paginate'
 import { PaginateQuery } from './decorator'
-import { HttpException, Logger } from '@nestjs/common'
+import { HttpException } from '@nestjs/common'
 import { CatEntity } from './__tests__/cat.entity'
 import { CatToyEntity } from './__tests__/cat-toy.entity'
 import { CatHomeEntity } from './__tests__/cat-home.entity'
