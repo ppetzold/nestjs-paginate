@@ -1,4 +1,4 @@
-import { createConnection, Repository, In, Connection } from 'typeorm'
+import { Repository, In, DataSource } from 'typeorm'
 import {
     Paginated,
     paginate,
@@ -20,7 +20,7 @@ import { CatHomeEntity } from './__tests__/cat-home.entity'
 import { clone } from 'lodash'
 
 describe('paginate', () => {
-    let connection: Connection
+    let dataSource: DataSource
     let catRepo: Repository<CatEntity>
     let catToyRepo: Repository<CatToyEntity>
     let catHomeRepo: Repository<CatHomeEntity>
@@ -29,16 +29,18 @@ describe('paginate', () => {
     let catHomes: CatHomeEntity[]
 
     beforeAll(async () => {
-        connection = await createConnection({
+        dataSource = new DataSource({
             type: 'sqlite',
             database: ':memory:',
             synchronize: true,
             logging: true,
             entities: [CatEntity, CatToyEntity, CatHomeEntity],
         })
-        catRepo = connection.getRepository(CatEntity)
-        catToyRepo = connection.getRepository(CatToyEntity)
-        catHomeRepo = connection.getRepository(CatHomeEntity)
+        await dataSource.initialize()
+        catRepo = dataSource.getRepository(CatEntity)
+        catToyRepo = dataSource.getRepository(CatToyEntity)
+        catHomeRepo = dataSource.getRepository(CatHomeEntity)
+
         cats = await catRepo.save([
             catRepo.create({ name: 'Milo', color: 'brown', age: 6, size: { height: 25, width: 10, length: 40 } }),
             catRepo.create({ name: 'Garfield', color: 'ginger', age: 5, size: { height: 30, width: 15, length: 45 } }),
@@ -101,7 +103,7 @@ describe('paginate', () => {
             path: '',
         }
 
-        const queryBuilder = await connection
+        const queryBuilder = await dataSource
             .createQueryBuilder()
             .select('cats')
             .from(CatEntity, 'cats')
