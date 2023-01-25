@@ -316,9 +316,15 @@ export async function paginate<T extends ObjectLiteral>(
                         })
                     } else {
                         const aliasColumn = hasRelation ? `${qb.alias}_${column}` : `${qb.alias}.${column}`
-                        qb.orWhere(`UPPER(${aliasColumn}) LIKE UPPER( CONCAT('%', :querySearch, '%'))`, {
-                            querySearch: query?.search ?? '',
-                        })
+                        if (['sqlite'].includes(queryBuilder.connection.options.type)) {
+                            qb.orWhere(`UPPER(${aliasColumn}) LIKE UPPER( '%' ||  :querySearch || '%')`, {
+                                querySearch: query?.search ?? '',
+                            })
+                        } else {
+                            qb.orWhere(`UPPER(${aliasColumn}) LIKE UPPER( CONCAT('%', :querySearch, '%'))`, {
+                                querySearch: query?.search ?? '',
+                            })
+                        }
                     }
                 }
             })
@@ -384,12 +390,12 @@ export async function paginate<T extends ObjectLiteral>(
 
     const filterQuery = query.filter
         ? '&' +
-          stringify(
-              mapKeys(query.filter, (_param, name) => 'filter.' + name),
-              '&',
-              '=',
-              { encodeURIComponent: (str) => str }
-          )
+        stringify(
+            mapKeys(query.filter, (_param, name) => 'filter.' + name),
+            '&',
+            '=',
+            { encodeURIComponent: (str) => str }
+        )
         : ''
 
     const options = `&limit=${limit}${sortByQuery}${searchQuery}${searchByQuery}${filterQuery}`
