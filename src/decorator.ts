@@ -13,6 +13,8 @@ export interface PaginateQuery {
     path: string
 }
 
+const singleSplit = (param: string, res: any[]) => res.push(param)
+
 const multipleSplit = (param: string, res: any[]) => {
     const items = param.split(':')
     if (items.length === 2) {
@@ -21,7 +23,11 @@ const multipleSplit = (param: string, res: any[]) => {
     return 0
 }
 
-const splitSingle = (param: string, res: any[]) => res.push(param)
+const multipleAndCommaSplit = (param: string, res: any[]) => {
+    const set = new Set<string>(param.split(','))
+    set.forEach((item) => res.push(item))
+    return set.size
+}
 
 function parseParam<T>(queryParam: unknown, parserLogic: (param: string, res: any[]) => number): T[] | undefined {
     const res = []
@@ -50,9 +56,9 @@ export const Paginate = createParamDecorator((_data: unknown, ctx: ExecutionCont
     const urlParts = new URL(originalUrl)
     const path = urlParts.protocol + '//' + urlParts.host + urlParts.pathname
 
-    const searchBy = parseParam<string>(query.searchBy, splitSingle)
-    const select = parseParam<string>(query.select, splitSingle)
+    const searchBy = parseParam<string>(query.searchBy, singleSplit)
     const sortBy = parseParam<[string, string]>(query.sortBy, multipleSplit)
+    const select = parseParam<string>(query.select, multipleAndCommaSplit)
 
     const filter = mapKeys(
         pickBy(
