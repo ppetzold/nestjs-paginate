@@ -61,6 +61,7 @@ describe('Decorator', () => {
             search: undefined,
             searchBy: undefined,
             filter: undefined,
+            select: undefined,
             path: 'http://localhost/items',
         })
     })
@@ -77,6 +78,7 @@ describe('Decorator', () => {
             search: undefined,
             searchBy: undefined,
             filter: undefined,
+            select: undefined,
             path: 'http://localhost/items',
         })
     })
@@ -89,6 +91,7 @@ describe('Decorator', () => {
             search: 'white',
             'filter.name': '$not:$eq:Kitty',
             'filter.createdAt': ['$gte:2020-01-01', '$lte:2020-12-31'],
+            select: ['name', 'createdAt'],
         })
 
         const result: PaginateQuery = decoratorfactory(null, context)
@@ -102,6 +105,7 @@ describe('Decorator', () => {
             ],
             search: 'white',
             searchBy: undefined,
+            select: ['name', 'createdAt'],
             path: 'http://localhost/items',
             filter: {
                 name: '$not:$eq:Kitty',
@@ -118,6 +122,7 @@ describe('Decorator', () => {
             search: 'white',
             'filter.name': '$not:$eq:Kitty',
             'filter.createdAt': ['$gte:2020-01-01', '$lte:2020-12-31'],
+            select: ['name', 'createdAt'],
         })
 
         const result: PaginateQuery = decoratorfactory(null, context)
@@ -136,6 +141,7 @@ describe('Decorator', () => {
                 name: '$not:$eq:Kitty',
                 createdAt: ['$gte:2020-01-01', '$lte:2020-12-31'],
             },
+            select: ['name', 'createdAt'],
         })
     })
 })
