@@ -311,10 +311,10 @@ export async function paginate<T extends ObjectLiteral>(
                         }
                         const aliasColumn = alias + columns.substring(0, columns.length - 1)
 
-                        qb.orWhere(`${aliasColumn}::text ILIKE '%${query.search}%'`)
+                        qb.orWhere(`${aliasColumn}::text ILIKE(:search)`, { search: `%${query.search}%` })
                     } else {
                         const aliasColumn = hasRelation ? `${qb.alias}_${column}` : `${qb.alias}.${column}`
-                        qb.orWhere(`UPPER(${aliasColumn}) LIKE UPPER('%${query.search}%')`)
+                        qb.orWhere(`UPPER(${aliasColumn}) LIKE UPPER(:search)`, { search: `%${query.search}%` })
                     }
                 }
             })
