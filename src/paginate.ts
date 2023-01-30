@@ -324,6 +324,10 @@ export async function paginate<T extends ObjectLiteral>(
                         parameters: [alias, `:${column}`],
                     }
 
+                    if (['postgres', 'cockroachdb'].includes(queryBuilder.connection.options.type)) {
+                        condition.parameters[0] += '::text'
+                    }
+
                     qb.orWhere(qb['createWhereConditionExpression'](condition), {
                         [column]: `%${query.search}%`,
                     })
