@@ -21,8 +21,18 @@ import { ServiceUnavailableException, Logger } from '@nestjs/common'
 import { values, mapKeys } from 'lodash'
 import { stringify } from 'querystring'
 import { WherePredicateOperator } from 'typeorm/query-builder/WhereClause'
-import { Column, Order, positiveNumberOrDefault, RelationColumn, SortBy } from './helper'
-import { ColumnMetadata } from 'typeorm/metadata/ColumnMetadata'
+import {
+    checkIsRelation,
+    Column,
+    extractVirtualProperty,
+    fixColumnAlias,
+    getPropertiesByColumnName,
+    Order,
+    positiveNumberOrDefault,
+    RelationColumn,
+    SortBy,
+} from './helper'
+import { addWhereCondition, Filter } from './filter'
 
 const logger: Logger = new Logger('nestjs-paginate')
 
@@ -121,8 +131,6 @@ export function getFilterTokens(raw: string): string[] {
     return tokens
 }
 
-type Filter = { [columnName: string]: FindOperator<string> }
-
 function parseFilter<T>(query: PaginateQuery, config: PaginateConfig<T>): Filter {
     const filter: Filter = {}
     let filterableColumns = config.filterableColumns
@@ -177,144 +185,6 @@ function parseFilter<T>(query: PaginateQuery, config: PaginateConfig<T>): Filter
 export const DEFAULT_MAX_LIMIT = 100
 export const DEFAULT_LIMIT = 20
 export const NO_PAGINATION = 0
-
-type ColumnProperties = { propertyPath?: string; propertyName: string }
-
-function getPropertiesByColumnName(column: string): ColumnProperties {
-    const propertyPath = column.split('.')
-    return propertyPath.length > 1
-        ? {
-              propertyPath: propertyPath[0],
-              propertyName: propertyPath.slice(1).join('.'), // the join is in case of an embedded entity
-          }
-        : { propertyName: propertyPath[0] }
-}
-
-function extractVirtualProperty(
-    qb: SelectQueryBuilder<unknown>,
-    columnProperties: ColumnProperties
-): { isVirtualProperty: boolean; query?: ColumnMetadata['query'] } {
-    const metadata = columnProperties.propertyPath
-        ? qb?.expressionMap?.mainAlias?.metadata?.findColumnWithPropertyPath(columnProperties.propertyPath)
-              ?.referencedColumn?.entityMetadata // on relation
-        : qb?.expressionMap?.mainAlias?.metadata
-    return (
-        metadata?.columns?.find((column) => column.propertyName === columnProperties.propertyName) || {
-            isVirtualProperty: false,
-            query: undefined,
-        }
-    )
-}
-
-function checkIsRelation(qb: SelectQueryBuilder<unknown>, propertyPath: string): boolean {
-    if (!qb || !propertyPath) {
-        return false
-    }
-    return !!qb?.expressionMap?.mainAlias?.metadata?.hasRelationWithPropertyPath(propertyPath)
-}
-
-// This function is used to fix the query parameters when using relation, embeded or virtual properties
-// It will replace the column name with the alias name and return the new parameters
-function fixQueryParam(
-    alias: string,
-    column: string,
-    filter: Filter,
-    condition: WherePredicateOperator,
-    parameters: { [key: string]: string }
-): { [key: string]: string } {
-    const isNotOperator = (condition.operator as string) === 'not'
-
-    const conditionFixer = (
-        alias: string,
-        column: string,
-        filter: Filter,
-        operator: WherePredicateOperator['operator'],
-        parameters: { [key: string]: string }
-    ): { condition_params: any; params: any } => {
-        let condition_params: any = undefined
-        let params = parameters
-        switch (operator) {
-            case 'between':
-                condition_params = [alias, `:${column}_from`, `:${column}_to`]
-                params = {
-                    [column + '_from']: filter[column].value[0],
-                    [column + '_to']: filter[column].value[1],
-                }
-                break
-            case 'in':
-                condition_params = [alias, `:...${column}`]
-                break
-            default:
-                condition_params = [alias, `:${column}`]
-                break
-        }
-        return { condition_params, params }
-    }
-
-    const { condition_params, params } = conditionFixer(
-        alias,
-        column,
-        filter,
-        isNotOperator ? condition['condition']['operator'] : condition.operator,
-        parameters
-    )
-
-    if (isNotOperator) {
-        condition['condition']['parameters'] = condition_params
-    } else {
-        condition.parameters = condition_params
-    }
-
-    return params
-}
-
-// This function is used to fix the column alias when using relation, embedded or virtual properties
-function fixColumnAlias(
-    properties: ColumnProperties,
-    alias: string,
-    isRelation = false,
-    isVirtualProperty = false,
-    query?: ColumnMetadata['query']
-): string {
-    if (isRelation) {
-        if (isVirtualProperty && query) {
-            return `(${query(`${alias}_${properties.propertyPath}`)})` // () is needed to avoid parameter conflict
-        } else if (isVirtualProperty && !query) {
-            return `${alias}_${properties.propertyPath}_${properties.propertyName}`
-        } else {
-            return `${alias}_${properties.propertyPath}.${properties.propertyName}` // include embeded property and relation property
-        }
-    } else if (isVirtualProperty) {
-        return query ? `(${query(`${alias}`)})` : `${alias}_${properties.propertyName}`
-    } else {
-        return `${alias}.${properties.propertyName}` //
-    }
-}
-
-function generatePredicateCondition(
-    qb: SelectQueryBuilder<unknown>,
-    column: string,
-    filter: Filter,
-    alias: string,
-    isVirtualProperty = false
-): WherePredicateOperator {
-    return qb['getWherePredicateCondition'](
-        isVirtualProperty ? column : alias,
-        filter[column]
-    ) as WherePredicateOperator
-}
-
-function addWhereCondition(qb: SelectQueryBuilder<unknown>, column: string, filter: Filter) {
-    const columnProperties = getPropertiesByColumnName(column)
-    const { isVirtualProperty, query: virtualQuery } = extractVirtualProperty(qb, columnProperties)
-    const isRelation = checkIsRelation(qb, columnProperties.propertyPath)
-    const alias = fixColumnAlias(columnProperties, qb.alias, isRelation, isVirtualProperty, virtualQuery)
-    const condition = generatePredicateCondition(qb, column, filter, alias, isVirtualProperty)
-    const parameters = fixQueryParam(alias, column, filter, condition, {
-        [column]: filter[column].value,
-    })
-    qb.andWhere(qb['createWhereConditionExpression'](condition), parameters)
-}
 
 export async function paginate<T extends ObjectLiteral>(
     query: PaginateQuery,
