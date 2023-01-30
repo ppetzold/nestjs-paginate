@@ -1,23 +1,20 @@
 import { Repository, In, DataSource } from 'typeorm'
-import {
-    Paginated,
-    paginate,
-    PaginateConfig,
-    FilterOperator,
-    isOperator,
-    getFilterTokens,
-    OperatorSymbolToFunction,
-    NO_PAGINATION,
-    FilterSuffix,
-    isSuffix,
-    FilterComparator,
-} from './paginate'
+import { Paginated, paginate, PaginateConfig, NO_PAGINATION } from './paginate'
 import { PaginateQuery } from './decorator'
 import { HttpException } from '@nestjs/common'
 import { CatEntity } from './__tests__/cat.entity'
 import { CatToyEntity } from './__tests__/cat-toy.entity'
 import { CatHomeEntity } from './__tests__/cat-home.entity'
 import { clone } from 'lodash'
+import {
+    FilterComparator,
+    FilterOperator,
+    FilterSuffix,
+    isOperator,
+    isSuffix,
+    OperatorSymbolToFunction,
+} from './operator'
+import { getFilterTokens } from './filter'
 
 describe('paginate', () => {
     let dataSource: DataSource
