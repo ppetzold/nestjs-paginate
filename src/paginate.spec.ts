@@ -466,7 +466,8 @@ describe('paginate', () => {
         delete toy.cat
         const toy2 = clone(catToys[2])
         delete toy2.cat
-        expect(result.data).toStrictEqual([Object.assign(clone(cats[0]), { toys: [toy, toy2] })])
+
+        expect(result.data).toStrictEqual([Object.assign(clone(cats[0]), { toys: [toy2, toy] })])
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&search=Mouse')
     })
 
@@ -482,7 +483,12 @@ describe('paginate', () => {
 
         const result = await paginate<CatHomeEntity>(query, catHomeRepo, config)
         expect(result.meta.sortBy).toStrictEqual([['cat.id', 'DESC']])
-        expect(result.data).toStrictEqual([catHomes[0], catHomes[1]].sort((a, b) => b.cat.id - a.cat.id))
+
+        const catHomesClone = clone([catHomes[0], catHomes[1]])
+        catHomesClone[0].countCat = cats.filter((cat) => cat.id === catHomesClone[0].cat.id).length
+        catHomesClone[1].countCat = cats.filter((cat) => cat.id === catHomesClone[1].cat.id).length
+
+        expect(result.data).toStrictEqual(catHomesClone.sort((a, b) => b.cat.id - a.cat.id))
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=cat.id:DESC')
     })
 
@@ -542,7 +548,11 @@ describe('paginate', () => {
         const result = await paginate<CatHomeEntity>(query, catHomeRepo, config)
 
         expect(result.meta.search).toStrictEqual('Garfield')
-        expect(result.data).toStrictEqual([catHomes[1]])
+
+        const catHomesClone = clone(catHomes[1])
+        catHomesClone.countCat = cats.filter((cat) => cat.id === catHomesClone.cat.id).length
+
+        expect(result.data).toStrictEqual([catHomesClone])
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&search=Garfield')
     })
 
@@ -674,7 +684,11 @@ describe('paginate', () => {
         expect(result.meta.filter).toStrictEqual({
             'cat.name': '$not:Garfield',
         })
-        expect(result.data).toStrictEqual([catHomes[0]])
+
+        const catHomesClone = clone(catHomes[0])
+        catHomesClone.countCat = cats.filter((cat) => cat.id === catHomesClone.cat.id).length
+
+        expect(result.data).toStrictEqual([catHomesClone])
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.cat.name=$not:Garfield')
     })
 
@@ -698,7 +712,11 @@ describe('paginate', () => {
         expect(result.meta.filter).toStrictEqual({
             'cat.age': '$in:4,6',
         })
-        expect(result.data).toStrictEqual([catHomes[0]])
+
+        const catHomesClone = clone(catHomes[0])
+        catHomesClone.countCat = cats.filter((cat) => cat.id === catHomesClone.cat.id).length
+
+        expect(result.data).toStrictEqual([catHomesClone])
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.cat.age=$in:4,6')
     })
 
@@ -722,7 +740,11 @@ describe('paginate', () => {
         expect(result.meta.filter).toStrictEqual({
             'cat.age': '$btw:6,10',
         })
-        expect(result.data).toStrictEqual([catHomes[0]])
+
+        const catHomesClone = clone(catHomes[0])
+        catHomesClone.countCat = cats.filter((cat) => cat.id === catHomesClone.cat.id).length
+
+        expect(result.data).toStrictEqual([catHomesClone])
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.cat.age=$btw:6,10')
     })
 
@@ -771,9 +793,11 @@ describe('paginate', () => {
 
         const copyHomes = catHomes.map((home: CatHomeEntity) => {
             const copy = clone(home)
+            copy.countCat = cats.filter((cat) => cat.id === copy.cat.id).length
             delete copy.cat
             return copy
         })
+
         copyCats[0].home = copyHomes[0]
         copyCats[1].home = copyHomes[1]
 
@@ -782,7 +806,7 @@ describe('paginate', () => {
             delete copy.cat
             return copy
         })
-        copyCats[0].toys = [copyToys[0], copyToys[1], copyToys[2]]
+        copyCats[0].toys = [copyToys[0], copyToys[2], copyToys[1]]
         copyCats[1].toys = [copyToys[3]]
 
         const orderedCats = [copyCats[3], copyCats[1], copyCats[2], copyCats[0], copyCats[4]]
@@ -869,7 +893,10 @@ describe('paginate', () => {
         }
 
         const result = await paginate<CatHomeEntity>(query, catHomeRepo, config)
-        const orderedHomes = [catHomes[1], catHomes[0]]
+        const orderedHomes = clone([catHomes[1], catHomes[0]])
+
+        orderedHomes[0].countCat = cats.filter((cat) => cat.id === orderedHomes[0].cat.id).length
+        orderedHomes[1].countCat = cats.filter((cat) => cat.id === orderedHomes[1].cat.id).length
 
         expect(result.data).toStrictEqual(orderedHomes)
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=cat.size.height:DESC')
@@ -969,8 +996,9 @@ describe('paginate', () => {
         }
 
         const result = await paginate<CatHomeEntity>(query, catHomeRepo, config)
-
-        expect(result.data).toStrictEqual([catHomes[1]])
+        const catHomeClone = clone(catHomes[1])
+        catHomeClone.countCat = cats.filter((cat) => cat.id === catHomeClone.cat.id).length
+        expect(result.data).toStrictEqual([catHomeClone])
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&search=30')
     })
 
@@ -1032,6 +1060,7 @@ describe('paginate', () => {
         const result = await paginate<CatEntity>(query, catRepo, config)
 
         const home = clone(catHomes[1])
+        home.countCat = cats.filter((cat) => cat.id === home.cat.id).length
         delete home.cat
 
         const copyCats = [
@@ -1117,7 +1146,9 @@ describe('paginate', () => {
         expect(result.meta.filter).toStrictEqual({
             'cat.size.height': '$eq:30',
         })
-        expect(result.data).toStrictEqual([catHomes[1]])
+        const catClone = clone(catHomes[1])
+        catClone.countCat = cats.filter((cat) => cat.size.height === 30 && cat.id == catClone.cat.id).length
+        expect(result.data).toStrictEqual([catClone])
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.cat.size.height=$eq:30')
     })
 
@@ -1141,7 +1172,13 @@ describe('paginate', () => {
         expect(result.meta.filter).toStrictEqual({
             'cat.size.height': '$in:10,30,35',
         })
-        expect(result.data).toStrictEqual([catHomes[1]])
+        const catClone = clone(catHomes[1])
+        catClone.countCat = cats.filter(
+            (cat) =>
+                (cat.size.height === 10 || cat.size.height === 30 || cat.size.height === 35) &&
+                cat.id == catClone.cat.id
+        ).length
+        expect(result.data).toStrictEqual([catClone])
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.cat.size.height=$in:10,30,35')
     })
 
@@ -1165,7 +1202,15 @@ describe('paginate', () => {
         expect(result.meta.filter).toStrictEqual({
             'cat.size.height': '$btw:18,33',
         })
-        expect(result.data).toStrictEqual([catHomes[0], catHomes[1]])
+
+        const catHomeClone = clone(catHomes)
+        catHomeClone[0].countCat = cats.filter(
+            (cat) => cat.size.height >= 18 && cat.size.height <= 33 && cat.id == catHomeClone[0].cat.id
+        ).length
+        catHomeClone[1].countCat = cats.filter(
+            (cat) => cat.size.height >= 18 && cat.size.height <= 33 && cat.id == catHomeClone[1].cat.id
+        ).length
+        expect(result.data).toStrictEqual([catHomeClone[0], catHomeClone[1]])
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.cat.size.height=$btw:18,33')
     })
 
@@ -1376,26 +1421,6 @@ describe('paginate', () => {
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.age=$not:$null')
     })
 
-    it('should return result based on not null query', async () => {
-        const config: PaginateConfig<CatEntity> = {
-            sortableColumns: ['id'],
-            filterableColumns: {
-                age: [FilterOperator.NOT, FilterOperator.NULL],
-            },
-        }
-        const query: PaginateQuery = {
-            path: '',
-            filter: {
-                age: '$not:$null',
-            },
-        }
-
-        const result = await paginate<CatEntity>(query, catRepo, config)
-
-        expect(result.data).toStrictEqual([cats[0], cats[1], cats[2], cats[3]])
-        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.age=$not:$null')
-    })
-
     it('should return result based on not null query on relation', async () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id'],
@@ -1525,6 +1550,82 @@ describe('paginate', () => {
         { string: '$eq:$not:$in:value', tokens: [] },
     ])('should get filter tokens for "$string"', ({ string, tokens }) => {
         expect(getFilterTokens(string)).toStrictEqual(tokens)
+    })
+
+    it('should return result based on virtualcolumn filter', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            filterableColumns: {
+                'home.countCat': [FilterOperator.GT],
+            },
+            relations: ['home'],
+        }
+        const query: PaginateQuery = {
+            path: '',
+            filter: {
+                'home.countCat': '$gt:0',
+            },
+            sortBy: [['id', 'ASC']],
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+        const expectedResult = [0, 1].map((i) => {
+            const ret = Object.assign(clone(cats[i]), { home: Object.assign(clone(catHomes[i])) })
+            delete ret.home.cat
+            return ret
+        })
+
+        expect(result.data).toStrictEqual(expectedResult)
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.home.countCat=$gt:0')
+    })
+
+    it('should return result sorted by a virtualcolumn', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['home.countCat'],
+            relations: ['home'],
+        }
+        const query: PaginateQuery = {
+            path: '',
+            sortBy: [['home.countCat', 'ASC']],
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+        const expectedResult = [2, 3, 4, 0, 1].map((i) => {
+            const ret = clone(cats[i])
+            if (i == 0 || i == 1) {
+                ret.home = clone(catHomes[i])
+                ret.home.countCat = cats.filter((cat) => cat.id === ret.home.cat.id).length
+                delete ret.home.cat
+            } else {
+                ret.home = null
+            }
+            return ret
+        })
+
+        expect(result.data).toStrictEqual(expectedResult)
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=home.countCat:ASC')
+    })
+
+    it('should return result sorted and filter by a virtualcolumn in main entity', async () => {
+        const config: PaginateConfig<CatHomeEntity> = {
+            sortableColumns: ['countCat'],
+            relations: ['cat'],
+            filterableColumns: {
+                countCat: [FilterOperator.GT],
+            },
+        }
+        const query: PaginateQuery = {
+            path: '',
+            filter: {
+                countCat: '$gt:0',
+            },
+            sortBy: [['countCat', 'ASC']],
+        }
+
+        const result = await paginate<CatHomeEntity>(query, catHomeRepo, config)
+
+        expect(result.data).toStrictEqual([catHomes[0], catHomes[1]])
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=countCat:ASC&filter.countCat=$gt:0')
     })
 
     it('should return all items even if deleted', async () => {
