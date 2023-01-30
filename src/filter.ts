@@ -25,7 +25,7 @@ export interface FilterToken {
 
 // This function is used to fix the query parameters when using relation, embeded or virtual properties
 // It will replace the column name with the alias name and return the new parameters
-function fixQueryParam(
+export function fixQueryParam(
     alias: string,
     column: string,
     filter: Filter,
@@ -78,7 +78,7 @@ function fixQueryParam(
     return params
 }
 
-function generatePredicateCondition(
+export function generatePredicateCondition(
     qb: SelectQueryBuilder<unknown>,
     column: string,
     filter: Filter,
@@ -91,7 +91,7 @@ function generatePredicateCondition(
     ) as WherePredicateOperator
 }
 
-function addWhereCondition<T>(qb: SelectQueryBuilder<T>, column: string, filter: ColumnsFilters) {
+export function addWhereCondition<T>(qb: SelectQueryBuilder<T>, column: string, filter: ColumnsFilters) {
     const columnProperties = getPropertiesByColumnName(column)
     const { isVirtualProperty, query: virtualQuery } = extractVirtualProperty(qb, columnProperties)
     const isRelation = checkIsRelation(qb, columnProperties.propertyPath)
@@ -153,7 +153,7 @@ export function getFilterTokens(raw?: string): FilterToken | null {
     return token
 }
 
-function parseFilter<T>(
+export function parseFilter<T>(
     query: PaginateQuery,
     filterableColumns?: PaginateConfig<T>['filterableColumns']
 ): ColumnsFilters {
