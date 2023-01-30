@@ -415,6 +415,21 @@ describe('paginate', () => {
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&search=i')
     })
 
+    it('should not result in a sql syntax error when attempting a sql injection', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id', 'name', 'color'],
+            searchableColumns: ['name', 'color'],
+        }
+        const query: PaginateQuery = {
+            path: '',
+            search: "i UNION SELECT tbl_name FROM sqlite_master WHERE type='table' and tbl_name NOT like 'sqlite_%'",
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        expect(result.data).toStrictEqual([])
+    })
+
     it('should return result based on search term on many-to-one relation', async () => {
         const config: PaginateConfig<CatToyEntity> = {
             relations: ['cat'],
