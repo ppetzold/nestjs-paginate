@@ -15,6 +15,7 @@ Pagination and filtering helper method for TypeORM repositories or query builder
 - Search across columns
 - Filter using operators (`$eq`, `$not`, `$null`, `$in`, `$gt`, `$gte`, `$lt`, `$lte`, `$btw`, `$ilike`)
 - Include relations
+- Virtual column support
 
 ## Installation
 
