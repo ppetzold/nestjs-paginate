@@ -1236,17 +1236,40 @@ describe('paginate', () => {
         const query: PaginateQuery = {
             path: '',
             filter: {
-                name: '$ilike:Garf',
+                name: '$ilike:arf',
             },
         }
 
         const result = await paginate<CatEntity>(query, catRepo, config)
 
         expect(result.meta.filter).toStrictEqual({
-            name: '$ilike:Garf',
+            name: '$ilike:arf',
         })
         expect(result.data).toStrictEqual([cats[1]])
-        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.name=$ilike:Garf')
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.name=$ilike:arf')
+    })
+
+    it('should return result based on $sw filter', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            filterableColumns: {
+                name: [FilterOperator.SW],
+            },
+        }
+        const query: PaginateQuery = {
+            path: '',
+            filter: {
+                name: '$sw:Ga',
+            },
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        expect(result.meta.filter).toStrictEqual({
+            name: '$sw:Ga',
+        })
+        expect(result.data).toStrictEqual([cats[1]])
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.name=$sw:Ga')
     })
 
     it('should return result based on filter and search term', async () => {
