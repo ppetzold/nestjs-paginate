@@ -418,6 +418,21 @@ describe('paginate', () => {
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&search=i')
     })
 
+    it('should not result in a sql syntax error when attempting a sql injection', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id', 'name', 'color'],
+            searchableColumns: ['name', 'color'],
+        }
+        const query: PaginateQuery = {
+            path: '',
+            search: "i UNION SELECT tbl_name FROM sqlite_master WHERE type='table' and tbl_name NOT like 'sqlite_%'",
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        expect(result.data).toStrictEqual([])
+    })
+
     it('should return result based on search term on many-to-one relation', async () => {
         const config: PaginateConfig<CatToyEntity> = {
             relations: ['cat'],
@@ -1672,6 +1687,28 @@ describe('paginate', () => {
         expect(result.links.current).toBe(
             '?page=1&limit=20&sortBy=id:ASC&filter.age=$null&filter.age=$or:$not:$eq:$null'
         )
+    })
+
+    it('should return result sorted and filter by a virtualcolumn in main entity', async () => {
+        const config: PaginateConfig<CatHomeEntity> = {
+            sortableColumns: ['countCat'],
+            relations: ['cat'],
+            filterableColumns: {
+                countCat: [FilterOperator.GT],
+            },
+        }
+        const query: PaginateQuery = {
+            path: '',
+            filter: {
+                countCat: '$gt:0',
+            },
+            sortBy: [['countCat', 'ASC']],
+        }
+
+        const result = await paginate<CatHomeEntity>(query, catHomeRepo, config)
+
+        expect(result.data).toStrictEqual([catHomes[0], catHomes[1]])
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=countCat:ASC&filter.countCat=$gt:0')
     })
 
     it('should return all items even if deleted', async () => {
