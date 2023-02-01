@@ -23,6 +23,7 @@ export enum FilterOperator {
     LTE = '$lte',
     BTW = '$btw',
     ILIKE = '$ilike',
+    SW = '$sw',
 }
 
 export function isOperator(value: unknown): value is FilterOperator {
@@ -60,4 +61,5 @@ export const OperatorSymbolToFunction = new Map<
     [FilterOperator.BTW, Between],
     [FilterOperator.ILIKE, ILike],
     [FilterSuffix.NOT, Not],
+    [FilterOperator.SW, ILike],
 ])

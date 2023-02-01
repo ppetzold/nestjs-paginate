@@ -185,19 +185,26 @@ export function parseFilter<T>(
                 continue
             }
 
-            const params: (typeof filter)[0][0] = {
+            const params: typeof filter[0][0] = {
                 comparator: token.comparator,
                 findOperator: undefined,
             }
 
-            if (token.operator === FilterOperator.BTW) {
-                params.findOperator = OperatorSymbolToFunction.get(token.operator)(...token.value.split(','))
-            } else if (token.operator === FilterOperator.IN) {
-                params.findOperator = OperatorSymbolToFunction.get(token.operator)(token.value.split(','))
-            } else if (token.operator === FilterOperator.ILIKE) {
-                params.findOperator = OperatorSymbolToFunction.get(token.operator)(`%${token.value}%`)
-            } else {
-                params.findOperator = OperatorSymbolToFunction.get(token.operator)(token.value)
+            switch (token.operator) {
+                case FilterOperator.BTW:
+                    params.findOperator = OperatorSymbolToFunction.get(token.operator)(...token.value.split(','))
+                    break
+                case FilterOperator.IN:
+                    params.findOperator = OperatorSymbolToFunction.get(token.operator)(token.value.split(','))
+                    break
+                case FilterOperator.ILIKE:
+                    params.findOperator = OperatorSymbolToFunction.get(token.operator)(`%${token.value}%`)
+                    break
+                case FilterOperator.SW:
+                    params.findOperator = OperatorSymbolToFunction.get(token.operator)(`${token.value}%`)
+                    break
+                default:
+                    params.findOperator = OperatorSymbolToFunction.get(token.operator)(token.value)
             }
 
             filter[column] = [...(filter[column] || []), params]
