@@ -185,7 +185,7 @@ export function parseFilter<T>(
                 continue
             }
 
-            const params: typeof filter[0][0] = {
+            const params: (typeof filter)[0][0] = {
                 comparator: token.comparator,
                 findOperator: undefined,
             }
