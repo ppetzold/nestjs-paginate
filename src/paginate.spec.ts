@@ -1109,7 +1109,7 @@ describe('paginate', () => {
         const query: PaginateQuery = {
             path: '',
             filter: {
-                'toys.size.height': '$eq:1',
+                'toys.size.height': '1',
             },
         }
 
@@ -1121,10 +1121,10 @@ describe('paginate', () => {
         cat2.toys = [catToys3]
 
         expect(result.meta.filter).toStrictEqual({
-            'toys.size.height': '$eq:1',
+            'toys.size.height': '1',
         })
         expect(result.data).toStrictEqual([cat2])
-        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.toys.size.height=$eq:1')
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.toys.size.height=1')
     })
 
     it('should return result based on filter on embedded on one-to-one relation', async () => {
