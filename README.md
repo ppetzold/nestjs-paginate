@@ -335,7 +335,7 @@ Multi filters are filters that can be applied to a single column with a comparat
 
 `?filter.id=$gt:3&filter.id=$and$lt:5&filter.id=$or$eq:7` where column `id` is greater than `3` **and** less than `5` **or** equal to `7`
 
-**Note:** that the `and` operators are not required. The above example is equivalent to:
+**Note:** the `and` operators are not required. The above example is equivalent to:
 
 `?filter.id=$gt:3&filter.id=$lt:5&filter.id=$or$eq:7`
 
