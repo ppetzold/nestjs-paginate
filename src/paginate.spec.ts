@@ -27,8 +27,19 @@ describe('paginate', () => {
 
     beforeAll(async () => {
         dataSource = new DataSource({
-            type: 'sqlite',
-            database: ':memory:',
+            ...(process.env.DB === 'postgres'
+                ? {
+                      type: 'postgres',
+                      host: 'localhost',
+                      port: 5432,
+                      username: 'root',
+                      password: 'pass',
+                      database: 'test',
+                  }
+                : {
+                      type: 'sqlite',
+                      database: ':memory:',
+                  }),
             synchronize: true,
             logging: false,
             entities: [CatEntity, CatToyEntity, CatHomeEntity],
@@ -1872,4 +1883,13 @@ describe('paginate', () => {
             })
         })
     })
+
+    if (process.env.DB === 'postgres') {
+        afterAll(async () => {
+            const entities = dataSource.entityMetadatas
+            const tableNames = entities.map((entity) => `"${entity.tableName}"`).join(', ')
+
+            await dataSource.query(`TRUNCATE ${tableNames} CASCADE;`)
+        })
+    }
 })
