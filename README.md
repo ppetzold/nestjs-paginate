@@ -339,7 +339,7 @@ Multi filters are filters that can be applied to a single column with a comparat
 
 `?filter.id=$gt:3&filter.id=$lt:5&filter.id=$or:$eq:7`
 
-**Note:** The first comparator on the the first filter is ignored because the filters are grouped by the column name and chained with an `and` to other filters.
+**Note:** The first comparator on the the first filter is ignored because the filters are grouped by the column name and chained with an `$and` to other filters.
 
 `...&filter.id=5&filter.id=$or:7&filter.name=Milo&...`
 
