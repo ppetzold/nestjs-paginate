@@ -331,15 +331,15 @@ Multi filters are filters that can be applied to a single column with a comparat
 
 `?filter.id=$gt:3&filter.id=$lt:5` where column `id` is greater than `3` **and** less than `5`
 
-`?filter.id=$gt:3&filter.id=$or$lt:5` where column `id` is greater than `3` **or** less than `5`
+`?filter.id=$gt:3&filter.id=$or:$lt:5` where column `id` is greater than `3` **or** less than `5`
 
-`?filter.id=$gt:3&filter.id=$and$lt:5&filter.id=$or$eq:7` where column `id` is greater than `3` **and** less than `5` **or** equal to `7`
+`?filter.id=$gt:3&filter.id=$and:$lt:5&filter.id=$or:$eq:7` where column `id` is greater than `3` **and** less than `5` **or** equal to `7`
 
-**Note:** that the `and` operators are not required. The above example is equivalent to:
+**Note:** The `$and` comparators are not required. The above example is equivalent to:
 
-`?filter.id=$gt:3&filter.id=$lt:5&filter.id=$or$eq:7`
+`?filter.id=$gt:3&filter.id=$lt:5&filter.id=$or:$eq:7`
 
-**Note:** the first comparator on the the first filter is ingnored becouse the filters are grouped by the column name and chained with an `and` to other filters.
+**Note:** The first comparator on the the first filter is ignored because the filters are grouped by the column name and chained with an `$and` to other filters.
 
 `...&filter.id=5&filter.id=$or:7&filter.name=Milo&...`
 
