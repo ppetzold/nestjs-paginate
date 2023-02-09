@@ -18,18 +18,16 @@ const singleSplit = (param: string, res: any[]) => res.push(param)
 const multipleSplit = (param: string, res: any[]) => {
     const items = param.split(':')
     if (items.length === 2) {
-        return res.push(items as [string, string])
+        res.push(items as [string, string])
     }
-    return 0
 }
 
 const multipleAndCommaSplit = (param: string, res: any[]) => {
     const set = new Set<string>(param.split(','))
     set.forEach((item) => res.push(item))
-    return set.size
 }
 
-function parseParam<T>(queryParam: unknown, parserLogic: (param: string, res: any[]) => number): T[] | undefined {
+function parseParam<T>(queryParam: unknown, parserLogic: (param: string, res: any[]) => void): T[] | undefined {
     const res = []
     if (queryParam) {
         const params = !Array.isArray(queryParam) ? [queryParam] : queryParam
