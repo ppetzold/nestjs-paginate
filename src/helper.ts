@@ -33,7 +33,7 @@ export type SortBy<T> = Order<T>[]
 export const positiveNumberOrDefault = (value: number | undefined, defaultValue: number, minValue: 0 | 1 = 0) =>
     value === undefined || value < minValue ? defaultValue : value
 
-type ColumnProperties = { propertyPath?: string; propertyName: string }
+export type ColumnProperties = { propertyPath?: string; propertyName: string }
 
 export function getPropertiesByColumnName(column: string): ColumnProperties {
     const propertyPath = column.split('.')
