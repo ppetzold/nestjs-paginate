@@ -21,7 +21,7 @@
   "scripts": {
     "prebuild": "rimraf lib",
     "build": "tsc",
-    "dev:yalc": "watch 'npm run build && yalc push' src",
+    "dev:yalc": "nodemon --watch src --ext ts --exec 'npm run build && yalc push'",
     "format": "prettier --write \"src/**/*.ts\"",
     "format:ci": "prettier --list-different \"src/**/*.ts\"",
     "lint": "eslint -c .eslintrc.json --ext .ts --max-warnings 0 src",
@@ -31,35 +31,35 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand"
   },
   "devDependencies": {
-    "@nestjs/common": "^9.2.1",
-    "@types/express": "^4.17.16",
-    "@types/jest": "^29.2.6",
+    "@nestjs/common": "^9.3.8",
+    "@types/express": "^4.17.17",
+    "@types/jest": "^29.4.0",
     "@types/lodash": "^4.14.191",
-    "@types/node": "^18.11.18",
-    "@typescript-eslint/eslint-plugin": "^5.49.0",
-    "@typescript-eslint/parser": "^5.49.0",
-    "eslint": "^8.32.0",
+    "@types/node": "^18.13.0",
+    "@typescript-eslint/eslint-plugin": "^5.51.0",
+    "@typescript-eslint/parser": "^5.51.0",
+    "eslint": "^8.34.0",
     "eslint-config-prettier": "^8.6.0",
     "eslint-plugin-prettier": "^4.2.1",
-    "fastify": "^4.12.0",
-    "jest": "^29.4.0",
-    "prettier": "^2.8.3",
+    "fastify": "^4.13.0",
+    "jest": "^29.4.2",
+    "prettier": "^2.8.4",
     "reflect-metadata": "^0.1.13",
     "rxjs": "^7.8.0",
     "sqlite3": "^5.1.4",
     "ts-jest": "^29.0.5",
     "ts-node": "^10.9.1",
-    "typeorm": "^0.3.11",
-    "typescript": "^4.9.4"
+    "typeorm": "^0.3.12",
+    "typescript": "^4.9.5"
   },
   "dependencies": {
     "lodash": "^4.17.21"
   },
   "peerDependencies": {
-    "@nestjs/common": "^9.2.1",
+    "@nestjs/common": "^9.3.8",
     "express": "^4.18.2",
-    "fastify": "^4.12.0",
-    "typeorm": "^0.3.11"
+    "fastify": "^4.13.0",
+    "typeorm": "^0.3.12"
   },
   "jest": {
     "moduleFileExtensions": [

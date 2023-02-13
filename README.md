@@ -13,8 +13,9 @@ Pagination and filtering helper method for TypeORM repositories or query builder
 - Pagination conforms to [JSON:API](https://jsonapi.org/)
 - Sort by multiple columns
 - Search across columns
-- Filter using operators (`$eq`, `$not`, `$null`, `$in`, `$gt`, `$gte`, `$lt`, `$lte`, `$btw`, `$ilike`)
+- Filter using operators (`$eq`, `$not`, `$null`, `$in`, `$gt`, `$gte`, `$lt`, `$lte`, `$btw`, `$ilike`, `$sw`)
 - Include relations
+- Virtual column support
 
 ## Installation
 
@@ -300,7 +301,7 @@ const config: PaginateConfig<CatEntity> = {
 const result = await paginate<CatEntity>(query, catRepo, config)
 ```
 
-## Filters
+## Single Filters
 
 Filter operators must be whitelisted per column in `PaginateConfig`.
 
@@ -314,11 +315,37 @@ Filter operators must be whitelisted per column in `PaginateConfig`.
 
 `?filter.summary=$not:$ilike:term` where column `summary` does **not** contain `term`
 
+`?filter.summary=$sw:term` where column `summary` starts with `term`
+
 `?filter.seenAt=$null` where column `seenAt` is `NULL`
 
 `?filter.seenAt=$not:$null` where column `seenAt` is **not** `NULL`
 
 `?filter.createdAt=$btw:2022-02-02,2022-02-10` where column `createdAt` is between the dates `2022-02-02` and `2022-02-10`
+
+## Multi Filters
+
+Multi filters are filters that can be applied to a single column with a comparator. As for single filters, multi filters must be whitelisted per column in `PaginateConfig`.
+
+### Examples
+
+`?filter.id=$gt:3&filter.id=$lt:5` where column `id` is greater than `3` **and** less than `5`
+
+`?filter.id=$gt:3&filter.id=$or:$lt:5` where column `id` is greater than `3` **or** less than `5`
+
+`?filter.id=$gt:3&filter.id=$and:$lt:5&filter.id=$or:$eq:7` where column `id` is greater than `3` **and** less than `5` **or** equal to `7`
+
+**Note:** The `$and` comparators are not required. The above example is equivalent to:
+
+`?filter.id=$gt:3&filter.id=$lt:5&filter.id=$or:$eq:7`
+
+**Note:** The first comparator on the the first filter is ignored because the filters are grouped by the column name and chained with an `$and` to other filters.
+
+`...&filter.id=5&filter.id=$or:7&filter.name=Milo&...`
+
+is resolved to:
+
+`WHERE ... AND (id = 5 OR id = 7) AND name = 'Milo' AND ...`
 
 ## Troubleshooting
 
