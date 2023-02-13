@@ -6,6 +6,7 @@ import { stringify } from 'querystring'
 import { WherePredicateOperator } from 'typeorm/query-builder/WhereClause'
 import {
     checkIsRelation,
+    checkIsEmbedded,
     Column,
     extractVirtualProperty,
     fixColumnAlias,
@@ -142,8 +143,8 @@ export async function paginate<T extends ObjectLiteral>(
         // Switch from take and skip to limit and offset
         // due to this problem https://github.com/typeorm/typeorm/issues/5670
         // (anyway this creates more clean query without double dinstict)
-        queryBuilder.limit(limit).offset((page - 1) * limit)
-        // queryBuilder.take(limit).skip((page - 1) * limit)
+        // queryBuilder.limit(limit).offset((page - 1) * limit)
+        queryBuilder.take(limit).skip((page - 1) * limit)
     }
 
     if (config.relations?.length) {
@@ -161,9 +162,8 @@ export async function paginate<T extends ObjectLiteral>(
         const columnProperties = getPropertiesByColumnName(order[0])
         const { isVirtualProperty } = extractVirtualProperty(queryBuilder, columnProperties)
         const isRelation = checkIsRelation(queryBuilder, columnProperties.propertyPath)
-
-        const alias = fixColumnAlias(columnProperties, queryBuilder.alias, isRelation, isVirtualProperty)
-
+        const isEmbeded = checkIsEmbedded(queryBuilder, columnProperties.propertyPath)
+        const alias = fixColumnAlias(columnProperties, queryBuilder.alias, isRelation, isVirtualProperty, isEmbeded)
         queryBuilder.addOrderBy(alias, order[1], nullSort)
     }
 
@@ -194,8 +194,15 @@ export async function paginate<T extends ObjectLiteral>(
                     const property = getPropertiesByColumnName(column)
                     const { isVirtualProperty, query: virtualQuery } = extractVirtualProperty(qb, property)
                     const isRelation = checkIsRelation(qb, property.propertyPath)
-
-                    const alias = fixColumnAlias(property, qb.alias, isRelation, isVirtualProperty, virtualQuery)
+                    const isEmbeded = checkIsEmbedded(qb, property.propertyPath)
+                    const alias = fixColumnAlias(
+                        property,
+                        qb.alias,
+                        isRelation,
+                        isVirtualProperty,
+                        isEmbeded,
+                        virtualQuery
+                    )
                     const condition: WherePredicateOperator = {
                         operator: 'ilike',
                         parameters: [alias, `:${column}`],
