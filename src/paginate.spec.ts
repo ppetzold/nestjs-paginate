@@ -785,8 +785,6 @@ describe('paginate', () => {
 
         const result = await paginate<CatEntity>(query, catRepo, config)
 
-        console.log(result.data)
-
         const copyCats = cats.map((cat: CatEntity) => {
             const copy = clone(cat)
             copy.home = null
@@ -1877,7 +1875,7 @@ describe('paginate', () => {
 
     it('should return selected columns', async () => {
         const config: PaginateConfig<CatEntity> = {
-            sortableColumns: ['name'],
+            sortableColumns: ['id', 'name'],
             select: ['id', 'name', 'toys.name', 'toys.size.height', 'toys.size.length'],
             relations: ['toys'],
         }
@@ -1894,7 +1892,7 @@ describe('paginate', () => {
         })
 
         result.data.forEach((cat) => {
-            if (cat.id === 2) {
+            if (cat.id === 1 || cat.id === 2) {
                 const toy = cat.toys[0]
                 expect(toy.name).not.toBeDefined()
                 expect(toy.id).not.toBeDefined()
