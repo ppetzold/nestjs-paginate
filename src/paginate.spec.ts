@@ -55,6 +55,9 @@ describe('paginate', () => {
             catHomeRepo.create({ name: 'Box', cat: cats[0] }),
             catHomeRepo.create({ name: 'House', cat: cats[1] }),
         ])
+
+        // add friends to Milo
+        catRepo.save({ ...cats[0], friends: cats.slice(1) })
     })
 
     it('should return an instance of Paginated', async () => {
@@ -1901,5 +1904,20 @@ describe('paginate', () => {
                 expect(cat.toys).toHaveLength(0)
             }
         })
+    })
+
+    it('should return the right amount of results if a many to many relation is involved', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            defaultSortBy: [['id', 'ASC']],
+            relations: ['friends'],
+        }
+        const query: PaginateQuery = {
+            path: '',
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        expect(result.data.length).toBe(4)
     })
 })
