@@ -1,7 +1,13 @@
 import { Brackets, FindOperator, SelectQueryBuilder } from 'typeorm'
 import { WherePredicateOperator } from 'typeorm/query-builder/WhereClause'
 import { PaginateQuery } from './decorator'
-import { checkIsRelation, extractVirtualProperty, fixColumnAlias, getPropertiesByColumnName } from './helper'
+import {
+    checkIsEmbedded,
+    checkIsRelation,
+    extractVirtualProperty,
+    fixColumnAlias,
+    getPropertiesByColumnName,
+} from './helper'
 import {
     FilterComparator,
     FilterOperator,
@@ -95,9 +101,17 @@ export function addWhereCondition<T>(qb: SelectQueryBuilder<T>, column: string, 
     const columnProperties = getPropertiesByColumnName(column)
     const { isVirtualProperty, query: virtualQuery } = extractVirtualProperty(qb, columnProperties)
     const isRelation = checkIsRelation(qb, columnProperties.propertyPath)
+    const isEmbedded = checkIsEmbedded(qb, columnProperties.propertyPath)
     filter[column].forEach((columnFilter: Filter, index: number) => {
         const columnNamePerIteration = `${column}${index}`
-        const alias = fixColumnAlias(columnProperties, qb.alias, isRelation, isVirtualProperty, virtualQuery)
+        const alias = fixColumnAlias(
+            columnProperties,
+            qb.alias,
+            isRelation,
+            isVirtualProperty,
+            isEmbedded,
+            virtualQuery
+        )
         const condition = generatePredicateCondition(qb, column, columnFilter, alias, isVirtualProperty)
         const parameters = fixQueryParam(alias, columnNamePerIteration, columnFilter, condition, {
             [columnNamePerIteration]: columnFilter.findOperator.value,

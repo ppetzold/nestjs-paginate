@@ -5,6 +5,8 @@ import {
     DeleteDateColumn,
     Entity,
     JoinColumn,
+    JoinTable,
+    ManyToMany,
     OneToMany,
     OneToOne,
     PrimaryGeneratedColumn,
@@ -42,6 +44,10 @@ export class CatEntity {
 
     @DeleteDateColumn({ nullable: true })
     deletedAt?: string
+
+    @ManyToMany(() => CatEntity)
+    @JoinTable()
+    friends: CatEntity[]
 
     @AfterLoad()
     // Fix due to typeorm bug that doesn't set entity to null

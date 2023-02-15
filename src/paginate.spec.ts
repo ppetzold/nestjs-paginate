@@ -55,6 +55,9 @@ describe('paginate', () => {
             catHomeRepo.create({ name: 'Box', cat: cats[0] }),
             catHomeRepo.create({ name: 'House', cat: cats[1] }),
         ])
+
+        // add friends to Milo
+        catRepo.save({ ...cats[0], friends: cats.slice(1) })
     })
 
     it('should return an instance of Paginated', async () => {
@@ -462,9 +465,9 @@ describe('paginate', () => {
         const result = await paginate<CatEntity>(query, catRepo, config)
 
         expect(result.meta.search).toStrictEqual('Mouse')
-        const toy = clone(catToys[1])
+        const toy = clone(catToys[2])
         delete toy.cat
-        const toy2 = clone(catToys[2])
+        const toy2 = clone(catToys[1])
         delete toy2.cat
 
         expect(result.data).toStrictEqual([Object.assign(clone(cats[0]), { toys: [toy2, toy] })])
@@ -807,7 +810,7 @@ describe('paginate', () => {
             delete copy.cat
             return copy
         })
-        copyCats[0].toys = [copyToys[0], copyToys[2], copyToys[1]]
+        copyCats[0].toys = [copyToys[0], copyToys[1], copyToys[2]]
         copyCats[1].toys = [copyToys[3]]
 
         const orderedCats = [copyCats[3], copyCats[1], copyCats[2], copyCats[0], copyCats[4]]
@@ -1871,5 +1874,20 @@ describe('paginate', () => {
                 expect(toy.id).not.toBeDefined()
             })
         })
+    })
+
+    it('should return the right amount of results if a many to many relation is involved', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            defaultSortBy: [['id', 'ASC']],
+            relations: ['friends'],
+        }
+        const query: PaginateQuery = {
+            path: '',
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        expect(result.data.length).toBe(4)
     })
 })
