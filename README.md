@@ -13,6 +13,7 @@ Pagination and filtering helper method for TypeORM repositories or query builder
 - Pagination conforms to [JSON:API](https://jsonapi.org/)
 - Sort by multiple columns
 - Search across columns
+- Select columns
 - Filter using operators (`$eq`, `$not`, `$null`, `$in`, `$gt`, `$gte`, `$lt`, `$lte`, `$btw`, `$ilike`, `$sw`)
 - Include relations
 - Virtual column support
@@ -32,7 +33,7 @@ The following code exposes a route that can be utilized like so:
 #### Endpoint
 
 ```url
-http://localhost:3000/cats?limit=5&page=2&sortBy=color:DESC&search=i&filter.age=$gte:3
+http://localhost:3000/cats?limit=5&page=2&sortBy=color:DESC&search=i&filter.age=$gte:3&select=id,name,color,age
 ```
 
 #### Result

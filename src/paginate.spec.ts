@@ -1876,6 +1876,36 @@ describe('paginate', () => {
         })
     })
 
+    it('should return selected columns', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id', 'name'],
+            select: ['id', 'name', 'toys.name', 'toys.size.height', 'toys.size.length'],
+            relations: ['toys'],
+        }
+        const query: PaginateQuery = {
+            path: '',
+            select: ['id', 'toys.size.height'],
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        result.data.forEach((cat) => {
+            expect(cat.id).toBeDefined()
+            expect(cat.name).not.toBeDefined()
+        })
+
+        result.data.forEach((cat) => {
+            if (cat.id === 1 || cat.id === 2) {
+                const toy = cat.toys[0]
+                expect(toy.name).not.toBeDefined()
+                expect(toy.id).not.toBeDefined()
+                expect(toy.size.height).toBeDefined()
+            } else {
+                expect(cat.toys).toHaveLength(0)
+            }
+        })
+    })
+
     it('should return the right amount of results if a many to many relation is involved', async () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id'],

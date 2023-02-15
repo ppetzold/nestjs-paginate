@@ -167,16 +167,20 @@ export async function paginate<T extends ObjectLiteral>(
         queryBuilder.addOrderBy(alias, order[1], nullSort)
     }
 
-    if (config.select?.length > 0) {
-        const mappedSelect = config.select.map((col) => {
-            if (col.includes('.')) {
-                const [rel, relCol] = col.split('.')
-                return `${queryBuilder.alias}_${rel}.${relCol}`
+    // When we partial select the columns (main or relation) we must add the primary key column otherwise
+    // typeorm will not be able to map the result TODO: write it in the docs
+    const selectParams = config.select || query.select
+    if (selectParams?.length > 0) {
+        const cols: string[] = selectParams.reduce((cols, currentCol) => {
+            if (query.select?.includes(currentCol) ?? true) {
+                const columnProperties = getPropertiesByColumnName(currentCol)
+                const isRelation = checkIsRelation(queryBuilder, columnProperties.propertyPath)
+                // here we can avoid to manually fix and add the query of virtual columns
+                cols.push(fixColumnAlias(columnProperties, queryBuilder.alias, isRelation))
             }
-
-            return `${queryBuilder.alias}.${col}`
-        })
-        queryBuilder.select(mappedSelect)
+            return cols
+        }, [])
+        queryBuilder.select(cols)
     }
 
     if (config.where) {
