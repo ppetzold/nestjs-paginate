@@ -1,4 +1,11 @@
-import { Repository, SelectQueryBuilder, Brackets, FindOptionsWhere, ObjectLiteral } from 'typeorm'
+import {
+    Repository,
+    SelectQueryBuilder,
+    Brackets,
+    FindOptionsWhere,
+    FindOptionsRelations,
+    ObjectLiteral,
+} from 'typeorm'
 import { PaginateQuery } from './decorator'
 import { ServiceUnavailableException, Logger } from '@nestjs/common'
 import { mapKeys } from 'lodash'
@@ -43,7 +50,7 @@ export class Paginated<T> {
 }
 
 export interface PaginateConfig<T> {
-    relations?: RelationColumn<T>[]
+    relations?: FindOptionsRelations<T> | RelationColumn<T>[]
     sortableColumns: Column<T>[]
     nullSort?: 'first' | 'last'
     searchableColumns?: Column<T>[]
@@ -137,7 +144,7 @@ export async function paginate<T extends ObjectLiteral>(
 
     let [items, totalItems]: [T[], number] = [[], 0]
 
-    const queryBuilder = repo instanceof Repository ? repo.createQueryBuilder('e') : repo
+    const queryBuilder = repo instanceof Repository ? repo.createQueryBuilder('__root') : repo
 
     if (isPaginated) {
         // Switch from take and skip to limit and offset
@@ -147,10 +154,35 @@ export async function paginate<T extends ObjectLiteral>(
         queryBuilder.take(limit).skip((page - 1) * limit)
     }
 
-    if (config.relations?.length) {
-        config.relations.forEach((relation) => {
-            queryBuilder.leftJoinAndSelect(`${queryBuilder.alias}.${relation}`, `${queryBuilder.alias}_${relation}`)
-        })
+    if (config.relations) {
+        // relations: ["relation"]
+        if (Array.isArray(config.relations)) {
+            config.relations.forEach((relation) => {
+                queryBuilder.leftJoinAndSelect(`${queryBuilder.alias}.${relation}`, `${queryBuilder.alias}_${relation}`)
+            })
+        } else {
+            // relations: {relation:true}
+            const createQueryBuilderRelations = (
+                prefix: string,
+                relations: FindOptionsRelations<T> | RelationColumn<T>[],
+                alias?: string
+            ) => {
+                Object.keys(relations).forEach((relationName) => {
+                    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+                    const relationSchema = relations![relationName]!
+
+                    queryBuilder.leftJoinAndSelect(
+                        `${alias ?? prefix}.${relationName}`,
+                        `${alias ?? prefix}_${relationName}`
+                    )
+
+                    if (typeof relationSchema === 'object') {
+                        createQueryBuilderRelations(relationName, relationSchema, `${prefix}_${relationName}`)
+                    }
+                })
+            }
+            createQueryBuilderRelations(queryBuilder.alias, config.relations)
+        }
     }
 
     let nullSort: 'NULLS LAST' | 'NULLS FIRST' | undefined = undefined
