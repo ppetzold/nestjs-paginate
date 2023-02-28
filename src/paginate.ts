@@ -1,4 +1,11 @@
-import { Repository, SelectQueryBuilder, Brackets, FindOptionsWhere, ObjectLiteral } from 'typeorm'
+import {
+    Repository,
+    SelectQueryBuilder,
+    Brackets,
+    FindOptionsWhere,
+    FindOptionsRelations,
+    ObjectLiteral,
+} from 'typeorm'
 import { PaginateQuery } from './decorator'
 import { ServiceUnavailableException, Logger } from '@nestjs/common'
 import { mapKeys } from 'lodash'
@@ -6,6 +13,7 @@ import { stringify } from 'querystring'
 import { WherePredicateOperator } from 'typeorm/query-builder/WhereClause'
 import {
     checkIsRelation,
+    checkIsEmbedded,
     Column,
     extractVirtualProperty,
     fixColumnAlias,
@@ -42,7 +50,7 @@ export class Paginated<T> {
 }
 
 export interface PaginateConfig<T> {
-    relations?: RelationColumn<T>[]
+    relations?: FindOptionsRelations<T> | RelationColumn<T>[]
     sortableColumns: Column<T>[]
     nullSort?: 'first' | 'last'
     searchableColumns?: Column<T>[]
@@ -136,20 +144,45 @@ export async function paginate<T extends ObjectLiteral>(
 
     let [items, totalItems]: [T[], number] = [[], 0]
 
-    const queryBuilder = repo instanceof Repository ? repo.createQueryBuilder('e') : repo
+    const queryBuilder = repo instanceof Repository ? repo.createQueryBuilder('__root') : repo
 
     if (isPaginated) {
         // Switch from take and skip to limit and offset
         // due to this problem https://github.com/typeorm/typeorm/issues/5670
         // (anyway this creates more clean query without double dinstict)
-        queryBuilder.limit(limit).offset((page - 1) * limit)
-        // queryBuilder.take(limit).skip((page - 1) * limit)
+        // queryBuilder.limit(limit).offset((page - 1) * limit)
+        queryBuilder.take(limit).skip((page - 1) * limit)
     }
 
-    if (config.relations?.length) {
-        config.relations.forEach((relation) => {
-            queryBuilder.leftJoinAndSelect(`${queryBuilder.alias}.${relation}`, `${queryBuilder.alias}_${relation}`)
-        })
+    if (config.relations) {
+        // relations: ["relation"]
+        if (Array.isArray(config.relations)) {
+            config.relations.forEach((relation) => {
+                queryBuilder.leftJoinAndSelect(`${queryBuilder.alias}.${relation}`, `${queryBuilder.alias}_${relation}`)
+            })
+        } else {
+            // relations: {relation:true}
+            const createQueryBuilderRelations = (
+                prefix: string,
+                relations: FindOptionsRelations<T> | RelationColumn<T>[],
+                alias?: string
+            ) => {
+                Object.keys(relations).forEach((relationName) => {
+                    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+                    const relationSchema = relations![relationName]!
+
+                    queryBuilder.leftJoinAndSelect(
+                        `${alias ?? prefix}.${relationName}`,
+                        `${alias ?? prefix}_${relationName}`
+                    )
+
+                    if (typeof relationSchema === 'object') {
+                        createQueryBuilderRelations(relationName, relationSchema, `${prefix}_${relationName}`)
+                    }
+                })
+            }
+            createQueryBuilderRelations(queryBuilder.alias, config.relations)
+        }
     }
 
     let nullSort: 'NULLS LAST' | 'NULLS FIRST' | undefined = undefined
@@ -161,22 +194,25 @@ export async function paginate<T extends ObjectLiteral>(
         const columnProperties = getPropertiesByColumnName(order[0])
         const { isVirtualProperty } = extractVirtualProperty(queryBuilder, columnProperties)
         const isRelation = checkIsRelation(queryBuilder, columnProperties.propertyPath)
-
-        const alias = fixColumnAlias(columnProperties, queryBuilder.alias, isRelation, isVirtualProperty)
-
+        const isEmbeded = checkIsEmbedded(queryBuilder, columnProperties.propertyPath)
+        const alias = fixColumnAlias(columnProperties, queryBuilder.alias, isRelation, isVirtualProperty, isEmbeded)
         queryBuilder.addOrderBy(alias, order[1], nullSort)
     }
 
-    if (config.select?.length > 0) {
-        const mappedSelect = config.select.map((col) => {
-            if (col.includes('.')) {
-                const [rel, relCol] = col.split('.')
-                return `${queryBuilder.alias}_${rel}.${relCol}`
+    // When we partial select the columns (main or relation) we must add the primary key column otherwise
+    // typeorm will not be able to map the result TODO: write it in the docs
+    const selectParams = config.select || query.select
+    if (selectParams?.length > 0) {
+        const cols: string[] = selectParams.reduce((cols, currentCol) => {
+            if (query.select?.includes(currentCol) ?? true) {
+                const columnProperties = getPropertiesByColumnName(currentCol)
+                const isRelation = checkIsRelation(queryBuilder, columnProperties.propertyPath)
+                // here we can avoid to manually fix and add the query of virtual columns
+                cols.push(fixColumnAlias(columnProperties, queryBuilder.alias, isRelation))
             }
-
-            return `${queryBuilder.alias}.${col}`
-        })
-        queryBuilder.select(mappedSelect)
+            return cols
+        }, [])
+        queryBuilder.select(cols)
     }
 
     if (config.where) {
@@ -194,8 +230,15 @@ export async function paginate<T extends ObjectLiteral>(
                     const property = getPropertiesByColumnName(column)
                     const { isVirtualProperty, query: virtualQuery } = extractVirtualProperty(qb, property)
                     const isRelation = checkIsRelation(qb, property.propertyPath)
-
-                    const alias = fixColumnAlias(property, qb.alias, isRelation, isVirtualProperty, virtualQuery)
+                    const isEmbeded = checkIsEmbedded(qb, property.propertyPath)
+                    const alias = fixColumnAlias(
+                        property,
+                        qb.alias,
+                        isRelation,
+                        isVirtualProperty,
+                        isEmbeded,
+                        virtualQuery
+                    )
                     const condition: WherePredicateOperator = {
                         operator: 'ilike',
                         parameters: [alias, `:${column}`],

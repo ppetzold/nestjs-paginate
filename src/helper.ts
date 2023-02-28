@@ -68,12 +68,20 @@ export function checkIsRelation(qb: SelectQueryBuilder<unknown>, propertyPath: s
     return !!qb?.expressionMap?.mainAlias?.metadata?.hasRelationWithPropertyPath(propertyPath)
 }
 
+export function checkIsEmbedded(qb: SelectQueryBuilder<unknown>, propertyPath: string): boolean {
+    if (!qb || !propertyPath) {
+        return false
+    }
+    return !!qb?.expressionMap?.mainAlias?.metadata?.hasEmbeddedWithPropertyPath(propertyPath)
+}
+
 // This function is used to fix the column alias when using relation, embedded or virtual properties
 export function fixColumnAlias(
     properties: ColumnProperties,
     alias: string,
     isRelation = false,
     isVirtualProperty = false,
+    isEmbedded = false,
     query?: ColumnMetadata['query']
 ): string {
     if (isRelation) {
@@ -82,11 +90,13 @@ export function fixColumnAlias(
         } else if (isVirtualProperty && !query) {
             return `${alias}_${properties.propertyPath}_${properties.propertyName}`
         } else {
-            return `${alias}_${properties.propertyPath}.${properties.propertyName}` // include embeded property and relation property
+            return `${alias}_${properties.propertyPath}.${properties.propertyName}`
         }
     } else if (isVirtualProperty) {
         return query ? `(${query(`${alias}`)})` : `${alias}_${properties.propertyName}`
+    } else if (isEmbedded) {
+        return `${alias}.${properties.propertyPath}.${properties.propertyName}`
     } else {
-        return `${alias}.${properties.propertyName}` //
+        return `${alias}.${properties.propertyName}`
     }
 }

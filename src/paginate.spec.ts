@@ -1,10 +1,11 @@
-import { Repository, In, DataSource } from 'typeorm'
+import { Repository, In, DataSource, TypeORMError } from 'typeorm'
 import { Paginated, paginate, PaginateConfig, NO_PAGINATION } from './paginate'
 import { PaginateQuery } from './decorator'
 import { HttpException } from '@nestjs/common'
 import { CatEntity } from './__tests__/cat.entity'
 import { CatToyEntity } from './__tests__/cat-toy.entity'
 import { CatHomeEntity } from './__tests__/cat-home.entity'
+import { CatHomePillowEntity } from './__tests__/cat-home-pillow.entity'
 import { clone } from 'lodash'
 import {
     FilterComparator,
@@ -21,9 +22,11 @@ describe('paginate', () => {
     let catRepo: Repository<CatEntity>
     let catToyRepo: Repository<CatToyEntity>
     let catHomeRepo: Repository<CatHomeEntity>
+    let catHomePillowRepo: Repository<CatHomePillowEntity>
     let cats: CatEntity[]
     let catToys: CatToyEntity[]
     let catHomes: CatHomeEntity[]
+    let catHomePillows: CatHomePillowEntity[]
 
     beforeAll(async () => {
         dataSource = new DataSource({
@@ -31,12 +34,13 @@ describe('paginate', () => {
             database: ':memory:',
             synchronize: true,
             logging: false,
-            entities: [CatEntity, CatToyEntity, CatHomeEntity],
+            entities: [CatEntity, CatToyEntity, CatHomeEntity, CatHomePillowEntity],
         })
         await dataSource.initialize()
         catRepo = dataSource.getRepository(CatEntity)
         catToyRepo = dataSource.getRepository(CatToyEntity)
         catHomeRepo = dataSource.getRepository(CatHomeEntity)
+        catHomePillowRepo = dataSource.getRepository(CatHomePillowEntity)
 
         cats = await catRepo.save([
             catRepo.create({ name: 'Milo', color: 'brown', age: 6, size: { height: 25, width: 10, length: 40 } }),
@@ -55,6 +59,17 @@ describe('paginate', () => {
             catHomeRepo.create({ name: 'Box', cat: cats[0] }),
             catHomeRepo.create({ name: 'House', cat: cats[1] }),
         ])
+        catHomePillows = await catHomePillowRepo.save([
+            catHomePillowRepo.create({ color: 'red', home: catHomes[0] }),
+            catHomePillowRepo.create({ color: 'yellow', home: catHomes[0] }),
+            catHomePillowRepo.create({ color: 'blue', home: catHomes[0] }),
+            catHomePillowRepo.create({ color: 'pink', home: catHomes[1] }),
+            catHomePillowRepo.create({ color: 'purple', home: catHomes[1] }),
+            catHomePillowRepo.create({ color: 'teal', home: catHomes[1] }),
+        ])
+
+        // add friends to Milo
+        catRepo.save({ ...cats[0], friends: cats.slice(1) })
     })
 
     it('should return an instance of Paginated', async () => {
@@ -462,9 +477,9 @@ describe('paginate', () => {
         const result = await paginate<CatEntity>(query, catRepo, config)
 
         expect(result.meta.search).toStrictEqual('Mouse')
-        const toy = clone(catToys[1])
+        const toy = clone(catToys[2])
         delete toy.cat
-        const toy2 = clone(catToys[2])
+        const toy2 = clone(catToys[1])
         delete toy2.cat
 
         expect(result.data).toStrictEqual([Object.assign(clone(cats[0]), { toys: [toy2, toy] })])
@@ -554,6 +569,55 @@ describe('paginate', () => {
 
         expect(result.data).toStrictEqual([catHomesClone])
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&search=Garfield')
+    })
+
+    it('should load nested relations', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            relations: { home: { pillows: true } },
+            sortableColumns: ['id', 'name'],
+            searchableColumns: ['name'],
+        }
+        const query: PaginateQuery = {
+            path: '',
+            search: 'Garfield',
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        const cat = clone(cats[1])
+        const catHomesClone = clone(catHomes[1])
+        const catHomePillowsClone3 = clone(catHomePillows[3])
+        delete catHomePillowsClone3.home
+        const catHomePillowsClone4 = clone(catHomePillows[4])
+        delete catHomePillowsClone4.home
+        const catHomePillowsClone5 = clone(catHomePillows[5])
+        delete catHomePillowsClone5.home
+
+        catHomesClone.countCat = cats.filter((cat) => cat.id === catHomesClone.cat.id).length
+        catHomesClone.pillows = [catHomePillowsClone3, catHomePillowsClone4, catHomePillowsClone5]
+        cat.home = catHomesClone
+        delete cat.home.cat
+
+        expect(result.meta.search).toStrictEqual('Garfield')
+        expect(result.data).toStrictEqual([cat])
+        expect(result.data[0].home).toBeDefined()
+        expect(result.data[0].home.pillows).toStrictEqual(cat.home.pillows)
+    })
+
+    it('should throw an error when nonexistent relation loaded', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            relations: <any>['homee'],
+            sortableColumns: ['id'],
+        }
+        const query: PaginateQuery = {
+            path: '',
+        }
+
+        try {
+            await paginate<CatEntity>(query, catRepo, config)
+        } catch (err) {
+            expect(err).toBeInstanceOf(TypeORMError)
+        }
     })
 
     it('should return result based on search term and searchBy columns', async () => {
@@ -807,7 +871,7 @@ describe('paginate', () => {
             delete copy.cat
             return copy
         })
-        copyCats[0].toys = [copyToys[0], copyToys[2], copyToys[1]]
+        copyCats[0].toys = [copyToys[0], copyToys[1], copyToys[2]]
         copyCats[1].toys = [copyToys[3]]
 
         const orderedCats = [copyCats[3], copyCats[1], copyCats[2], copyCats[0], copyCats[4]]
@@ -1871,5 +1935,50 @@ describe('paginate', () => {
                 expect(toy.id).not.toBeDefined()
             })
         })
+    })
+
+    it('should return selected columns', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id', 'name'],
+            select: ['id', 'name', 'toys.name', 'toys.size.height', 'toys.size.length'],
+            relations: ['toys'],
+        }
+        const query: PaginateQuery = {
+            path: '',
+            select: ['id', 'toys.size.height'],
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        result.data.forEach((cat) => {
+            expect(cat.id).toBeDefined()
+            expect(cat.name).not.toBeDefined()
+        })
+
+        result.data.forEach((cat) => {
+            if (cat.id === 1 || cat.id === 2) {
+                const toy = cat.toys[0]
+                expect(toy.name).not.toBeDefined()
+                expect(toy.id).not.toBeDefined()
+                expect(toy.size.height).toBeDefined()
+            } else {
+                expect(cat.toys).toHaveLength(0)
+            }
+        })
+    })
+
+    it('should return the right amount of results if a many to many relation is involved', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            defaultSortBy: [['id', 'ASC']],
+            relations: ['friends'],
+        }
+        const query: PaginateQuery = {
+            path: '',
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        expect(result.data.length).toBe(4)
     })
 })
