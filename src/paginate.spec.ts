@@ -1992,7 +1992,7 @@ describe('paginate', () => {
 
         const query: PaginateQuery = {
             path: '',
-            search: 'Garfield'
+            search: 'Garfield',
         }
 
         const result = await paginate<CatEntity>(query, catRepo, config)

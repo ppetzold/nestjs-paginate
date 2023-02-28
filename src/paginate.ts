@@ -150,7 +150,7 @@ export async function paginate<T extends ObjectLiteral>(
 
     if (repo instanceof Repository && !config.relations && config.loadEagerRelations === true) {
         if (!config.relations) {
-            FindOptionsUtils.joinEagerRelations(queryBuilder, queryBuilder.alias, repo.metadata);
+            FindOptionsUtils.joinEagerRelations(queryBuilder, queryBuilder.alias, repo.metadata)
         }
     }
 
@@ -282,12 +282,12 @@ export async function paginate<T extends ObjectLiteral>(
 
     const filterQuery = query.filter
         ? '&' +
-        stringify(
-            mapKeys(query.filter, (_param, name) => 'filter.' + name),
-            '&',
-            '=',
-            { encodeURIComponent: (str) => str }
-        )
+          stringify(
+              mapKeys(query.filter, (_param, name) => 'filter.' + name),
+              '&',
+              '=',
+              { encodeURIComponent: (str) => str }
+          )
         : ''
 
     const options = `&limit=${limit}${sortByQuery}${searchQuery}${searchByQuery}${filterQuery}`
