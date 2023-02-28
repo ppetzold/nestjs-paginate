@@ -1981,4 +1981,24 @@ describe('paginate', () => {
 
         expect(result.data.length).toBe(4)
     })
+
+    it('should return eager relations when set the property `loadEagerRelations` as true', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            defaultSortBy: [['id', 'ASC']],
+            loadEagerRelations: true,
+            searchableColumns: ['name'],
+        }
+
+        const query: PaginateQuery = {
+            path: '',
+            search: 'Garfield'
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        expect(result.data[0].toys).toBeDefined()
+
+        expect(result.data[0].toys).toHaveLength(1)
+    })
 })
