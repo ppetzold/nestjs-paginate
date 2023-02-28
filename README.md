@@ -282,10 +282,10 @@ export class CatEntity {
   @Column('int')
   age: number
 
-  @OneToMany(t => LionKingEntity, lionKing.cats, {
+  @OneToMany(() => CatToyEntity, (catToy) => catToy.cat, {
     eager: true,
   })
-  lionKings: LionKingEntity[];
+  toys: CatToyEntity[]
 }
 
 // service
@@ -295,7 +295,8 @@ class CatService {
   public findAll(query: PaginateQuery): Promise<Paginated<CatEntity>> {
     return paginate(query, this.catsRepository, {
       sortableColumns: ['id', 'name', 'color', 'age'],
-    }) // automatically loads all eager relationships, disable setting property `loadEagerRelations` as false
+      loadEagerRelations: true // set this property as true to enable the eager loading
+    })
   }
 }
 ```

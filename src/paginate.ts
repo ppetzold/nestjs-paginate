@@ -148,7 +148,7 @@ export async function paginate<T extends ObjectLiteral>(
 
     const queryBuilder = repo instanceof Repository ? repo.createQueryBuilder('__root') : repo
 
-    if (repo instanceof Repository && !config.relations && (config.loadEagerRelations === undefined || config.loadEagerRelations === true)) {
+    if (repo instanceof Repository && !config.relations && config.loadEagerRelations === true) {
         if (!config.relations) {
             FindOptionsUtils.joinEagerRelations(queryBuilder, queryBuilder.alias, repo.metadata);
         }
