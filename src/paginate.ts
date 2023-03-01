@@ -5,6 +5,7 @@ import {
     FindOptionsWhere,
     FindOptionsRelations,
     ObjectLiteral,
+    FindOptionsUtils,
 } from 'typeorm'
 import { PaginateQuery } from './decorator'
 import { ServiceUnavailableException, Logger } from '@nestjs/common'
@@ -62,6 +63,7 @@ export interface PaginateConfig<T> {
     filterableColumns?: {
         [key in Column<T>]?: (FilterOperator | FilterSuffix)[]
     }
+    loadEagerRelations?: boolean
     withDeleted?: boolean
     relativePath?: boolean
     origin?: string
@@ -145,6 +147,12 @@ export async function paginate<T extends ObjectLiteral>(
     let [items, totalItems]: [T[], number] = [[], 0]
 
     const queryBuilder = repo instanceof Repository ? repo.createQueryBuilder('__root') : repo
+
+    if (repo instanceof Repository && !config.relations && config.loadEagerRelations === true) {
+        if (!config.relations) {
+            FindOptionsUtils.joinEagerRelations(queryBuilder, queryBuilder.alias, repo.metadata)
+        }
+    }
 
     if (isPaginated) {
         // Switch from take and skip to limit and offset

@@ -261,6 +261,46 @@ const paginateConfig: PaginateConfig<CatEntity> {
 }
 ```
 
+## Eager loading
+
+Eager loading should work with typeorm's eager property out the box. Like so
+
+```typescript
+import { Entity, OneToMany } from 'typeorm';
+
+@Entity()
+export class CatEntity {
+  @PrimaryGeneratedColumn()
+  id: number
+
+  @Column('text')
+  name: string
+
+  @Column('text')
+  color: string
+
+  @Column('int')
+  age: number
+
+  @OneToMany(() => CatToyEntity, (catToy) => catToy.cat, {
+    eager: true,
+  })
+  toys: CatToyEntity[]
+}
+
+// service
+class CatService {
+  constructor(private readonly catsRepository: Repository<CatEntity>) {}
+
+  public findAll(query: PaginateQuery): Promise<Paginated<CatEntity>> {
+    return paginate(query, this.catsRepository, {
+      sortableColumns: ['id', 'name', 'color', 'age'],
+      loadEagerRelations: true // set this property as true to enable the eager loading
+    })
+  }
+}
+```
+
 ## Usage with Query Builder
 
 You can paginate custom queries by passing on the query builder:
