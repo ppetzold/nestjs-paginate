@@ -1871,6 +1871,20 @@ describe('paginate', () => {
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=countCat:ASC&filter.countCat=$gt:0')
     })
 
+    it("should return all columns if select doesn't contain all primary columns", async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id', 'name'],
+            select: ['name'],
+        }
+        const query: PaginateQuery = {
+            path: '',
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        expect(result.data).toStrictEqual(cats)
+    })
+
     it('should return all items even if deleted', async () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id'],
@@ -1980,5 +1994,25 @@ describe('paginate', () => {
         const result = await paginate<CatEntity>(query, catRepo, config)
 
         expect(result.data.length).toBe(4)
+    })
+
+    it('should return eager relations when set the property `loadEagerRelations` as true', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            defaultSortBy: [['id', 'ASC']],
+            loadEagerRelations: true,
+            searchableColumns: ['name'],
+        }
+
+        const query: PaginateQuery = {
+            path: '',
+            search: 'Garfield',
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        expect(result.data[0].toys).toBeDefined()
+
+        expect(result.data[0].toys).toHaveLength(1)
     })
 })

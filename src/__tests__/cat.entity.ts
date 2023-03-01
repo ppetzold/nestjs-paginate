@@ -32,7 +32,9 @@ export class CatEntity {
     @Column(() => SizeEmbed)
     size: SizeEmbed
 
-    @OneToMany(() => CatToyEntity, (catToy) => catToy.cat)
+    @OneToMany(() => CatToyEntity, (catToy) => catToy.cat, {
+        eager: true,
+    })
     toys: CatToyEntity[]
 
     @OneToOne(() => CatHomeEntity, (catHome) => catHome.cat, { nullable: true })

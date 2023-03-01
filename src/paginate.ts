@@ -5,6 +5,7 @@ import {
     FindOptionsWhere,
     FindOptionsRelations,
     ObjectLiteral,
+    FindOptionsUtils,
 } from 'typeorm'
 import { PaginateQuery } from './decorator'
 import { ServiceUnavailableException, Logger } from '@nestjs/common'
@@ -22,6 +23,8 @@ import {
     positiveNumberOrDefault,
     RelationColumn,
     SortBy,
+    hasColumnWithPropertyPath,
+    includesAllPrimaryKeyColumns,
 } from './helper'
 import { FilterOperator, FilterSuffix } from './operator'
 import { addFilter } from './filter'
@@ -62,6 +65,7 @@ export interface PaginateConfig<T> {
     filterableColumns?: {
         [key in Column<T>]?: (FilterOperator | FilterSuffix)[]
     }
+    loadEagerRelations?: boolean
     withDeleted?: boolean
     relativePath?: boolean
     origin?: string
@@ -146,6 +150,12 @@ export async function paginate<T extends ObjectLiteral>(
 
     const queryBuilder = repo instanceof Repository ? repo.createQueryBuilder('__root') : repo
 
+    if (repo instanceof Repository && !config.relations && config.loadEagerRelations === true) {
+        if (!config.relations) {
+            FindOptionsUtils.joinEagerRelations(queryBuilder, queryBuilder.alias, repo.metadata)
+        }
+    }
+
     if (isPaginated) {
         // Switch from take and skip to limit and offset
         // due to this problem https://github.com/typeorm/typeorm/issues/5670
@@ -200,15 +210,18 @@ export async function paginate<T extends ObjectLiteral>(
     }
 
     // When we partial select the columns (main or relation) we must add the primary key column otherwise
-    // typeorm will not be able to map the result TODO: write it in the docs
+    // typeorm will not be able to map the result.
     const selectParams = config.select || query.select
-    if (selectParams?.length > 0) {
+    if (selectParams?.length > 0 && includesAllPrimaryKeyColumns(queryBuilder, selectParams)) {
         const cols: string[] = selectParams.reduce((cols, currentCol) => {
             if (query.select?.includes(currentCol) ?? true) {
                 const columnProperties = getPropertiesByColumnName(currentCol)
                 const isRelation = checkIsRelation(queryBuilder, columnProperties.propertyPath)
-                // here we can avoid to manually fix and add the query of virtual columns
-                cols.push(fixColumnAlias(columnProperties, queryBuilder.alias, isRelation))
+                const { isVirtualProperty } = extractVirtualProperty(queryBuilder, columnProperties)
+                if (hasColumnWithPropertyPath(queryBuilder, columnProperties) || isVirtualProperty) {
+                    // here we can avoid to manually fix and add the query of virtual columns
+                    cols.push(fixColumnAlias(columnProperties, queryBuilder.alias, isRelation))
+                }
             }
             return cols
         }, [])
