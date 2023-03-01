@@ -61,6 +61,25 @@ export function extractVirtualProperty(
     )
 }
 
+export function includesAllPrimaryKeyColumns(qb: SelectQueryBuilder<unknown>, propertyPath: string[]): boolean {
+    if (!qb || !propertyPath) {
+        return false
+    }
+    return qb.expressionMap.mainAlias?.metadata?.primaryColumns
+        .map((column) => column.propertyPath)
+        .every((column) => propertyPath.includes(column))
+}
+
+export function hasColumnWithPropertyPath(
+    qb: SelectQueryBuilder<unknown>,
+    columnProperties: ColumnProperties
+): boolean {
+    if (!qb || !columnProperties) {
+        return false
+    }
+    return !!qb.expressionMap.mainAlias?.metadata?.hasColumnWithPropertyPath(columnProperties.propertyName)
+}
+
 export function checkIsRelation(qb: SelectQueryBuilder<unknown>, propertyPath: string): boolean {
     if (!qb || !propertyPath) {
         return false

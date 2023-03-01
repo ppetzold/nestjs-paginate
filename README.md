@@ -194,6 +194,7 @@ const paginateConfig: PaginateConfig<CatEntity> {
    * Type: TypeORM partial selection
    * Default: None
    * https://typeorm.io/select-query-builder#partial-selection
+   * Note: You must include the primary key in the selection.
    */
   select: ['name', 'color'],
 
@@ -266,7 +267,7 @@ const paginateConfig: PaginateConfig<CatEntity> {
 Eager loading should work with typeorm's eager property out the box. Like so
 
 ```typescript
-import { Entity, OneToMany } from 'typeorm';
+import { Entity, OneToMany } from 'typeorm'
 
 @Entity()
 export class CatEntity {
@@ -295,7 +296,7 @@ class CatService {
   public findAll(query: PaginateQuery): Promise<Paginated<CatEntity>> {
     return paginate(query, this.catsRepository, {
       sortableColumns: ['id', 'name', 'color', 'age'],
-      loadEagerRelations: true // set this property as true to enable the eager loading
+      loadEagerRelations: true, // set this property as true to enable the eager loading
     })
   }
 }

@@ -23,6 +23,8 @@ import {
     positiveNumberOrDefault,
     RelationColumn,
     SortBy,
+    hasColumnWithPropertyPath,
+    includesAllPrimaryKeyColumns,
 } from './helper'
 import { FilterOperator, FilterSuffix } from './operator'
 import { addFilter } from './filter'
@@ -208,14 +210,15 @@ export async function paginate<T extends ObjectLiteral>(
     }
 
     // When we partial select the columns (main or relation) we must add the primary key column otherwise
-    // typeorm will not be able to map the result TODO: write it in the docs
+    // typeorm will not be able to map the result.
     const selectParams = config.select || query.select
-    if (selectParams?.length > 0) {
+    if (selectParams?.length > 0 && includesAllPrimaryKeyColumns(queryBuilder, selectParams)) {
         const cols: string[] = selectParams.reduce((cols, currentCol) => {
-            if (queryBuilder.expressionMap.mainAlias?.metadata?.hasColumnWithPropertyPath(currentCol)) {
-                if (query.select?.includes(currentCol) ?? true) {
-                    const columnProperties = getPropertiesByColumnName(currentCol)
-                    const isRelation = checkIsRelation(queryBuilder, columnProperties.propertyPath)
+            if (query.select?.includes(currentCol) ?? true) {
+                const columnProperties = getPropertiesByColumnName(currentCol)
+                const isRelation = checkIsRelation(queryBuilder, columnProperties.propertyPath)
+                const { isVirtualProperty } = extractVirtualProperty(queryBuilder, columnProperties)
+                if (hasColumnWithPropertyPath(queryBuilder, columnProperties) || isVirtualProperty) {
                     // here we can avoid to manually fix and add the query of virtual columns
                     cols.push(fixColumnAlias(columnProperties, queryBuilder.alias, isRelation))
                 }
