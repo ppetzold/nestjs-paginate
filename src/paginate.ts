@@ -204,11 +204,13 @@ export async function paginate<T extends ObjectLiteral>(
     const selectParams = config.select || query.select
     if (selectParams?.length > 0) {
         const cols: string[] = selectParams.reduce((cols, currentCol) => {
-            if (query.select?.includes(currentCol) ?? true) {
-                const columnProperties = getPropertiesByColumnName(currentCol)
-                const isRelation = checkIsRelation(queryBuilder, columnProperties.propertyPath)
-                // here we can avoid to manually fix and add the query of virtual columns
-                cols.push(fixColumnAlias(columnProperties, queryBuilder.alias, isRelation))
+            if (queryBuilder.expressionMap.mainAlias?.metadata?.hasColumnWithPropertyPath(currentCol)) {
+                if (query.select?.includes(currentCol) ?? true) {
+                    const columnProperties = getPropertiesByColumnName(currentCol)
+                    const isRelation = checkIsRelation(queryBuilder, columnProperties.propertyPath)
+                    // here we can avoid to manually fix and add the query of virtual columns
+                    cols.push(fixColumnAlias(columnProperties, queryBuilder.alias, isRelation))
+                }
             }
             return cols
         }, [])
