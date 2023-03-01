@@ -2015,4 +2015,62 @@ describe('paginate', () => {
 
         expect(result.data[0].toys).toHaveLength(1)
     })
+
+    it('should search nested relations', async () => {
+        const config: PaginateConfig<CatEntity> = {
+          relations: { home: { pillows: true } },
+          sortableColumns: ['id', 'name'],
+          searchableColumns: ['name', 'home.pillows.color'],
+        }
+        const query: PaginateQuery = {
+          path: '',
+          search: 'red',
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        const cat = clone(cats[0])
+        const catHomesClone = clone(catHomes[0])
+        const catHomePillowsClone = clone(catHomePillows[0])
+        delete catHomePillowsClone.home
+
+        catHomesClone.countCat = cats.filter((cat) => cat.id === catHomesClone.cat.id).length
+        catHomesClone.pillows = [catHomePillowsClone]
+        cat.home = catHomesClone
+        delete cat.home.cat
+
+        expect(result.meta.search).toStrictEqual('red')
+        expect(result.data).toStrictEqual([cat])
+        expect(result.data[0].home).toBeDefined()
+        expect(result.data[0].home.pillows).toStrictEqual(cat.home.pillows)
+    })
+
+    it('should filter nested relations', async () => {
+        const config: PaginateConfig<CatEntity> = {
+          relations: { home: { pillows: true } },
+          sortableColumns: ['id', 'name'],
+          filterableColumns: { "home.pillows.color": [FilterOperator.EQ] },
+        }
+        const query: PaginateQuery = {
+          path: '',
+          filter: {'home.pillows.color': 'red'},
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        const cat = clone(cats[0])
+        const catHomesClone = clone(catHomes[0])
+        const catHomePillowsClone = clone(catHomePillows[0])
+        delete catHomePillowsClone.home
+
+        catHomesClone.countCat = cats.filter((cat) => cat.id === catHomesClone.cat.id).length
+        catHomesClone.pillows = [catHomePillowsClone]
+        cat.home = catHomesClone
+        delete cat.home.cat
+
+        expect(result.meta.filter['home.pillows.color']).toStrictEqual('red')
+        expect(result.data).toStrictEqual([cat])
+        expect(result.data[0].home).toBeDefined()
+        expect(result.data[0].home.pillows).toStrictEqual(cat.home.pillows)
+    })
 })
