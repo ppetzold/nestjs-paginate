@@ -264,9 +264,9 @@ const paginateConfig: PaginateConfig<CatEntity> {
    * Required: false
    * Type: string
    * Description: Allow user to choose between limit/offset and take/skip.
-   * Default: PaginationTypeEnum.TAKE_AND_SKIP
+   * Default: PaginationType.TAKE_AND_SKIP
    */
-  paginationType: PaginationTypeEnum.LIMIT_AND_OFFSET,
+  paginationType: PaginationType.LIMIT_AND_OFFSET,
 }
 ```
 
@@ -361,9 +361,9 @@ You can use either `limit`/`offset` or `take`/`skip` to return paginated results
 
 ```typescript
 const config: PaginateConfig<CatEntity> = {
-  paginationType: PaginationTypeEnum.LIMIT_AND_OFFSET,
+  paginationType: PaginationType.LIMIT_AND_OFFSET,
   // Or
-  paginationType: PaginationTypeEnum.TAKE_AND_SKIP,
+  paginationType: PaginationType.TAKE_AND_SKIP,
 }
 
 const result = await paginate<CatEntity>(query, catRepo, config)
