@@ -1,7 +1,11 @@
 import { SelectQueryBuilder } from 'typeorm'
 import { ColumnMetadata } from 'typeorm/metadata/ColumnMetadata'
 
-type Join<K, P> = K extends string ? (P extends string ? `${K}${'' extends P ? '' : '.'}${P}` : never) : never
+type Join<K, P> = K extends string
+    ? P extends string
+        ? `${K}${'' extends P ? '' : '.'}${P | `(${P}` | `${P})`}`
+        : never
+    : never
 
 type Prev = [never, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, ...0[]]
 
@@ -42,11 +46,11 @@ export function getPropertiesByColumnName(column: string): ColumnProperties {
         let isNested = false,
             propertyName = propertyNamePath.join('.')
 
-        if (!propertyName.startsWith('{') && propertyNamePath.length > 1) {
+        if (!propertyName.startsWith('(') && propertyNamePath.length > 1) {
             isNested = true
         }
 
-        propertyName = propertyName.replace('{', '').replace('}', '')
+        propertyName = propertyName.replace('(', '').replace(')', '')
 
         return {
             propertyPath: propertyPath[0],
