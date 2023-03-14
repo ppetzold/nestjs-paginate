@@ -15,7 +15,7 @@ import {
     SelectQueryBuilder,
 } from 'typeorm'
 import { WherePredicateOperator } from 'typeorm/query-builder/WhereClause'
-import { PaginateQuery } from '../decorator'
+import { PaginateQuery } from './decorator'
 import {
     checkIsEmbedded,
     checkIsRelation,

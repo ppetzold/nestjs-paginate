@@ -1,11 +1,11 @@
 import { Repository, In, DataSource, TypeORMError } from 'typeorm'
-import { Paginated, paginate, PaginateConfig, NO_PAGINATION } from '.'
-import { PaginateQuery } from '../decorator'
+import { Paginated, paginate, PaginateConfig, NO_PAGINATION } from './paginate'
+import { PaginateQuery } from './decorator'
 import { HttpException } from '@nestjs/common'
-import { CatEntity } from '../__tests__/cat.entity'
-import { CatToyEntity } from '../__tests__/cat-toy.entity'
-import { CatHomeEntity } from '../__tests__/cat-home.entity'
-import { CatHomePillowEntity } from '../__tests__/cat-home-pillow.entity'
+import { CatEntity } from './__tests__/cat.entity'
+import { CatToyEntity } from './__tests__/cat-toy.entity'
+import { CatHomeEntity } from './__tests__/cat-home.entity'
+import { CatHomePillowEntity } from './__tests__/cat-home-pillow.entity'
 import { clone } from 'lodash'
 import {
     getFilterTokens,

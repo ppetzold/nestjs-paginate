@@ -7,7 +7,7 @@ import {
     ObjectLiteral,
     FindOptionsUtils,
 } from 'typeorm'
-import { PaginateQuery } from '../decorator'
+import { PaginateQuery } from './decorator'
 import { ServiceUnavailableException, Logger } from '@nestjs/common'
 import { mapKeys } from 'lodash'
 import { stringify } from 'querystring'
