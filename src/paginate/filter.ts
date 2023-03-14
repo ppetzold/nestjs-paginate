@@ -1,6 +1,21 @@
-import { Brackets, FindOperator, SelectQueryBuilder } from 'typeorm'
+import { values } from 'lodash'
+import {
+    Brackets,
+    Equal,
+    FindOperator,
+    In,
+    MoreThan,
+    MoreThanOrEqual,
+    IsNull,
+    LessThan,
+    LessThanOrEqual,
+    Between,
+    ILike,
+    Not,
+    SelectQueryBuilder,
+} from 'typeorm'
 import { WherePredicateOperator } from 'typeorm/query-builder/WhereClause'
-import { PaginateQuery } from './decorator'
+import { PaginateQuery } from '../decorator'
 import {
     checkIsEmbedded,
     checkIsRelation,
@@ -8,16 +23,57 @@ import {
     fixColumnAlias,
     getPropertiesByColumnName,
 } from './helper'
-import {
-    FilterComparator,
-    FilterOperator,
-    FilterSuffix,
-    isComparator,
-    isOperator,
-    isSuffix,
-    OperatorSymbolToFunction,
-} from './operator'
-import { PaginateConfig } from './paginate'
+
+export enum FilterOperator {
+    EQ = '$eq',
+    GT = '$gt',
+    GTE = '$gte',
+    IN = '$in',
+    NULL = '$null',
+    LT = '$lt',
+    LTE = '$lte',
+    BTW = '$btw',
+    ILIKE = '$ilike',
+    SW = '$sw',
+}
+
+export function isOperator(value: unknown): value is FilterOperator {
+    return values(FilterOperator).includes(value as any)
+}
+
+export enum FilterSuffix {
+    NOT = '$not',
+}
+
+export function isSuffix(value: unknown): value is FilterSuffix {
+    return values(FilterSuffix).includes(value as any)
+}
+
+export enum FilterComparator {
+    AND = '$and',
+    OR = '$or',
+}
+
+export function isComparator(value: unknown): value is FilterComparator {
+    return values(FilterComparator).includes(value as any)
+}
+
+export const OperatorSymbolToFunction = new Map<
+    FilterOperator | FilterSuffix,
+    (...args: any[]) => FindOperator<string>
+>([
+    [FilterOperator.EQ, Equal],
+    [FilterOperator.GT, MoreThan],
+    [FilterOperator.GTE, MoreThanOrEqual],
+    [FilterOperator.IN, In],
+    [FilterOperator.NULL, IsNull],
+    [FilterOperator.LT, LessThan],
+    [FilterOperator.LTE, LessThanOrEqual],
+    [FilterOperator.BTW, Between],
+    [FilterOperator.ILIKE, ILike],
+    [FilterSuffix.NOT, Not],
+    [FilterOperator.SW, ILike],
+])
 
 type Filter = { comparator: FilterComparator; findOperator: FindOperator<string> }
 type ColumnsFilters = { [columnName: string]: Filter[] }
@@ -168,7 +224,7 @@ export function getFilterTokens(raw?: string): FilterToken | null {
 
 export function parseFilter<T>(
     query: PaginateQuery,
-    filterableColumns?: PaginateConfig<T>['filterableColumns']
+    filterableColumns?: { [column: string]: (FilterOperator | FilterSuffix)[] }
 ): ColumnsFilters {
     const filter: ColumnsFilters = {}
     if (!filterableColumns || !query.filter) {
@@ -237,7 +293,7 @@ export function parseFilter<T>(
 export function addFilter<T>(
     qb: SelectQueryBuilder<T>,
     query: PaginateQuery,
-    filterableColumns?: PaginateConfig<T>['filterableColumns']
+    filterableColumns?: { [column: string]: (FilterOperator | FilterSuffix)[] }
 ): SelectQueryBuilder<T> {
     const filter = parseFilter(query, filterableColumns)
     return qb.andWhere(

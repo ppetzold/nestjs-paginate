@@ -34,6 +34,10 @@ export type RelationColumn<T> = Extract<
 export type Order<T> = [Column<T>, 'ASC' | 'DESC']
 export type SortBy<T> = Order<T>[]
 
+export function isEntityKey<T>(entityColumns: Column<T>[], column: string): column is Column<T> {
+    return !!entityColumns.find((c) => c === column)
+}
+
 export const positiveNumberOrDefault = (value: number | undefined, defaultValue: number, minValue: 0 | 1 = 0) =>
     value === undefined || value < minValue ? defaultValue : value
 

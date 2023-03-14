@@ -7,7 +7,7 @@ import {
     ObjectLiteral,
     FindOptionsUtils,
 } from 'typeorm'
-import { PaginateQuery } from './decorator'
+import { PaginateQuery } from '../decorator'
 import { ServiceUnavailableException, Logger } from '@nestjs/common'
 import { mapKeys } from 'lodash'
 import { stringify } from 'querystring'
@@ -25,11 +25,13 @@ import {
     SortBy,
     hasColumnWithPropertyPath,
     includesAllPrimaryKeyColumns,
+    isEntityKey,
 } from './helper'
-import { FilterOperator, FilterSuffix } from './operator'
-import { addFilter } from './filter'
+import { addFilter, FilterOperator, FilterSuffix } from './filter'
 
 const logger: Logger = new Logger('nestjs-paginate')
+
+export { FilterOperator, FilterSuffix }
 
 export class Paginated<T> {
     data: T[]
@@ -121,10 +123,6 @@ export async function paginate<T extends ObjectLiteral>(
         path = queryOrigin + queryPath
     }
 
-    function isEntityKey(entityColumns: Column<T>[], column: string): column is Column<T> {
-        return !!entityColumns.find((c) => c === column)
-    }
-
     if (config.sortableColumns.length < 1) {
         logger.debug("Missing required 'sortableColumns' config.")
         throw new ServiceUnavailableException()
@@ -142,18 +140,6 @@ export async function paginate<T extends ObjectLiteral>(
         sortBy.push(...(config.defaultSortBy || [[config.sortableColumns[0], 'ASC']]))
     }
 
-    if (config.searchableColumns) {
-        if (query.searchBy) {
-            for (const column of query.searchBy) {
-                if (isEntityKey(config.searchableColumns, column)) {
-                    searchBy.push(column)
-                }
-            }
-        } else {
-            searchBy.push(...config.searchableColumns)
-        }
-    }
-
     let [items, totalItems]: [T[], number] = [[], 0]
 
     const queryBuilder = repo instanceof Repository ? repo.createQueryBuilder('__root') : repo
@@ -165,10 +151,12 @@ export async function paginate<T extends ObjectLiteral>(
     }
 
     if (isPaginated) {
-        // Switch from take and skip to limit and offset
-        // due to this problem https://github.com/typeorm/typeorm/issues/5670
-        // (anyway this creates more clean query without double distinct)
-        // queryBuilder.limit(limit).offset((page - 1) * limit)
+        // Allow user to choose between limit/offset and take/skip.
+        // However, using limit/offset can return unexpected results.
+        // For more information see:
+        // [#477](https://github.com/ppetzold/nestjs-paginate/issues/477)
+        // [#4742](https://github.com/typeorm/typeorm/issues/4742)
+        // [#5670](https://github.com/typeorm/typeorm/issues/5670)
         if (paginationType === PaginationType.LIMIT_AND_OFFSET) {
             queryBuilder.limit(limit).offset((page - 1) * limit)
         } else {
@@ -246,6 +234,18 @@ export async function paginate<T extends ObjectLiteral>(
 
     if (config.withDeleted) {
         queryBuilder.withDeleted()
+    }
+
+    if (config.searchableColumns) {
+        if (query.searchBy) {
+            for (const column of query.searchBy) {
+                if (isEntityKey(config.searchableColumns, column)) {
+                    searchBy.push(column)
+                }
+            }
+        } else {
+            searchBy.push(...config.searchableColumns)
+        }
     }
 
     if (query.search && searchBy.length) {
