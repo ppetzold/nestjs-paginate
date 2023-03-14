@@ -222,7 +222,7 @@ export function getFilterTokens(raw?: string): FilterToken | null {
     return token
 }
 
-export function parseFilter<T>(
+export function parseFilter(
     query: PaginateQuery,
     filterableColumns?: { [column: string]: (FilterOperator | FilterSuffix)[] }
 ): ColumnsFilters {
