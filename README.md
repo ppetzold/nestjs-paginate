@@ -93,12 +93,6 @@ http://localhost:3000/cats?limit=5&page=2&sortBy=color:DESC&search=i&filter.age=
 }
 ```
 
-Array values for filter operators such as `$in` should be provided as comma-separated values:
-
-```
-http://localhost:3000/cats?filter.name=$in:George,Milo
-```
-
 #### Code
 
 ```ts
@@ -265,48 +259,14 @@ const paginateConfig: PaginateConfig<CatEntity> {
    * Type: string
    * Description: Allow user to choose between limit/offset and take/skip.
    * Default: PaginationType.TAKE_AND_SKIP
+   *
+   * However, using limit/offset can return unexpected results.
+   * For more information see:
+   * [#477](https://github.com/ppetzold/nestjs-paginate/issues/477)
+   * [#4742](https://github.com/typeorm/typeorm/issues/4742)
+   * [#5670](https://github.com/typeorm/typeorm/issues/5670)
    */
   paginationType: PaginationType.LIMIT_AND_OFFSET,
-}
-```
-
-## Eager loading
-
-Eager loading should work with typeorm's eager property out the box. Like so
-
-```typescript
-import { Entity, OneToMany } from 'typeorm'
-
-@Entity()
-export class CatEntity {
-  @PrimaryGeneratedColumn()
-  id: number
-
-  @Column('text')
-  name: string
-
-  @Column('text')
-  color: string
-
-  @Column('int')
-  age: number
-
-  @OneToMany(() => CatToyEntity, (catToy) => catToy.cat, {
-    eager: true,
-  })
-  toys: CatToyEntity[]
-}
-
-// service
-class CatService {
-  constructor(private readonly catsRepository: Repository<CatEntity>) {}
-
-  public findAll(query: PaginateQuery): Promise<Paginated<CatEntity>> {
-    return paginate(query, this.catsRepository, {
-      sortableColumns: ['id', 'name', 'color', 'age'],
-      loadEagerRelations: true, // set this property as true to enable the eager loading
-    })
-  }
 }
 ```
 
@@ -351,16 +311,26 @@ const config: PaginateConfig<CatEntity> = {
 const result = await paginate<CatEntity>(query, catRepo, config)
 ```
 
-## Usage with nested Relations
+**Note:** Embedded columns on relations have to be wrapped with brackets:
 
-Similar as with relations, you can specify nested relations for sorting, filtering, search and relations:
+```typescript
+const config: PaginateConfig<CatEntity> = {
+  sortableColumns: ['id', 'name', 'toys.(size.height)', 'toys.(size.width)'],
+  searchableColumns: ['name'],
+  relations: ['toys'],
+}
+```
+
+## Usage with Nested Relations
+
+Similar as with relations, you can specify nested relations for sorting, filtering and searching:
 
 ### Example
 
 #### Endpoint
 
 ```url
-http://localhost:3000/cats?filter.home.pillows.color=$eq:ping,String
+http://localhost:3000/cats?filter.home.pillows.color=pink
 ```
 
 #### Code
@@ -376,28 +346,35 @@ const config: PaginateConfig<CatEntity> = {
 const result = await paginate<CatEntity>(query, catRepo, config)
 ```
 
-## Usage of pagination type
+## Usage with Eager Loading
 
-You can use either `limit`/`offset` or `take`/`skip` to return paginated results.
+Eager loading should work with TypeORM's eager property out the box:
 
 ### Example
 
 #### Code
 
 ```typescript
+@Entity()
+export class CatEntity {
+  // ...
+
+  @OneToMany(() => CatToyEntity, (catToy) => catToy.cat, {
+    eager: true,
+  })
+  toys: CatToyEntity[]
+}
+
 const config: PaginateConfig<CatEntity> = {
-  paginationType: PaginationType.LIMIT_AND_OFFSET,
-  // Or
-  paginationType: PaginationType.TAKE_AND_SKIP,
+  loadEagerRelations: true,
+  sortableColumns: ['id', 'name', 'toys.name'],
+  filterableColumns: {
+    'toys.name': [FilterOperator.IN],
+  },
 }
 
 const result = await paginate<CatEntity>(query, catRepo, config)
 ```
-
-> However, using `limit`/`offset` can return unexpected results.   
-> For more information
-> see [#477](https://github.com/ppetzold/nestjs-paginate/issues/477), [#4742](https://github.com/typeorm/typeorm/issues/4742)
-> and [#5670](https://github.com/typeorm/typeorm/issues/5670).
 
 ## Single Filters
 
