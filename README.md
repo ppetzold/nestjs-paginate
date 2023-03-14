@@ -348,7 +348,7 @@ const result = await paginate<CatEntity>(query, catRepo, config)
 
 ## Usage with Eager Loading
 
-Eager loading should work with TypeORM's eager property out the box:
+Eager loading should work with TypeORM's eager property out of the box:
 
 ### Example
 
