@@ -267,6 +267,14 @@ const paginateConfig: PaginateConfig<CatEntity> {
    * [#5670](https://github.com/typeorm/typeorm/issues/5670)
    */
   paginationType: PaginationType.LIMIT_AND_OFFSET,
+
+  /**
+   * Required: false
+   * Type: boolean
+   * Default: false
+   * Description: Load eager relations using TypeORM's eager property.
+   */
+  loadEagerRelations: true
 }
 ```
 
