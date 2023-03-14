@@ -62,13 +62,13 @@ export interface PaginateConfig<T> {
     sortableColumns: Column<T>[]
     nullSort?: 'first' | 'last'
     searchableColumns?: Column<T>[]
-    select?: Column<T>[]
+    select?: Column<T>[] | string[]
     maxLimit?: number
     defaultSortBy?: SortBy<T>
     defaultLimit?: number
     where?: FindOptionsWhere<T> | FindOptionsWhere<T>[]
     filterableColumns?: {
-        [key in Column<T>]?: (FilterOperator | FilterSuffix)[]
+        [key in Column<T> | string]?: (FilterOperator | FilterSuffix)[]
     }
     loadEagerRelations?: boolean
     withDeleted?: boolean
@@ -264,9 +264,10 @@ export async function paginate<T extends ObjectLiteral>(
                         isEmbeded,
                         virtualQuery
                     )
+
                     const condition: WherePredicateOperator = {
                         operator: 'ilike',
-                        parameters: [alias, `:${column}`],
+                        parameters: [alias, `:${property.column}`],
                     }
 
                     if (['postgres', 'cockroachdb'].includes(queryBuilder.connection.options.type)) {
@@ -274,7 +275,7 @@ export async function paginate<T extends ObjectLiteral>(
                     }
 
                     qb.orWhere(qb['createWhereConditionExpression'](condition), {
-                        [column]: `%${query.search}%`,
+                        [property.column]: `%${query.search}%`,
                     })
                 }
             })
