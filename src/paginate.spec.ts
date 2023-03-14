@@ -882,7 +882,7 @@ describe('paginate', () => {
 
     it('should return result based on sort on embedded entity on one-to-many relation', async () => {
         const config: PaginateConfig<CatEntity> = {
-            sortableColumns: ['id', 'name', 'toys.(size.height)' as any, 'toys.(size.length)', 'toys.(size.width)'],
+            sortableColumns: ['id', 'name', 'toys.(size.height)', 'toys.(size.length)', 'toys.(size.width)'],
             searchableColumns: ['name'],
             relations: ['toys'],
         }
@@ -924,7 +924,7 @@ describe('paginate', () => {
 
     it('should return result based on sort on embedded entity on many-to-one relation', async () => {
         const config: PaginateConfig<CatToyEntity> = {
-            sortableColumns: ['id', 'name', 'cat.(size.height)' as any, 'cat.(size.length)', 'cat.(size.width)'],
+            sortableColumns: ['id', 'name', 'cat.(size.height)', 'cat.(size.length)', 'cat.(size.width)'],
             searchableColumns: ['name'],
             relations: ['cat'],
         }
@@ -948,7 +948,7 @@ describe('paginate', () => {
 
     it('should return result based on sort on embedded entity on one-to-one relation', async () => {
         const config: PaginateConfig<CatHomeEntity> = {
-            sortableColumns: ['id', 'name', 'cat.(size.height)' as any, 'cat.(size.length)', 'cat.(size.width)'],
+            sortableColumns: ['id', 'name', 'cat.(size.height)', 'cat.(size.length)', 'cat.(size.width)'],
             searchableColumns: ['name'],
             relations: ['cat'],
         }
@@ -1008,8 +1008,8 @@ describe('paginate', () => {
 
     it('should return result based on search term on embedded entity on many-to-one relation', async () => {
         const config: PaginateConfig<CatToyEntity> = {
-            sortableColumns: ['id', 'name', 'cat.(size.height)' as any, 'cat.(size.length)', 'cat.(size.width)'],
-            searchableColumns: ['cat.(size.height)' as any],
+            sortableColumns: ['id', 'name', 'cat.(size.height)', 'cat.(size.length)', 'cat.(size.width)'],
+            searchableColumns: ['cat.(size.height)'],
             relations: ['cat'],
         }
         const query: PaginateQuery = {
@@ -1025,8 +1025,8 @@ describe('paginate', () => {
 
     it('should return result based on search term on embedded entity on one-to-many relation', async () => {
         const config: PaginateConfig<CatEntity> = {
-            sortableColumns: ['id', 'name', 'toys.(size.height)' as any, 'toys.(size.length)', 'toys.(size.width)'],
-            searchableColumns: ['toys.(size.height)' as any],
+            sortableColumns: ['id', 'name', 'toys.(size.height)', 'toys.(size.length)', 'toys.(size.width)'],
+            searchableColumns: ['toys.(size.height)'],
             relations: ['toys'],
         }
         const query: PaginateQuery = {
@@ -1051,8 +1051,8 @@ describe('paginate', () => {
 
     it('should return result based on search term on embedded entity on one-to-one relation', async () => {
         const config: PaginateConfig<CatHomeEntity> = {
-            sortableColumns: ['id', 'name', 'cat.(size.height)' as any, 'cat.(size.length)', 'cat.(size.width)'],
-            searchableColumns: ['cat.(size.height)' as any],
+            sortableColumns: ['id', 'name', 'cat.(size.height)', 'cat.(size.length)', 'cat.(size.width)'],
+            searchableColumns: ['cat.(size.height)'],
             relations: ['cat'],
         }
         const query: PaginateQuery = {
@@ -1069,8 +1069,8 @@ describe('paginate', () => {
 
     it('should return result based on sort and search on embedded many-to-one relation', async () => {
         const config: PaginateConfig<CatToyEntity> = {
-            sortableColumns: ['id', 'name', 'cat.(size.height)' as any, 'cat.(size.length)', 'cat.(size.width)'],
-            searchableColumns: ['cat.(size.width)' as any],
+            sortableColumns: ['id', 'name', 'cat.(size.height)', 'cat.(size.length)', 'cat.(size.width)'],
+            searchableColumns: ['cat.(size.width)'],
             relations: ['cat'],
         }
         const query: PaginateQuery = {

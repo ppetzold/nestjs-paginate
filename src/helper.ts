@@ -37,17 +37,17 @@ export type SortBy<T> = Order<T>[]
 export const positiveNumberOrDefault = (value: number | undefined, defaultValue: number, minValue: 0 | 1 = 0) =>
     value === undefined || value < minValue ? defaultValue : value
 
-export type ColumnProperties = { propertyPath?: string; propertyName: string; isNested: boolean; column: string }
+export type ColumnProperties = { propertyPath?: string; propertyName: string; isEmbedded: boolean; column: string }
 
 export function getPropertiesByColumnName(column: string): ColumnProperties {
     const propertyPath = column.split('.')
     if (propertyPath.length > 1) {
         const propertyNamePath = propertyPath.slice(1)
-        let isNested = false,
+        let isEmbedded = false,
             propertyName = propertyNamePath.join('.')
 
         if (!propertyName.startsWith('(') && propertyNamePath.length > 1) {
-            isNested = true
+            isEmbedded = true
         }
 
         propertyName = propertyName.replace('(', '').replace(')', '')
@@ -55,11 +55,11 @@ export function getPropertiesByColumnName(column: string): ColumnProperties {
         return {
             propertyPath: propertyPath[0],
             propertyName, // the join is in case of an embedded entity
-            isNested,
+            isEmbedded,
             column: `${propertyPath[0]}.${propertyName}`,
         }
     } else {
-        return { propertyName: propertyPath[0], isNested: false, column: propertyPath[0] }
+        return { propertyName: propertyPath[0], isEmbedded: false, column: propertyPath[0] }
     }
 }
 
@@ -124,7 +124,7 @@ export function fixColumnAlias(
     if (isRelation) {
         if (isVirtualProperty && query) {
             return `(${query(`${alias}_${properties.propertyPath}`)})` // () is needed to avoid parameter conflict
-        } else if ((isVirtualProperty && !query) || properties.isNested) {
+        } else if ((isVirtualProperty && !query) || properties.isEmbedded) {
             return `${alias}_${properties.propertyPath}_${properties.propertyName}`
         } else {
             return `${alias}_${properties.propertyPath}.${properties.propertyName}`
