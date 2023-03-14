@@ -259,6 +259,14 @@ const paginateConfig: PaginateConfig<CatEntity> {
    * Description: Overrides the origin of absolute resource links if set.
    */
   origin: 'http://cats.example',
+
+  /**
+   * Required: false
+   * Type: string
+   * Description: Allow user to choose between limit/offset and take/skip.
+   * Default: PaginationType.TAKE_AND_SKIP
+   */
+  paginationType: PaginationType.LIMIT_AND_OFFSET,
 }
 ```
 
@@ -367,6 +375,29 @@ const config: PaginateConfig<CatEntity> = {
 
 const result = await paginate<CatEntity>(query, catRepo, config)
 ```
+
+## Usage of pagination type
+
+You can use either `limit`/`offset` or `take`/`skip` to return paginated results.
+
+### Example
+
+#### Code
+
+```typescript
+const config: PaginateConfig<CatEntity> = {
+  paginationType: PaginationType.LIMIT_AND_OFFSET,
+  // Or
+  paginationType: PaginationType.TAKE_AND_SKIP,
+}
+
+const result = await paginate<CatEntity>(query, catRepo, config)
+```
+
+> However, using `limit`/`offset` can return unexpected results.   
+> For more information
+> see [#477](https://github.com/ppetzold/nestjs-paginate/issues/477), [#4742](https://github.com/typeorm/typeorm/issues/4742)
+> and [#5670](https://github.com/typeorm/typeorm/issues/5670).
 
 ## Single Filters
 
