@@ -15,7 +15,7 @@ Pagination and filtering helper method for TypeORM repositories or query builder
 - Search across columns
 - Select columns
 - Filter using operators (`$eq`, `$not`, `$null`, `$in`, `$gt`, `$gte`, `$lt`, `$lte`, `$btw`, `$ilike`, `$sw`)
-- Include relations
+- Include relations and nested relations
 - Virtual column support
 
 ## Installation
@@ -338,6 +338,31 @@ const config: PaginateConfig<CatEntity> = {
   filterableColumns: {
     'toys.name': [FilterOperator.IN],
   },
+}
+
+const result = await paginate<CatEntity>(query, catRepo, config)
+```
+
+## Usage with nested Relations
+
+Similar as with relations, you can specify nested relations for sorting, filtering, search and relations:
+
+### Example
+
+#### Endpoint
+
+```url
+http://localhost:3000/cats?filter.home.pillows.color=$eq:ping,String
+```
+
+#### Code
+
+```typescript
+const config: PaginateConfig<CatEntity> = {
+  relations: { home: { pillows: true } },
+  sortableColumns: ['id', 'name', 'home.pillows.color'],
+  searchableColumns: ['name', 'home.pillows.color'],
+  filterableColumns: { 'home.pillows.color': [FilterOperator.EQ] },
 }
 
 const result = await paginate<CatEntity>(query, catRepo, config)
