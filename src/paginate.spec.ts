@@ -882,7 +882,7 @@ describe('paginate', () => {
 
     it('should return result based on sort on embedded entity on one-to-many relation', async () => {
         const config: PaginateConfig<CatEntity> = {
-            sortableColumns: ['id', 'name', 'toys.size.height', 'toys.size.length', 'toys.size.width'],
+            sortableColumns: ['id', 'name', 'toys.(size.height)', 'toys.(size.length)', 'toys.(size.width)'],
             searchableColumns: ['name'],
             relations: ['toys'],
         }
@@ -890,8 +890,8 @@ describe('paginate', () => {
             path: '',
             sortBy: [
                 ['id', 'DESC'],
-                ['toys.size.height', 'ASC'],
-                ['toys.size.length', 'ASC'],
+                ['toys.(size.height)', 'ASC'],
+                ['toys.(size.length)', 'ASC'],
             ],
         }
 
@@ -918,21 +918,21 @@ describe('paginate', () => {
         ]
         expect(result.data).toStrictEqual(orderedCats)
         expect(result.links.current).toBe(
-            '?page=1&limit=20&sortBy=id:DESC&sortBy=toys.size.height:ASC&sortBy=toys.size.length:ASC'
+            '?page=1&limit=20&sortBy=id:DESC&sortBy=toys.(size.height):ASC&sortBy=toys.(size.length):ASC'
         )
     })
 
     it('should return result based on sort on embedded entity on many-to-one relation', async () => {
         const config: PaginateConfig<CatToyEntity> = {
-            sortableColumns: ['id', 'name', 'cat.size.height', 'cat.size.length', 'cat.size.width'],
+            sortableColumns: ['id', 'name', 'cat.(size.height)', 'cat.(size.length)', 'cat.(size.width)'],
             searchableColumns: ['name'],
             relations: ['cat'],
         }
         const query: PaginateQuery = {
             path: '',
             sortBy: [
-                ['cat.size.height', 'DESC'],
-                ['cat.size.length', 'DESC'],
+                ['cat.(size.height)', 'DESC'],
+                ['cat.(size.length)', 'DESC'],
                 ['name', 'ASC'],
             ],
         }
@@ -942,19 +942,19 @@ describe('paginate', () => {
 
         expect(result.data).toStrictEqual(orderedToys)
         expect(result.links.current).toBe(
-            '?page=1&limit=20&sortBy=cat.size.height:DESC&sortBy=cat.size.length:DESC&sortBy=name:ASC'
+            '?page=1&limit=20&sortBy=cat.(size.height):DESC&sortBy=cat.(size.length):DESC&sortBy=name:ASC'
         )
     })
 
     it('should return result based on sort on embedded entity on one-to-one relation', async () => {
         const config: PaginateConfig<CatHomeEntity> = {
-            sortableColumns: ['id', 'name', 'cat.size.height', 'cat.size.length', 'cat.size.width'],
+            sortableColumns: ['id', 'name', 'cat.(size.height)', 'cat.(size.length)', 'cat.(size.width)'],
             searchableColumns: ['name'],
             relations: ['cat'],
         }
         const query: PaginateQuery = {
             path: '',
-            sortBy: [['cat.size.height', 'DESC']],
+            sortBy: [['cat.(size.height)', 'DESC']],
         }
 
         const result = await paginate<CatHomeEntity>(query, catHomeRepo, config)
@@ -964,7 +964,7 @@ describe('paginate', () => {
         orderedHomes[1].countCat = cats.filter((cat) => cat.id === orderedHomes[1].cat.id).length
 
         expect(result.data).toStrictEqual(orderedHomes)
-        expect(result.links.current).toBe('?page=1&limit=20&sortBy=cat.size.height:DESC')
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=cat.(size.height):DESC')
     })
 
     it('should return result based on search on embedded entity', async () => {
@@ -1008,8 +1008,8 @@ describe('paginate', () => {
 
     it('should return result based on search term on embedded entity on many-to-one relation', async () => {
         const config: PaginateConfig<CatToyEntity> = {
-            sortableColumns: ['id', 'name', 'cat.size.height', 'cat.size.length', 'cat.size.width'],
-            searchableColumns: ['cat.size.height'],
+            sortableColumns: ['id', 'name', 'cat.(size.height)', 'cat.(size.length)', 'cat.(size.width)'],
+            searchableColumns: ['cat.(size.height)'],
             relations: ['cat'],
         }
         const query: PaginateQuery = {
@@ -1025,8 +1025,8 @@ describe('paginate', () => {
 
     it('should return result based on search term on embedded entity on one-to-many relation', async () => {
         const config: PaginateConfig<CatEntity> = {
-            sortableColumns: ['id', 'name', 'toys.size.height', 'toys.size.length', 'toys.size.width'],
-            searchableColumns: ['toys.size.height'],
+            sortableColumns: ['id', 'name', 'toys.(size.height)', 'toys.(size.length)', 'toys.(size.width)'],
+            searchableColumns: ['toys.(size.height)'],
             relations: ['toys'],
         }
         const query: PaginateQuery = {
@@ -1051,8 +1051,8 @@ describe('paginate', () => {
 
     it('should return result based on search term on embedded entity on one-to-one relation', async () => {
         const config: PaginateConfig<CatHomeEntity> = {
-            sortableColumns: ['id', 'name', 'cat.size.height', 'cat.size.length', 'cat.size.width'],
-            searchableColumns: ['cat.size.height'],
+            sortableColumns: ['id', 'name', 'cat.(size.height)', 'cat.(size.length)', 'cat.(size.width)'],
+            searchableColumns: ['cat.(size.height)'],
             relations: ['cat'],
         }
         const query: PaginateQuery = {
@@ -1069,20 +1069,20 @@ describe('paginate', () => {
 
     it('should return result based on sort and search on embedded many-to-one relation', async () => {
         const config: PaginateConfig<CatToyEntity> = {
-            sortableColumns: ['id', 'name', 'cat.size.height', 'cat.size.length', 'cat.size.width'],
-            searchableColumns: ['cat.size.width'],
+            sortableColumns: ['id', 'name', 'cat.(size.height)', 'cat.(size.length)', 'cat.(size.width)'],
+            searchableColumns: ['cat.(size.width)'],
             relations: ['cat'],
         }
         const query: PaginateQuery = {
             path: '',
             search: '1',
-            sortBy: [['cat.size.height', 'DESC']],
+            sortBy: [['cat.(size.height)', 'DESC']],
         }
 
         const result = await paginate<CatToyEntity>(query, catToyRepo, config)
         expect(result.meta.search).toStrictEqual('1')
         expect(result.data).toStrictEqual([catToys[3], catToys[0], catToys[1], catToys[2]])
-        expect(result.links.current).toBe('?page=1&limit=20&sortBy=cat.size.height:DESC&search=1')
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=cat.(size.height):DESC&search=1')
     })
 
     it('should return result based on filter on embedded entity', async () => {
@@ -1143,23 +1143,23 @@ describe('paginate', () => {
             relations: ['cat'],
             sortableColumns: ['id', 'name'],
             filterableColumns: {
-                'cat.size.height': [FilterSuffix.NOT],
+                'cat.(size.height)': [FilterSuffix.NOT],
             },
         }
         const query: PaginateQuery = {
             path: '',
             filter: {
-                'cat.size.height': '$not:25',
+                'cat.(size.height)': '$not:25',
             },
         }
 
         const result = await paginate<CatToyEntity>(query, catToyRepo, config)
 
         expect(result.meta.filter).toStrictEqual({
-            'cat.size.height': '$not:25',
+            'cat.(size.height)': '$not:25',
         })
         expect(result.data).toStrictEqual([catToys[3]])
-        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.cat.size.height=$not:25')
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.cat.(size.height)=$not:25')
     })
 
     it('should return result based on filter on embedded on one-to-many relation', async () => {
@@ -1167,13 +1167,13 @@ describe('paginate', () => {
             relations: ['toys'],
             sortableColumns: ['id', 'name'],
             filterableColumns: {
-                'toys.size.height': [FilterOperator.EQ],
+                'toys.(size.height)': [FilterOperator.EQ],
             },
         }
         const query: PaginateQuery = {
             path: '',
             filter: {
-                'toys.size.height': '1',
+                'toys.(size.height)': '1',
             },
         }
 
@@ -1185,10 +1185,10 @@ describe('paginate', () => {
         cat2.toys = [catToys3]
 
         expect(result.meta.filter).toStrictEqual({
-            'toys.size.height': '1',
+            'toys.(size.height)': '1',
         })
         expect(result.data).toStrictEqual([cat2])
-        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.toys.size.height=1')
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.toys.(size.height)=1')
     })
 
     it('should return result based on filter on embedded on one-to-one relation', async () => {
@@ -1196,25 +1196,25 @@ describe('paginate', () => {
             relations: ['cat'],
             sortableColumns: ['id', 'name'],
             filterableColumns: {
-                'cat.size.height': [FilterOperator.EQ],
+                'cat.(size.height)': [FilterOperator.EQ],
             },
         }
         const query: PaginateQuery = {
             path: '',
             filter: {
-                'cat.size.height': '$eq:30',
+                'cat.(size.height)': '$eq:30',
             },
         }
 
         const result = await paginate<CatHomeEntity>(query, catHomeRepo, config)
 
         expect(result.meta.filter).toStrictEqual({
-            'cat.size.height': '$eq:30',
+            'cat.(size.height)': '$eq:30',
         })
         const catClone = clone(catHomes[1])
         catClone.countCat = cats.filter((cat) => cat.size.height === 30 && cat.id == catClone.cat.id).length
         expect(result.data).toStrictEqual([catClone])
-        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.cat.size.height=$eq:30')
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.cat.(size.height)=$eq:30')
     })
 
     it('should return result based on $in filter on embedded on one-to-one relation', async () => {
@@ -1222,20 +1222,20 @@ describe('paginate', () => {
             relations: ['cat'],
             sortableColumns: ['id', 'name'],
             filterableColumns: {
-                'cat.size.height': [FilterOperator.IN],
+                'cat.(size.height)': [FilterOperator.IN],
             },
         }
         const query: PaginateQuery = {
             path: '',
             filter: {
-                'cat.size.height': '$in:10,30,35',
+                'cat.(size.height)': '$in:10,30,35',
             },
         }
 
         const result = await paginate<CatHomeEntity>(query, catHomeRepo, config)
 
         expect(result.meta.filter).toStrictEqual({
-            'cat.size.height': '$in:10,30,35',
+            'cat.(size.height)': '$in:10,30,35',
         })
         const catClone = clone(catHomes[1])
         catClone.countCat = cats.filter(
@@ -1244,7 +1244,7 @@ describe('paginate', () => {
                 cat.id == catClone.cat.id
         ).length
         expect(result.data).toStrictEqual([catClone])
-        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.cat.size.height=$in:10,30,35')
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.cat.(size.height)=$in:10,30,35')
     })
 
     it('should return result based on $btw filter on embedded on one-to-one relation', async () => {
@@ -1252,20 +1252,20 @@ describe('paginate', () => {
             relations: ['cat'],
             sortableColumns: ['id', 'name'],
             filterableColumns: {
-                'cat.size.height': [FilterOperator.BTW],
+                'cat.(size.height)': [FilterOperator.BTW],
             },
         }
         const query: PaginateQuery = {
             path: '',
             filter: {
-                'cat.size.height': '$btw:18,33',
+                'cat.(size.height)': '$btw:18,33',
             },
         }
 
         const result = await paginate<CatHomeEntity>(query, catHomeRepo, config)
 
         expect(result.meta.filter).toStrictEqual({
-            'cat.size.height': '$btw:18,33',
+            'cat.(size.height)': '$btw:18,33',
         })
 
         const catHomeClone = clone(catHomes)
@@ -1276,7 +1276,7 @@ describe('paginate', () => {
             (cat) => cat.size.height >= 18 && cat.size.height <= 33 && cat.id == catHomeClone[1].cat.id
         ).length
         expect(result.data).toStrictEqual([catHomeClone[0], catHomeClone[1]])
-        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.cat.size.height=$btw:18,33')
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.cat.(size.height)=$btw:18,33')
     })
 
     it('should return result based on where array and filter', async () => {
@@ -1954,12 +1954,12 @@ describe('paginate', () => {
     it('should return selected columns', async () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id', 'name'],
-            select: ['id', 'name', 'toys.name', 'toys.size.height', 'toys.size.length'],
+            select: ['id', 'name', 'toys.name', 'toys.(size.height)', 'toys.(size.length)'],
             relations: ['toys'],
         }
         const query: PaginateQuery = {
             path: '',
-            select: ['id', 'toys.size.height'],
+            select: ['id', 'toys.(size.height)'],
         }
 
         const result = await paginate<CatEntity>(query, catRepo, config)
@@ -2014,5 +2014,63 @@ describe('paginate', () => {
         expect(result.data[0].toys).toBeDefined()
 
         expect(result.data[0].toys).toHaveLength(1)
+    })
+
+    it('should search nested relations', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            relations: { home: { pillows: true } },
+            sortableColumns: ['id', 'name'],
+            searchableColumns: ['name', 'home.pillows.color'],
+        }
+        const query: PaginateQuery = {
+            path: '',
+            search: 'pink',
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        const cat = clone(cats[1])
+        const catHomesClone = clone(catHomes[1])
+        const catHomePillowsClone = clone(catHomePillows[3])
+        delete catHomePillowsClone.home
+
+        catHomesClone.countCat = cats.filter((cat) => cat.id === catHomesClone.cat.id).length
+        catHomesClone.pillows = [catHomePillowsClone]
+        cat.home = catHomesClone
+        delete cat.home.cat
+
+        expect(result.meta.search).toStrictEqual('pink')
+        expect(result.data).toStrictEqual([cat])
+        expect(result.data[0].home).toBeDefined()
+        expect(result.data[0].home.pillows).toStrictEqual(cat.home.pillows)
+    })
+
+    it('should filter nested relations', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            relations: { home: { pillows: true } },
+            sortableColumns: ['id', 'name'],
+            filterableColumns: { 'home.pillows.color': [FilterOperator.EQ] },
+        }
+        const query: PaginateQuery = {
+            path: '',
+            filter: { 'home.pillows.color': 'pink' },
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        const cat = clone(cats[1])
+        const catHomesClone = clone(catHomes[1])
+        const catHomePillowsClone = clone(catHomePillows[3])
+        delete catHomePillowsClone.home
+
+        catHomesClone.countCat = cats.filter((cat) => cat.id === catHomesClone.cat.id).length
+        catHomesClone.pillows = [catHomePillowsClone]
+        cat.home = catHomesClone
+        delete cat.home.cat
+
+        expect(result.meta.filter['home.pillows.color']).toStrictEqual('pink')
+        expect(result.data).toStrictEqual([cat])
+        expect(result.data[0].home).toBeDefined()
+        expect(result.data[0].home.pillows).toStrictEqual(cat.home.pillows)
     })
 })
