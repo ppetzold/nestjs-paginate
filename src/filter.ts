@@ -1,16 +1,17 @@
 import { values } from 'lodash'
 import {
+    ArrayContains,
+    Between,
     Brackets,
     Equal,
     FindOperator,
+    ILike,
     In,
-    MoreThan,
-    MoreThanOrEqual,
     IsNull,
     LessThan,
     LessThanOrEqual,
-    Between,
-    ILike,
+    MoreThan,
+    MoreThanOrEqual,
     Not,
     SelectQueryBuilder,
 } from 'typeorm'
@@ -35,6 +36,7 @@ export enum FilterOperator {
     BTW = '$btw',
     ILIKE = '$ilike',
     SW = '$sw',
+    CONTAINS = '$contains',
 }
 
 export function isOperator(value: unknown): value is FilterOperator {
@@ -73,6 +75,7 @@ export const OperatorSymbolToFunction = new Map<
     [FilterOperator.ILIKE, ILike],
     [FilterSuffix.NOT, Not],
     [FilterOperator.SW, ILike],
+    [FilterOperator.CONTAINS, ArrayContains],
 ])
 
 type Filter = { comparator: FilterComparator; findOperator: FindOperator<string> }
@@ -264,6 +267,7 @@ export function parseFilter(
                     params.findOperator = OperatorSymbolToFunction.get(token.operator)(...token.value.split(','))
                     break
                 case FilterOperator.IN:
+                case FilterOperator.CONTAINS: // <- IN and CONTAINS are identically handled.
                     params.findOperator = OperatorSymbolToFunction.get(token.operator)(token.value.split(','))
                     break
                 case FilterOperator.ILIKE:

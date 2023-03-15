@@ -14,7 +14,7 @@ Pagination and filtering helper method for TypeORM repositories or query builder
 - Sort by multiple columns
 - Search across columns
 - Select columns
-- Filter using operators (`$eq`, `$not`, `$null`, `$in`, `$gt`, `$gte`, `$lt`, `$lte`, `$btw`, `$ilike`, `$sw`)
+- Filter using operators (`$eq`, `$not`, `$null`, `$in`, `$gt`, `$gte`, `$lt`, `$lte`, `$btw`, `$ilike`, `$sw`, `$contains`)
 - Include relations and nested relations
 - Virtual column support
 
@@ -405,6 +405,10 @@ Filter operators must be whitelisted per column in `PaginateConfig`.
 `?filter.seenAt=$not:$null` where column `seenAt` is **not** `NULL`
 
 `?filter.createdAt=$btw:2022-02-02,2022-02-10` where column `createdAt` is between the dates `2022-02-02` and `2022-02-10`
+
+`?filter.roles=$contains:Moderator` where column `roles` is an array and contains the value "Moderator".
+
+`?filter.roles=$contains:Moderator,Admin` where column `roles` is an array and contains the values "Moderator" and "Admin".
 
 ## Multi Filters
 
