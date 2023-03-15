@@ -1,6 +1,6 @@
 import { values } from 'lodash'
 import {
-    ArrayIncludes,
+    ArrayContains,
     Between,
     Brackets,
     Equal,
@@ -36,7 +36,7 @@ export enum FilterOperator {
     BTW = '$btw',
     ILIKE = '$ilike',
     SW = '$sw',
-    CONTAINS = "$contains",
+    CONTAINS = '$contains',
 }
 
 export function isOperator(value: unknown): value is FilterOperator {
@@ -75,7 +75,7 @@ export const OperatorSymbolToFunction = new Map<
     [FilterOperator.ILIKE, ILike],
     [FilterSuffix.NOT, Not],
     [FilterOperator.SW, ILike],
-    [FilterOperator.CONTAINS, ArrayIncludes]
+    [FilterOperator.CONTAINS, ArrayContains],
 ])
 
 type Filter = { comparator: FilterComparator; findOperator: FindOperator<string> }
