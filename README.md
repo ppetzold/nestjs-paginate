@@ -408,6 +408,8 @@ Filter operators must be whitelisted per column in `PaginateConfig`.
 
 `?filter.roles=$contains:Moderator` where column `roles` is an array and contains the value "Moderator".
 
+`?filter.roles=$contains:Moderator,Admin` where column `roles` is an array and contains the values "Moderator" and "Admin".
+
 ## Multi Filters
 
 Multi filters are filters that can be applied to a single column with a comparator. As for single filters, multi filters must be whitelisted per column in `PaginateConfig`.

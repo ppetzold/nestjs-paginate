@@ -267,6 +267,7 @@ export function parseFilter(
                     params.findOperator = OperatorSymbolToFunction.get(token.operator)(...token.value.split(','))
                     break
                 case FilterOperator.IN:
+                case FilterOperator.CONTAINS: // <- IN and CONTAINS are identically handled.
                     params.findOperator = OperatorSymbolToFunction.get(token.operator)(token.value.split(','))
                     break
                 case FilterOperator.ILIKE:
