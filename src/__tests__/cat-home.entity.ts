@@ -10,6 +10,9 @@ export class CatHomeEntity {
     @Column()
     name: string
 
+    @Column({ nullable: true })
+    street: string | null
+
     @OneToOne(() => CatEntity, (cat) => cat.home)
     cat: CatEntity
 
