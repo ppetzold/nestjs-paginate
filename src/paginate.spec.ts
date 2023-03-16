@@ -1120,7 +1120,7 @@ describe('paginate', () => {
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&search=1')
     })
 
-    it.only('should return result based on search term on embedded entity on one-to-one relation', async () => {
+    it('should return result based on search term on embedded entity on one-to-one relation', async () => {
         const config: PaginateConfig<CatHomeEntity> = {
             sortableColumns: ['id', 'name', 'cat.(size.height)', 'cat.(size.length)', 'cat.(size.width)'],
             searchableColumns: ['cat.(size.height)'],
