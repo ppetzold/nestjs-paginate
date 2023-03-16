@@ -14,6 +14,20 @@ jobs:
       matrix:
         node-version: [14.x, 16.x, 18.x]
 
+    services:
+      postgres:
+        image: postgres:latest
+        env:
+          POSTGRES_USER: root
+          POSTGRES_PASSWORD: pass
+          POSTGRES_DB: test
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - uses: actions/checkout@v3
       - name: Use Node.js ${{ matrix.node-version }}
@@ -24,6 +38,10 @@ jobs:
       - run: npm run format:ci
       - run: npm run lint
       - run: npm run build
+
+      # TODO: run postgres and sqlite in parallel
+      - run: DB=postgres npm run test
+
       - run: npm run test:cov
       - run: bash <(curl -s https://codecov.io/bash)
       - name: Semantic Release
