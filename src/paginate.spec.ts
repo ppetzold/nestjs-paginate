@@ -44,7 +44,7 @@ describe('paginate', () => {
                       database: ':memory:',
                   }),
             synchronize: true,
-            logging: true,
+            logging: false,
             entities: [CatEntity, CatToyEntity, CatHomeEntity, CatHomePillowEntity],
         })
         await dataSource.initialize()

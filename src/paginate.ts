@@ -26,7 +26,6 @@ import {
     hasColumnWithPropertyPath,
     includesAllPrimaryKeyColumns,
     isEntityKey,
-    quotifyColumn,
 } from './helper'
 import { addFilter, FilterOperator, FilterSuffix } from './filter'
 
