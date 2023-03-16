@@ -2,7 +2,7 @@ import { Repository, In, DataSource, TypeORMError } from 'typeorm'
 import { Paginated, paginate, PaginateConfig, NO_PAGINATION } from './paginate'
 import { PaginateQuery } from './decorator'
 import { HttpException } from '@nestjs/common'
-import { CatEntity } from './__tests__/cat.entity'
+import { CatEntity, CutenessLevel } from './__tests__/cat.entity'
 import { CatToyEntity } from './__tests__/cat-toy.entity'
 import { CatHomeEntity } from './__tests__/cat-home.entity'
 import { CatHomePillowEntity } from './__tests__/cat-home-pillow.entity'
@@ -30,8 +30,19 @@ describe('paginate', () => {
 
     beforeAll(async () => {
         dataSource = new DataSource({
-            type: 'sqlite',
-            database: ':memory:',
+            ...(process.env.DB === 'postgres'
+                ? {
+                      type: 'postgres',
+                      host: 'localhost',
+                      port: 5432,
+                      username: 'root',
+                      password: 'pass',
+                      database: 'test',
+                  }
+                : {
+                      type: 'sqlite',
+                      database: ':memory:',
+                  }),
             synchronize: true,
             logging: false,
             entities: [CatEntity, CatToyEntity, CatHomeEntity, CatHomePillowEntity],
@@ -43,11 +54,41 @@ describe('paginate', () => {
         catHomePillowRepo = dataSource.getRepository(CatHomePillowEntity)
 
         cats = await catRepo.save([
-            catRepo.create({ name: 'Milo', color: 'brown', age: 6, size: { height: 25, width: 10, length: 40 } }),
-            catRepo.create({ name: 'Garfield', color: 'ginger', age: 5, size: { height: 30, width: 15, length: 45 } }),
-            catRepo.create({ name: 'Shadow', color: 'black', age: 4, size: { height: 25, width: 10, length: 50 } }),
-            catRepo.create({ name: 'George', color: 'white', age: 3, size: { height: 35, width: 12, length: 40 } }),
-            catRepo.create({ name: 'Leche', color: 'white', age: null, size: { height: 10, width: 5, length: 15 } }),
+            catRepo.create({
+                name: 'Milo',
+                color: 'brown',
+                age: 6,
+                cutenessLevel: CutenessLevel.HIGH,
+                size: { height: 25, width: 10, length: 40 },
+            }),
+            catRepo.create({
+                name: 'Garfield',
+                color: 'ginger',
+                age: 5,
+                cutenessLevel: CutenessLevel.MEDIUM,
+                size: { height: 30, width: 15, length: 45 },
+            }),
+            catRepo.create({
+                name: 'Shadow',
+                color: 'black',
+                age: 4,
+                cutenessLevel: CutenessLevel.HIGH,
+                size: { height: 25, width: 10, length: 50 },
+            }),
+            catRepo.create({
+                name: 'George',
+                color: 'white',
+                age: 3,
+                cutenessLevel: CutenessLevel.LOW,
+                size: { height: 35, width: 12, length: 40 },
+            }),
+            catRepo.create({
+                name: 'Leche',
+                color: 'white',
+                age: null,
+                cutenessLevel: CutenessLevel.HIGH,
+                size: { height: 10, width: 5, length: 15 },
+            }),
         ])
         catToys = await catToyRepo.save([
             catToyRepo.create({ name: 'Fuzzy Thing', cat: cats[0], size: { height: 10, width: 10, length: 10 } }),
@@ -69,8 +110,38 @@ describe('paginate', () => {
         ])
 
         // add friends to Milo
-        catRepo.save({ ...cats[0], friends: cats.slice(1) })
+        await catRepo.save({ ...cats[0], friends: cats.slice(1) })
     })
+
+    // TODO: Make all tests pass postgres driver.
+    if (process.env.DB === 'postgres') {
+        it('should return result based on search term including a camelcase named column', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id', 'name', 'color'],
+                searchableColumns: ['cutenessLevel'],
+            }
+            const query: PaginateQuery = {
+                path: '',
+                search: 'hi',
+            }
+
+            const result = await paginate<CatEntity>(query, catRepo, config)
+
+            expect(result.meta.search).toStrictEqual('hi')
+            expect(result.data).toStrictEqual([cats[0], cats[2], cats[4]])
+            expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&search=hi')
+        })
+
+        afterAll(async () => {
+            const entities = dataSource.entityMetadatas
+            const tableNames = entities.map((entity) => `"${entity.tableName}"`).join(', ')
+
+            await dataSource.query(`TRUNCATE ${tableNames} CASCADE;`)
+        })
+
+        // We end postgres coverage here. See TODO above.
+        return
+    }
 
     it('should return an instance of Paginated', async () => {
         const config: PaginateConfig<CatEntity> = {
