@@ -161,7 +161,6 @@ const paginateConfig: PaginateConfig<CatEntity> {
   /**
    * Required: false
    * Type: 'first' | 'last'
-   * Default: 'first'
    * Description: (ONLY WORKS WITH POSTGRES) Define whether to put null values
    * at the beginning or end of the result set.
    */

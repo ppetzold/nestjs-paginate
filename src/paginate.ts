@@ -100,8 +100,6 @@ export async function paginate<T extends ObjectLiteral>(
 
     const queryBuilder = repo instanceof Repository ? repo.createQueryBuilder('__root') : repo
 
-    const isPostgres = ['postgres', 'cockroachdb'].includes(queryBuilder.connection.options.type)
-
     if (repo instanceof Repository && !config.relations && config.loadEagerRelations === true) {
         if (!config.relations) {
             FindOptionsUtils.joinEagerRelations(queryBuilder, queryBuilder.alias, repo.metadata)
@@ -143,7 +141,7 @@ export async function paginate<T extends ObjectLiteral>(
         }
     }
 
-    let nullSort: 'NULLS LAST' | 'NULLS FIRST' | undefined = isPostgres ? 'NULLS FIRST' : undefined
+    let nullSort: 'NULLS LAST' | 'NULLS FIRST' | undefined = undefined
     if (config.nullSort) {
         nullSort = config.nullSort === 'last' ? 'NULLS LAST' : 'NULLS FIRST'
     }
@@ -238,7 +236,7 @@ export async function paginate<T extends ObjectLiteral>(
                         parameters: [alias, `:${property.column}`],
                     }
 
-                    if (isPostgres) {
+                    if (['postgres', 'cockroachdb'].includes(queryBuilder.connection.options.type)) {
                         condition.parameters[0] = `CAST(${condition.parameters[0]} AS text)`
                     }
 
