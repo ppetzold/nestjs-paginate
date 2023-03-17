@@ -54,11 +54,6 @@ export class Paginated<T> {
     }
 }
 
-export enum PaginationType {
-    LIMIT_AND_OFFSET = 'limit',
-    TAKE_AND_SKIP = 'take',
-}
-
 export interface PaginateConfig<T> {
     relations?: FindOptionsRelations<T> | RelationColumn<T>[]
     sortableColumns: Column<T>[]
@@ -76,13 +71,11 @@ export interface PaginateConfig<T> {
     withDeleted?: boolean
     relativePath?: boolean
     origin?: string
-    paginationType?: PaginationType
 }
 
 export const DEFAULT_MAX_LIMIT = 100
 export const DEFAULT_LIMIT = 20
 export const NO_PAGINATION = 0
-export const DEFAULT_PAGINATE_TYPE = PaginationType.TAKE_AND_SKIP
 
 export async function paginate<T extends ObjectLiteral>(
     query: PaginateQuery,
@@ -94,7 +87,6 @@ export async function paginate<T extends ObjectLiteral>(
     const defaultLimit = config.defaultLimit || DEFAULT_LIMIT
     const maxLimit = positiveNumberOrDefault(config.maxLimit, DEFAULT_MAX_LIMIT)
     const queryLimit = positiveNumberOrDefault(query.limit, defaultLimit)
-    const paginationType = config.paginationType || DEFAULT_PAGINATE_TYPE
 
     const isPaginated = !(queryLimit === NO_PAGINATION && maxLimit === NO_PAGINATION)
 
@@ -151,17 +143,7 @@ export async function paginate<T extends ObjectLiteral>(
     }
 
     if (isPaginated) {
-        // Allow user to choose between limit/offset and take/skip.
-        // However, using limit/offset can return unexpected results.
-        // For more information see:
-        // [#477](https://github.com/ppetzold/nestjs-paginate/issues/477)
-        // [#4742](https://github.com/typeorm/typeorm/issues/4742)
-        // [#5670](https://github.com/typeorm/typeorm/issues/5670)
-        if (paginationType === PaginationType.LIMIT_AND_OFFSET) {
-            queryBuilder.limit(limit).offset((page - 1) * limit)
-        } else {
-            queryBuilder.take(limit).skip((page - 1) * limit)
-        }
+        queryBuilder.limit(limit).offset((page - 1) * limit)
     }
 
     if (config.relations) {
