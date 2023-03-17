@@ -113,34 +113,13 @@ describe('paginate', () => {
         await catRepo.save({ ...cats[0], friends: cats.slice(1) })
     })
 
-    // TODO: Make all tests pass postgres driver.
     if (process.env.DB === 'postgres') {
-        it('should return result based on search term including a camelcase named column', async () => {
-            const config: PaginateConfig<CatEntity> = {
-                sortableColumns: ['id', 'name', 'color'],
-                searchableColumns: ['cutenessLevel'],
-            }
-            const query: PaginateQuery = {
-                path: '',
-                search: 'hi',
-            }
-
-            const result = await paginate<CatEntity>(query, catRepo, config)
-
-            expect(result.meta.search).toStrictEqual('hi')
-            expect(result.data).toStrictEqual([cats[0], cats[2], cats[4]])
-            expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&search=hi')
-        })
-
         afterAll(async () => {
             const entities = dataSource.entityMetadatas
             const tableNames = entities.map((entity) => `"${entity.tableName}"`).join(', ')
 
             await dataSource.query(`TRUNCATE ${tableNames} CASCADE;`)
         })
-
-        // We end postgres coverage here. See TODO above.
-        return
     }
 
     it('should return an instance of Paginated', async () => {
@@ -501,6 +480,23 @@ describe('paginate', () => {
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&search=i')
     })
 
+    it('should return result based on search term on a camelcase named column', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id', 'name', 'color'],
+            searchableColumns: ['cutenessLevel'],
+        }
+        const query: PaginateQuery = {
+            path: '',
+            search: 'hi',
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        expect(result.meta.search).toStrictEqual('hi')
+        expect(result.data).toStrictEqual([cats[0], cats[2], cats[4]])
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&search=hi')
+    })
+
     it('should not result in a sql syntax error when attempting a sql injection', async () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id', 'name', 'color'],
@@ -537,12 +533,16 @@ describe('paginate', () => {
     it('should return result based on search term on one-to-many relation', async () => {
         const config: PaginateConfig<CatEntity> = {
             relations: ['toys'],
-            sortableColumns: ['id', 'name'],
+            sortableColumns: ['id', 'toys.id'],
             searchableColumns: ['name', 'toys.name'],
         }
         const query: PaginateQuery = {
             path: '',
             search: 'Mouse',
+            sortBy: [
+                ['id', 'ASC'],
+                ['toys.id', 'DESC'],
+            ],
         }
 
         const result = await paginate<CatEntity>(query, catRepo, config)
@@ -554,7 +554,7 @@ describe('paginate', () => {
         delete toy2.cat
 
         expect(result.data).toStrictEqual([Object.assign(clone(cats[0]), { toys: [toy2, toy] })])
-        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&search=Mouse')
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&sortBy=toys.id:DESC&search=Mouse')
     })
 
     it('should return result based on search term on one-to-one relation', async () => {
@@ -903,6 +903,12 @@ describe('paginate', () => {
         expect(result.data).toStrictEqual(orderedCats)
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=size.height:ASC&sortBy=size.length:ASC')
     })
+
+    // TODO: Make all tests pass postgres driver.
+    if (process.env.DB === 'postgres') {
+        // We end postgres coverage here. See TODO above.
+        return
+    }
 
     it('should return result based on sort on embedded entity when other relations loaded', async () => {
         const config: PaginateConfig<CatEntity> = {

@@ -26,6 +26,7 @@ import {
     hasColumnWithPropertyPath,
     includesAllPrimaryKeyColumns,
     isEntityKey,
+    getQueryUrlComponents,
 } from './helper'
 import { addFilter, FilterOperator, FilterSuffix } from './filter'
 
@@ -94,47 +95,12 @@ export async function paginate<T extends ObjectLiteral>(
 
     const sortBy = [] as SortBy<T>
     const searchBy: Column<T>[] = []
-    let path: string
-
-    const r = new RegExp('^(?:[a-z+]+:)?//', 'i')
-    let queryOrigin = ''
-    let queryPath = ''
-    if (r.test(query.path)) {
-        const url = new URL(query.path)
-        queryOrigin = url.origin
-        queryPath = url.pathname
-    } else {
-        queryPath = query.path
-    }
-
-    if (config.relativePath) {
-        path = queryPath
-    } else if (config.origin) {
-        path = config.origin + queryPath
-    } else {
-        path = queryOrigin + queryPath
-    }
-
-    if (config.sortableColumns.length < 1) {
-        logger.debug("Missing required 'sortableColumns' config.")
-        throw new ServiceUnavailableException()
-    }
-
-    if (query.sortBy) {
-        for (const order of query.sortBy) {
-            if (isEntityKey(config.sortableColumns, order[0]) && ['ASC', 'DESC'].includes(order[1])) {
-                sortBy.push(order as Order<T>)
-            }
-        }
-    }
-
-    if (!sortBy.length) {
-        sortBy.push(...(config.defaultSortBy || [[config.sortableColumns[0], 'ASC']]))
-    }
 
     let [items, totalItems]: [T[], number] = [[], 0]
 
     const queryBuilder = repo instanceof Repository ? repo.createQueryBuilder('__root') : repo
+
+    const isPostgres = ['postgres', 'cockroachdb'].includes(queryBuilder.connection.options.type)
 
     if (repo instanceof Repository && !config.relations && config.loadEagerRelations === true) {
         if (!config.relations) {
@@ -177,9 +143,26 @@ export async function paginate<T extends ObjectLiteral>(
         }
     }
 
-    let nullSort: 'NULLS LAST' | 'NULLS FIRST' | undefined = undefined
+    let nullSort: 'NULLS LAST' | 'NULLS FIRST' | undefined = isPostgres ? 'NULLS FIRST' : undefined
     if (config.nullSort) {
         nullSort = config.nullSort === 'last' ? 'NULLS LAST' : 'NULLS FIRST'
+    }
+
+    if (config.sortableColumns.length < 1) {
+        logger.debug("Missing required 'sortableColumns' config.")
+        throw new ServiceUnavailableException()
+    }
+
+    if (query.sortBy) {
+        for (const order of query.sortBy) {
+            if (isEntityKey(config.sortableColumns, order[0]) && ['ASC', 'DESC'].includes(order[1])) {
+                sortBy.push(order as Order<T>)
+            }
+        }
+    }
+
+    if (!sortBy.length) {
+        sortBy.push(...(config.defaultSortBy || [[config.sortableColumns[0], 'ASC']]))
     }
 
     for (const order of sortBy) {
@@ -252,7 +235,7 @@ export async function paginate<T extends ObjectLiteral>(
                         parameters: [alias, `:${property.column}`],
                     }
 
-                    if (['postgres', 'cockroachdb'].includes(queryBuilder.connection.options.type)) {
+                    if (isPostgres) {
                         condition.parameters[0] = `CAST(${condition.parameters[0]} AS text)`
                     }
 
@@ -272,6 +255,16 @@ export async function paginate<T extends ObjectLiteral>(
         ;[items, totalItems] = await queryBuilder.getManyAndCount()
     } else {
         items = await queryBuilder.getMany()
+    }
+
+    let path: string
+    const { queryOrigin, queryPath } = getQueryUrlComponents(query.path)
+    if (config.relativePath) {
+        path = queryPath
+    } else if (config.origin) {
+        path = config.origin + queryPath
+    } else {
+        path = queryOrigin + queryPath
     }
 
     const sortByQuery = sortBy.map((order) => `&sortBy=${order.join(':')}`).join('')
