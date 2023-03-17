@@ -1828,12 +1828,6 @@ describe('paginate', () => {
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=home.countCat:ASC')
     })
 
-    // TODO: Make all tests pass postgres driver.
-    if (process.env.DB === 'postgres') {
-        // We end postgres coverage here. See TODO above.
-        return
-    }
-
     it('should return result based on or between range filter', async () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id'],
