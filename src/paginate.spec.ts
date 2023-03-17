@@ -44,7 +44,7 @@ describe('paginate', () => {
                       database: ':memory:',
                   }),
             synchronize: true,
-            logging: false,
+            logging: true,
             entities: [CatEntity, CatToyEntity, CatHomeEntity, CatHomePillowEntity],
         })
         await dataSource.initialize()
@@ -118,7 +118,7 @@ describe('paginate', () => {
             const entities = dataSource.entityMetadatas
             const tableNames = entities.map((entity) => `"${entity.tableName}"`).join(', ')
 
-            await dataSource.query(`TRUNCATE ${tableNames} CASCADE;`)
+            await dataSource.query(`TRUNCATE ${tableNames} RESTART IDENTITY CASCADE;`)
         })
     }
 
@@ -461,6 +461,27 @@ describe('paginate', () => {
             ['name', 'ASC'],
         ])
         expect(result.data).toStrictEqual([cats[3], cats[4], cats[1], cats[0], cats[2]])
+    })
+
+    it('should sort result by camelcase columns', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['cutenessLevel', 'name'],
+        }
+        const query: PaginateQuery = {
+            path: '',
+            sortBy: [
+                ['cutenessLevel', 'ASC'],
+                ['name', 'ASC'],
+            ],
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        expect(result.meta.sortBy).toStrictEqual([
+            ['cutenessLevel', 'ASC'],
+            ['name', 'ASC'],
+        ])
+        expect(result.data).toStrictEqual([cats[4], cats[0], cats[2], cats[3], cats[1]])
     })
 
     it('should return result based on search term', async () => {
@@ -904,15 +925,9 @@ describe('paginate', () => {
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=size.height:ASC&sortBy=size.length:ASC')
     })
 
-    // TODO: Make all tests pass postgres driver.
-    if (process.env.DB === 'postgres') {
-        // We end postgres coverage here. See TODO above.
-        return
-    }
-
     it('should return result based on sort on embedded entity when other relations loaded', async () => {
         const config: PaginateConfig<CatEntity> = {
-            sortableColumns: ['id', 'name', 'size.height', 'size.length', 'size.width'],
+            sortableColumns: ['id', 'name', 'size.height', 'size.length', 'size.width', 'toys.(size.height)'],
             searchableColumns: ['name'],
             relations: ['home', 'toys'],
         }
@@ -921,6 +936,7 @@ describe('paginate', () => {
             sortBy: [
                 ['size.height', 'DESC'],
                 ['size.length', 'DESC'],
+                ['toys.(size.height)', 'DESC'],
             ],
         }
 
@@ -954,7 +970,9 @@ describe('paginate', () => {
         const orderedCats = [copyCats[3], copyCats[1], copyCats[2], copyCats[0], copyCats[4]]
 
         expect(result.data).toStrictEqual(orderedCats)
-        expect(result.links.current).toBe('?page=1&limit=20&sortBy=size.height:DESC&sortBy=size.length:DESC')
+        expect(result.links.current).toBe(
+            '?page=1&limit=20&sortBy=size.height:DESC&sortBy=size.length:DESC&sortBy=toys.(size.height):DESC'
+        )
     })
 
     it('should return result based on sort on embedded entity on one-to-many relation', async () => {
@@ -1809,6 +1827,12 @@ describe('paginate', () => {
         expect(result.data).toStrictEqual(expectedResult)
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=home.countCat:ASC')
     })
+
+    // TODO: Make all tests pass postgres driver.
+    if (process.env.DB === 'postgres') {
+        // We end postgres coverage here. See TODO above.
+        return
+    }
 
     it('should return result based on or between range filter', async () => {
         const config: PaginateConfig<CatEntity> = {

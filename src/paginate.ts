@@ -170,7 +170,10 @@ export async function paginate<T extends ObjectLiteral>(
         const { isVirtualProperty } = extractVirtualProperty(queryBuilder, columnProperties)
         const isRelation = checkIsRelation(queryBuilder, columnProperties.propertyPath)
         const isEmbeded = checkIsEmbedded(queryBuilder, columnProperties.propertyPath)
-        const alias = fixColumnAlias(columnProperties, queryBuilder.alias, isRelation, isVirtualProperty, isEmbeded)
+        let alias = fixColumnAlias(columnProperties, queryBuilder.alias, isRelation, isVirtualProperty, isEmbeded)
+        if (isVirtualProperty) {
+            alias = `"${alias}"`
+        }
         queryBuilder.addOrderBy(alias, order[1], nullSort)
     }
 

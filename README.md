@@ -238,7 +238,7 @@ const paginateConfig: PaginateConfig<CatEntity> {
    * Description: Load eager relations using TypeORM's eager property.
    * Only works if `relations` is not defined.
    */
-  loadEagerRelations: true
+  loadEagerRelations: true,
 
   /**
    * Required: false

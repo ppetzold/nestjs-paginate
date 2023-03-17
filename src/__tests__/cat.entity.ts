@@ -35,10 +35,7 @@ export class CatEntity {
     @Column({ nullable: true })
     age: number | null
 
-    @Column({
-        type: 'simple-enum',
-        enum: CutenessLevel,
-    })
+    @Column({ type: 'text' }) // We don't use enum type as it makes it easier when testing across different db drivers.
     cutenessLevel: CutenessLevel
 
     @Column(() => SizeEmbed)
