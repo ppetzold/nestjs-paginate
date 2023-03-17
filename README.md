@@ -418,7 +418,7 @@ Multi filters are filters that can be applied to a single column with a comparat
 
 `?filter.id=$gt:3&filter.id=$lt:5` where column `id` is greater than `3` **and** less than `5`
 
-`?filter.id=$gt:3&filter.id=$or:$lt:5` where column `id` is greater than `3` **or** less than `5`
+`?filter.id=$contains:moderator&filter.id=$or:$contains:admin` where column `roles` is an array and contains `moderator` **or** `admin`
 
 `?filter.id=$gt:3&filter.id=$and:$lt:5&filter.id=$or:$eq:7` where column `id` is greater than `3` **and** less than `5` **or** equal to `7`
 
