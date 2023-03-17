@@ -406,9 +406,9 @@ Filter operators must be whitelisted per column in `PaginateConfig`.
 
 `?filter.createdAt=$btw:2022-02-02,2022-02-10` where column `createdAt` is between the dates `2022-02-02` and `2022-02-10`
 
-`?filter.roles=$contains:Moderator` where column `roles` is an array and contains the value "Moderator".
+`?filter.roles=$contains:moderator` where column `roles` is an array and contains the value `moderator`
 
-`?filter.roles=$contains:Moderator,Admin` where column `roles` is an array and contains the values "Moderator" and "Admin".
+`?filter.roles=$contains:moderator,admin` where column `roles` is an array and contains the values `moderator` and `admin`
 
 ## Multi Filters
 
