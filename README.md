@@ -234,6 +234,15 @@ const paginateConfig: PaginateConfig<CatEntity> {
   /**
    * Required: false
    * Type: boolean
+   * Default: false
+   * Description: Load eager relations using TypeORM's eager property.
+   * Only works if `relations` is not defined.
+   */
+  loadEagerRelations: true
+
+  /**
+   * Required: false
+   * Type: boolean
    * Description: Disables the global condition of "non-deleted" for the entity with delete date columns.
    * https://typeorm.io/select-query-builder#querying-deleted-rows
    */
@@ -253,14 +262,6 @@ const paginateConfig: PaginateConfig<CatEntity> {
    * Description: Overrides the origin of absolute resource links if set.
    */
   origin: 'http://cats.example',
-
-  /**
-   * Required: false
-   * Type: boolean
-   * Default: false
-   * Description: Load eager relations using TypeORM's eager property.
-   */
-  loadEagerRelations: true
 }
 ```
 
