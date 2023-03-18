@@ -66,7 +66,7 @@ export interface PaginateConfig<T> {
     defaultLimit?: number
     where?: FindOptionsWhere<T> | FindOptionsWhere<T>[]
     filterableColumns?: {
-        [key in Column<T> | string]?: (FilterOperator | FilterSuffix)[]
+        [key in Column<T> | string]?: (FilterOperator | FilterSuffix)[] | true
     }
     loadEagerRelations?: boolean
     withDeleted?: boolean

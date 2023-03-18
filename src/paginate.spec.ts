@@ -2155,4 +2155,41 @@ describe('paginate', () => {
         expect(result.data[0].home).toBeDefined()
         expect(result.data[0].home.pillows).toStrictEqual(cat.home.pillows)
     })
+
+    it('should allow all filters on a field when passing boolean', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            filterableColumns: {
+                id: true,
+            },
+        }
+        const query: PaginateQuery = {
+            path: '',
+            filter: {
+                id: '$not:$in:1,2,5',
+            },
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        expect(result.data).toStrictEqual([cats[2], cats[3]])
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.id=$not:$in:1,2,5')
+    })
+
+    it('should ignore all filters on a field when not passing anything', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+        }
+        const query: PaginateQuery = {
+            path: '',
+            filter: {
+                id: '$not:$in:1,2,5',
+            },
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        expect(result.data).toStrictEqual([cats[0], cats[1], cats[2], cats[3], cats[4]])
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.id=$not:$in:1,2,5')
+    })
 })

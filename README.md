@@ -370,11 +370,27 @@ const config: PaginateConfig<CatEntity> = {
 const result = await paginate<CatEntity>(query, catRepo, config)
 ```
 
-## Single Filters
+## Filters
 
 Filter operators must be whitelisted per column in `PaginateConfig`.
 
 ### Examples
+
+#### Code
+
+```typescript
+const config: PaginateConfig<CatEntity> = {
+  // ...
+  filterableColumns: {
+    // Whitelist operators individually
+    id: [FilterOperator.EQ, FilterSuffix.NOT],
+    'toys.name': [FilterOperator.IN],
+
+    // Whitelist all operators on a single column
+    age: true,
+  },
+}
+```
 
 `?filter.name=$eq:Milo` is equivalent with `?filter.name=Milo`
 
@@ -398,7 +414,7 @@ Filter operators must be whitelisted per column in `PaginateConfig`.
 
 ## Multi Filters
 
-Multi filters are filters that can be applied to a single column with a comparator. As for single filters, multi filters must be whitelisted per column in `PaginateConfig`.
+Multi filters are filters that can be applied to a single column with a comparator.
 
 ### Examples
 

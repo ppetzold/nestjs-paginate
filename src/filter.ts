@@ -227,7 +227,7 @@ export function getFilterTokens(raw?: string): FilterToken | null {
 
 export function parseFilter(
     query: PaginateQuery,
-    filterableColumns?: { [column: string]: (FilterOperator | FilterSuffix)[] }
+    filterableColumns?: { [column: string]: (FilterOperator | FilterSuffix)[] | true }
 ): ColumnsFilters {
     const filter: ColumnsFilters = {}
     if (!filterableColumns || !query.filter) {
@@ -242,19 +242,27 @@ export function parseFilter(
         const statements = !Array.isArray(input) ? [input] : input
         for (const raw of statements) {
             const token = getFilterTokens(raw)
-            if (
-                !token ||
-                !(
-                    allowedOperators.includes(token.operator) ||
-                    (token.suffix === FilterSuffix.NOT &&
-                        allowedOperators.includes(token.suffix) &&
-                        token.operator === FilterOperator.EQ) ||
-                    (token.suffix &&
-                        allowedOperators.includes(token.suffix) &&
-                        allowedOperators.includes(token.operator))
-                )
-            ) {
+            if (!token) {
                 continue
+            }
+            if (allowedOperators === true) {
+                if (token.operator && !isOperator(token.operator)) {
+                    continue
+                }
+                if (token.suffix && !isSuffix(token.suffix)) {
+                    continue
+                }
+            } else {
+                if (
+                    token.operator &&
+                    token.operator !== FilterOperator.EQ &&
+                    !allowedOperators.includes(token.operator)
+                ) {
+                    continue
+                }
+                if (token.suffix && !allowedOperators.includes(token.suffix)) {
+                    continue
+                }
             }
 
             const params: (typeof filter)[0][0] = {
@@ -297,7 +305,7 @@ export function parseFilter(
 export function addFilter<T>(
     qb: SelectQueryBuilder<T>,
     query: PaginateQuery,
-    filterableColumns?: { [column: string]: (FilterOperator | FilterSuffix)[] }
+    filterableColumns?: { [column: string]: (FilterOperator | FilterSuffix)[] | true }
 ): SelectQueryBuilder<T> {
     const filter = parseFilter(query, filterableColumns)
     return qb.andWhere(
