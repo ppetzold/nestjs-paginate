@@ -334,7 +334,9 @@ const config: PaginateConfig<CatEntity> = {
   relations: { home: { pillows: true } },
   sortableColumns: ['id', 'name', 'home.pillows.color'],
   searchableColumns: ['name', 'home.pillows.color'],
-  filterableColumns: { 'home.pillows.color': [FilterOperator.EQ] },
+  filterableColumns: {
+    'home.pillows.color': [FilterOperator.EQ]
+  },
 }
 
 const result = await paginate<CatEntity>(query, catRepo, config)
