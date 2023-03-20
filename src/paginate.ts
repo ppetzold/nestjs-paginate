@@ -183,11 +183,7 @@ export async function paginate<T extends ObjectLiteral>(
             if (query.select?.includes(currentCol) ?? true) {
                 const columnProperties = getPropertiesByColumnName(currentCol)
                 const isRelation = checkIsRelation(queryBuilder, columnProperties.propertyPath)
-                const { isVirtualProperty } = extractVirtualProperty(queryBuilder, columnProperties)
-                if (hasColumnWithPropertyPath(queryBuilder, columnProperties) || isVirtualProperty) {
-                    // here we can avoid to manually fix and add the query of virtual columns
-                    cols.push(fixColumnAlias(columnProperties, queryBuilder.alias, isRelation))
-                }
+                cols.push(fixColumnAlias(columnProperties, queryBuilder.alias, isRelation))
             }
             return cols
         }, [])

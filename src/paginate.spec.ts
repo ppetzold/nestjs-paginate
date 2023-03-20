@@ -2061,6 +2061,62 @@ describe('paginate', () => {
         })
     })
 
+    it('should only select columns via query which are selected in config', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            select: ['id', 'home.id', 'home.pillows.id'],
+            relations: { home: { pillows: true } },
+            sortableColumns: ['id', 'name'],
+        }
+        const query: PaginateQuery = {
+            path: '',
+            select: ['id', 'home.id', 'home.name'],
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        result.data.forEach((cat) => {
+            expect(cat.id).toBeDefined()
+
+            if (cat.id === 1 || cat.id === 2) {
+                expect(cat.home.id).toBeDefined()
+                expect(cat.home.name).not.toBeDefined()
+            } else {
+                expect(cat.home).toBeNull()
+            }
+        })
+    })
+
+    it('should return the specified nested relationship columns only', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            select: ['id', 'home.id', 'home.pillows.id'],
+            relations: { home: { pillows: true } },
+            sortableColumns: ['id', 'name'],
+        }
+        const query: PaginateQuery = {
+            path: '',
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        result.data.forEach((cat) => {
+            expect(cat.id).toBeDefined()
+            expect(cat.name).not.toBeDefined()
+
+            if (cat.id === 1 || cat.id === 2) {
+                expect(cat.home.id).toBeDefined()
+                expect(cat.home.name).not.toBeDefined()
+                expect(cat.home.countCat).not.toBeDefined()
+
+                cat.home.pillows.forEach((pillow) => {
+                    expect(pillow.id).toBeDefined()
+                    expect(pillow.color).not.toBeDefined()
+                })
+            } else {
+                expect(cat.home).toBeNull()
+            }
+        })
+    })
+
     it('should return the right amount of results if a many to many relation is involved', async () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id'],
