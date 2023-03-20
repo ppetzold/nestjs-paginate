@@ -23,7 +23,6 @@ import {
     positiveNumberOrDefault,
     RelationColumn,
     SortBy,
-    hasColumnWithPropertyPath,
     includesAllPrimaryKeyColumns,
     isEntityKey,
     getQueryUrlComponents,
