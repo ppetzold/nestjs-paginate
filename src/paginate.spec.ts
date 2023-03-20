@@ -2031,6 +2031,32 @@ describe('paginate', () => {
         })
     })
 
+    it('should return the specified nested relationship columns only', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            select: ['id', 'home.id', 'home.pillows.id'],
+            relations: { home: { pillows: true } },
+            sortableColumns: ['id', 'name'],
+        }
+        const query: PaginateQuery = {
+            path: '',
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        result.data.forEach((cat) => {
+            expect(cat.id).toBeDefined()
+            expect(cat.name).not.toBeDefined()
+            expect(cat.home.id).toBeDefined()
+            expect(cat.home.name).not.toBeDefined()
+            expect(cat.home.countCat).not.toBeDefined()
+
+            cat.home.pillows.forEach((pillow) => {
+                expect(pillow.id).toBeDefined()
+                expect(pillow.color).not.toBeDefined()
+            })
+        })
+    })
+
     it('should return selected columns', async () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id', 'name'],
