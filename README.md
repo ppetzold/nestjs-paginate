@@ -98,7 +98,7 @@ http://localhost:3000/cats?limit=5&page=2&sortBy=color:DESC&search=i&filter.age=
 ```ts
 import { Controller, Injectable, Get } from '@nestjs/common'
 import { InjectRepository } from '@nestjs/typeorm'
-import { FilterOperator, Paginate, PaginateQuery, paginate, Paginated } from 'nestjs-paginate'
+import { FilterOperator, FilterSuffix, Paginate, PaginateQuery, paginate, Paginated } from 'nestjs-paginate'
 import { Repository, Entity, PrimaryGeneratedColumn, Column } from 'typeorm'
 
 @Entity()
@@ -114,6 +114,12 @@ export class CatEntity {
 
   @Column('int')
   age: number
+
+  @Column({ nullable: true })
+  lastVetVisit: Date | null
+
+  @CreateDateColumn()
+  createdAt: string
 }
 
 @Injectable()
@@ -127,10 +133,12 @@ export class CatsService {
     return paginate(query, this.catsRepository, {
       sortableColumns: ['id', 'name', 'color', 'age'],
       nullSort: 'last',
-      searchableColumns: ['name', 'color', 'age'],
       defaultSortBy: [['id', 'DESC']],
+      searchableColumns: ['name', 'color', 'age'],
+      select: ['id', 'name', 'color', 'age', 'lastVetVisit'],
       filterableColumns: {
-        age: [FilterOperator.GTE, FilterOperator.LTE],
+        name: [FilterOperator.EQ, FilterSuffix.NOT],
+        age: true,
       },
     })
   }
@@ -184,12 +192,13 @@ const paginateConfig: PaginateConfig<CatEntity> {
 
   /**
    * Required: false
-   * Type: TypeORM partial selection
+   * Type: (keyof CatEntity)[]
    * Default: None
+   * Description: TypeORM partial selection. Limit selection further by using `select` query param.
    * https://typeorm.io/select-query-builder#partial-selection
    * Note: You must include the primary key in the selection.
    */
-  select: ['name', 'color'],
+  select: ['id', 'name', 'color'],
 
   /**
    * Required: false

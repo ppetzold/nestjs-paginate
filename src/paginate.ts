@@ -43,6 +43,7 @@ export class Paginated<T> {
         sortBy: SortBy<T>
         searchBy: Column<T>[]
         search: string
+        select: string[]
         filter?: { [column: string]: string | string[] }
     }
     links: {
@@ -176,14 +177,13 @@ export async function paginate<T extends ObjectLiteral>(
 
     // When we partial select the columns (main or relation) we must add the primary key column otherwise
     // typeorm will not be able to map the result.
-    const selectParams = config.select || query.select
+    const selectParams =
+        config.select && query.select ? config.select.filter((column) => query.select.includes(column)) : config.select
     if (selectParams?.length > 0 && includesAllPrimaryKeyColumns(queryBuilder, selectParams)) {
         const cols: string[] = selectParams.reduce((cols, currentCol) => {
-            if (query.select?.includes(currentCol) ?? true) {
-                const columnProperties = getPropertiesByColumnName(currentCol)
-                const isRelation = checkIsRelation(queryBuilder, columnProperties.propertyPath)
-                cols.push(fixColumnAlias(columnProperties, queryBuilder.alias, isRelation))
-            }
+            const columnProperties = getPropertiesByColumnName(currentCol)
+            const isRelation = checkIsRelation(queryBuilder, columnProperties.propertyPath)
+            cols.push(fixColumnAlias(columnProperties, queryBuilder.alias, isRelation))
             return cols
         }, [])
         queryBuilder.select(cols)
@@ -269,6 +269,10 @@ export async function paginate<T extends ObjectLiteral>(
     const searchByQuery =
         query.searchBy && searchBy.length ? searchBy.map((column) => `&searchBy=${column}`).join('') : ''
 
+    // Only expose select in meta data if query select differs from config select
+    const isQuerySelected = selectParams?.length !== config.select?.length
+    const selectQuery = isQuerySelected ? `&select=${selectParams.join(',')}` : ''
+
     const filterQuery = query.filter
         ? '&' +
           stringify(
@@ -279,7 +283,7 @@ export async function paginate<T extends ObjectLiteral>(
           )
         : ''
 
-    const options = `&limit=${limit}${sortByQuery}${searchQuery}${searchByQuery}${filterQuery}`
+    const options = `&limit=${limit}${sortByQuery}${searchQuery}${searchByQuery}${selectQuery}${filterQuery}`
 
     const buildLink = (p: number): string => path + '?page=' + p + options
 
@@ -295,6 +299,7 @@ export async function paginate<T extends ObjectLiteral>(
             sortBy,
             search: query.search,
             searchBy: query.search ? searchBy : undefined,
+            select: isQuerySelected ? selectParams : undefined,
             filter: query.filter,
         },
         links: {
