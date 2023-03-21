@@ -1968,6 +1968,8 @@ describe('paginate', () => {
         const result = await paginate<CatEntity>(query, catRepo, config)
 
         expect(result.data).toStrictEqual(cats)
+        expect(result.meta.select).toStrictEqual(undefined)
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC')
     })
 
     it('should return all items even if deleted', async () => {
@@ -2010,8 +2012,32 @@ describe('paginate', () => {
         const result = await paginate<CatEntity>(query, catRepo, config)
 
         result.data.forEach((cat) => {
+            expect(cat.id).toBeDefined()
+            expect(cat.name).toBeDefined()
             expect(cat.color).not.toBeDefined()
         })
+        expect(result.meta.select).toBe(undefined)
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC')
+    })
+
+    it('should return selected columns only using query', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+        }
+        const query: PaginateQuery = {
+            path: '',
+            select: ['id', 'name'],
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        result.data.forEach((cat) => {
+            expect(cat.id).toBeDefined()
+            expect(cat.name).toBeDefined()
+            expect(cat.color).not.toBeDefined()
+        })
+        expect(result.meta.select).toEqual(['id', 'name'])
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&select=id,name')
     })
 
     it('should return the specified relationship columns only', async () => {
@@ -2036,6 +2062,8 @@ describe('paginate', () => {
                 expect(toy.id).not.toBeDefined()
             })
         })
+        expect(result.meta.select).toBe(undefined)
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=name:ASC')
     })
 
     it('should return selected columns', async () => {
@@ -2066,6 +2094,8 @@ describe('paginate', () => {
                 expect(cat.toys).toHaveLength(0)
             }
         })
+        expect(result.meta.select).toStrictEqual(['id', 'toys.(size.height)'])
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&select=id,toys.(size.height)')
     })
 
     it('should only select columns via query which are selected in config', async () => {
@@ -2091,6 +2121,8 @@ describe('paginate', () => {
                 expect(cat.home).toBeNull()
             }
         })
+        expect(result.meta.select).toStrictEqual(['id', 'home.id'])
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&select=id,home.id')
     })
 
     it('should return the specified nested relationship columns only', async () => {
@@ -2122,6 +2154,8 @@ describe('paginate', () => {
                 expect(cat.home).toBeNull()
             }
         })
+        expect(result.meta.select).toBe(undefined)
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC')
     })
 
     it('should return the right amount of results if a many to many relation is involved', async () => {
