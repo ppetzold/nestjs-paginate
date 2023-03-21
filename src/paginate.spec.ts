@@ -8,7 +8,7 @@ import { CatHomeEntity } from './__tests__/cat-home.entity'
 import { CatHomePillowEntity } from './__tests__/cat-home-pillow.entity'
 import { clone } from 'lodash'
 import {
-    getFilterTokens,
+    parseFilterToken,
     FilterComparator,
     FilterOperator,
     FilterSuffix,
@@ -16,6 +16,8 @@ import {
     isSuffix,
     OperatorSymbolToFunction,
 } from './filter'
+
+const isoStringToDate = (isoString) => new Date(isoString)
 
 describe('paginate', () => {
     let dataSource: DataSource
@@ -44,7 +46,7 @@ describe('paginate', () => {
                       database: ':memory:',
                   }),
             synchronize: true,
-            logging: true,
+            logging: false,
             entities: [CatEntity, CatToyEntity, CatHomeEntity, CatHomePillowEntity],
         })
         await dataSource.initialize()
@@ -59,6 +61,7 @@ describe('paginate', () => {
                 color: 'brown',
                 age: 6,
                 cutenessLevel: CutenessLevel.HIGH,
+                lastVetVisit: isoStringToDate('2022-12-19T10:00:00.000Z'),
                 size: { height: 25, width: 10, length: 40 },
             }),
             catRepo.create({
@@ -66,6 +69,7 @@ describe('paginate', () => {
                 color: 'ginger',
                 age: 5,
                 cutenessLevel: CutenessLevel.MEDIUM,
+                lastVetVisit: isoStringToDate('2022-12-20T10:00:00.000Z'),
                 size: { height: 30, width: 15, length: 45 },
             }),
             catRepo.create({
@@ -73,6 +77,7 @@ describe('paginate', () => {
                 color: 'black',
                 age: 4,
                 cutenessLevel: CutenessLevel.HIGH,
+                lastVetVisit: isoStringToDate('2022-12-21T10:00:00.000Z'),
                 size: { height: 25, width: 10, length: 50 },
             }),
             catRepo.create({
@@ -80,6 +85,7 @@ describe('paginate', () => {
                 color: 'white',
                 age: 3,
                 cutenessLevel: CutenessLevel.LOW,
+                lastVetVisit: null,
                 size: { height: 35, width: 12, length: 40 },
             }),
             catRepo.create({
@@ -87,6 +93,7 @@ describe('paginate', () => {
                 color: 'white',
                 age: null,
                 cutenessLevel: CutenessLevel.HIGH,
+                lastVetVisit: null,
                 size: { height: 10, width: 5, length: 15 },
             }),
         ])
@@ -1753,7 +1760,7 @@ describe('paginate', () => {
                 tokens: { comparator, operator: '$null', suffix: '$not', value: undefined },
             },
         ])('should get filter tokens for "$string"', ({ string, tokens }) => {
-            expect(getFilterTokens(string)).toStrictEqual(tokens)
+            expect(parseFilterToken(string)).toStrictEqual(tokens)
         })
     }
 
@@ -2247,5 +2254,202 @@ describe('paginate', () => {
 
         expect(result.data).toStrictEqual([cats[0], cats[1], cats[2], cats[3], cats[4]])
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.id=$not:$in:1,2,5')
+    })
+
+    describe('should return result based on date column filter', () => {
+        it('with $not and $null operators', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id'],
+                filterableColumns: {
+                    lastVetVisit: [FilterSuffix.NOT, FilterOperator.NULL],
+                },
+            }
+            const query: PaginateQuery = {
+                path: '',
+                filter: {
+                    lastVetVisit: '$not:$null',
+                },
+            }
+
+            const result = await paginate<CatEntity>(query, catRepo, config)
+
+            expect(result.meta.filter).toStrictEqual({
+                lastVetVisit: '$not:$null',
+            })
+            expect(result.data).toStrictEqual([cats[0], cats[1], cats[2]])
+            expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.lastVetVisit=$not:$null')
+        })
+
+        it('with $lt operator', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id'],
+                filterableColumns: {
+                    lastVetVisit: [FilterOperator.LT],
+                },
+            }
+            const query: PaginateQuery = {
+                path: '',
+                filter: {
+                    lastVetVisit: '$lt:2022-12-20T10:00:00.000Z',
+                },
+            }
+
+            const result = await paginate<CatEntity>(query, catRepo, config)
+
+            expect(result.meta.filter).toStrictEqual({
+                lastVetVisit: '$lt:2022-12-20T10:00:00.000Z',
+            })
+            expect(result.data).toStrictEqual([cats[0]])
+            expect(result.links.current).toBe(
+                '?page=1&limit=20&sortBy=id:ASC&filter.lastVetVisit=$lt:2022-12-20T10:00:00.000Z'
+            )
+        })
+
+        it('with $lte operator', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id'],
+                filterableColumns: {
+                    lastVetVisit: [FilterOperator.LTE],
+                },
+            }
+            const query: PaginateQuery = {
+                path: '',
+                filter: {
+                    lastVetVisit: '$lte:2022-12-20T10:00:00.000Z',
+                },
+            }
+
+            const result = await paginate<CatEntity>(query, catRepo, config)
+
+            expect(result.meta.filter).toStrictEqual({
+                lastVetVisit: '$lte:2022-12-20T10:00:00.000Z',
+            })
+            expect(result.data).toStrictEqual([cats[0], cats[1]])
+            expect(result.links.current).toBe(
+                '?page=1&limit=20&sortBy=id:ASC&filter.lastVetVisit=$lte:2022-12-20T10:00:00.000Z'
+            )
+        })
+
+        it('with $btw operator', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id'],
+                filterableColumns: {
+                    lastVetVisit: [FilterOperator.BTW],
+                },
+            }
+            const query: PaginateQuery = {
+                path: '',
+                filter: {
+                    lastVetVisit: '$btw:2022-12-20T08:00:00.000Z,2022-12-20T12:00:00.000Z',
+                },
+            }
+
+            const result = await paginate<CatEntity>(query, catRepo, config)
+
+            expect(result.meta.filter).toStrictEqual({
+                lastVetVisit: '$btw:2022-12-20T08:00:00.000Z,2022-12-20T12:00:00.000Z',
+            })
+            expect(result.data).toStrictEqual([cats[1]])
+            expect(result.links.current).toBe(
+                '?page=1&limit=20&sortBy=id:ASC&filter.lastVetVisit=$btw:2022-12-20T08:00:00.000Z,2022-12-20T12:00:00.000Z'
+            )
+        })
+
+        it('with $gte operator', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id'],
+                filterableColumns: {
+                    lastVetVisit: [FilterOperator.GTE],
+                },
+            }
+            const query: PaginateQuery = {
+                path: '',
+                filter: {
+                    lastVetVisit: '$gte:2022-12-20T10:00:00.000Z',
+                },
+            }
+
+            const result = await paginate<CatEntity>(query, catRepo, config)
+
+            expect(result.meta.filter).toStrictEqual({
+                lastVetVisit: '$gte:2022-12-20T10:00:00.000Z',
+            })
+            expect(result.data).toStrictEqual([cats[1], cats[2]])
+            expect(result.links.current).toBe(
+                '?page=1&limit=20&sortBy=id:ASC&filter.lastVetVisit=$gte:2022-12-20T10:00:00.000Z'
+            )
+        })
+
+        it('with $gt operator', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id'],
+                filterableColumns: {
+                    lastVetVisit: [FilterOperator.GT],
+                },
+            }
+            const query: PaginateQuery = {
+                path: '',
+                filter: {
+                    lastVetVisit: '$gt:2022-12-20T10:00:00.000Z',
+                },
+            }
+
+            const result = await paginate<CatEntity>(query, catRepo, config)
+
+            expect(result.meta.filter).toStrictEqual({
+                lastVetVisit: '$gt:2022-12-20T10:00:00.000Z',
+            })
+            expect(result.data).toStrictEqual([cats[2]])
+            expect(result.links.current).toBe(
+                '?page=1&limit=20&sortBy=id:ASC&filter.lastVetVisit=$gt:2022-12-20T10:00:00.000Z'
+            )
+        })
+
+        it('with $lt operator and date only', async () => {
+            {
+                const config: PaginateConfig<CatEntity> = {
+                    sortableColumns: ['id'],
+                    filterableColumns: {
+                        lastVetVisit: [FilterOperator.LT],
+                    },
+                }
+                const query: PaginateQuery = {
+                    path: '',
+                    filter: {
+                        lastVetVisit: '$lt:2022-12-20',
+                    },
+                }
+
+                const result = await paginate<CatEntity>(query, catRepo, config)
+
+                expect(result.meta.filter).toStrictEqual({
+                    lastVetVisit: '$lt:2022-12-20',
+                })
+                expect(result.data).toStrictEqual([cats[0]])
+                expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.lastVetVisit=$lt:2022-12-20')
+            }
+            {
+                const config: PaginateConfig<CatEntity> = {
+                    sortableColumns: ['id'],
+                    filterableColumns: {
+                        lastVetVisit: [FilterOperator.LT],
+                    },
+                }
+                const query: PaginateQuery = {
+                    path: '',
+                    filter: {
+                        lastVetVisit: '$lt:2022-12-21',
+                    },
+                }
+
+                const result = await paginate<CatEntity>(query, catRepo, config)
+
+                expect(result.meta.filter).toStrictEqual({
+                    lastVetVisit: '$lt:2022-12-21',
+                })
+                expect(result.data).toStrictEqual([cats[0], cats[1]])
+                expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.lastVetVisit=$lt:2022-12-21')
+            }
+        })
     })
 })

@@ -335,7 +335,7 @@ const config: PaginateConfig<CatEntity> = {
   sortableColumns: ['id', 'name', 'home.pillows.color'],
   searchableColumns: ['name', 'home.pillows.color'],
   filterableColumns: {
-    'home.pillows.color': [FilterOperator.EQ]
+    'home.pillows.color': [FilterOperator.EQ],
   },
 }
 
@@ -410,6 +410,8 @@ const config: PaginateConfig<CatEntity> = {
 
 `?filter.createdAt=$btw:2022-02-02,2022-02-10` where column `createdAt` is between the dates `2022-02-02` and `2022-02-10`
 
+`?filter.createdAt=$lt:2022-12-20T10:00:00.000Z` where column `createdAt` is before iso date `2022-12-20T10:00:00.000Z`
+
 `?filter.roles=$contains:moderator` where column `roles` is an array and contains the value `moderator`
 
 `?filter.roles=$contains:moderator,admin` where column `roles` is an array and contains the values `moderator` and `admin`
@@ -420,7 +422,7 @@ Multi filters are filters that can be applied to a single column with a comparat
 
 ### Examples
 
-`?filter.id=$gt:3&filter.id=$lt:5` where column `id` is greater than `3` **and** less than `5`
+`?filter.createdAt=$gt:2022-02-02&filter.createdAt=$lt:2022-02-10` where column `createdAt` is after `2022-02-02` **and** is before `2022-02-10`
 
 `?filter.id=$contains:moderator&filter.id=$or:$contains:admin` where column `roles` is an array and contains `moderator` **or** `admin`
 
