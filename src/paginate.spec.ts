@@ -2020,7 +2020,7 @@ describe('paginate', () => {
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC')
     })
 
-    it('should return selected columns only using query', async () => {
+    it('should ignore query select', async () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id'],
         }
@@ -2034,10 +2034,32 @@ describe('paginate', () => {
         result.data.forEach((cat) => {
             expect(cat.id).toBeDefined()
             expect(cat.name).toBeDefined()
-            expect(cat.color).not.toBeDefined()
+            expect(cat.color).toBeDefined()
         })
-        expect(result.meta.select).toEqual(['id', 'name'])
-        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&select=id,name')
+        expect(result.meta.select).toEqual(undefined)
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC')
+    })
+
+    it('should only query select columns which have been config selected', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            select: ['id', 'name', 'color'],
+        }
+        const query: PaginateQuery = {
+            path: '',
+            select: ['id', 'color', 'age'],
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        result.data.forEach((cat) => {
+            expect(cat.id).toBeDefined()
+            expect(cat.name).not.toBeDefined()
+            expect(cat.color).toBeDefined()
+            expect(cat.age).not.toBeDefined()
+        })
+        expect(result.meta.select).toEqual(['id', 'color'])
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&select=id,color')
     })
 
     it('should return the specified relationship columns only', async () => {
