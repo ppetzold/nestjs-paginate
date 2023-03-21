@@ -384,12 +384,8 @@ Filter operators must be whitelisted per column in `PaginateConfig`.
 const config: PaginateConfig<CatEntity> = {
   // ...
   filterableColumns: {
-    // Whitelist operators individually
-    id: [FilterOperator.EQ, FilterSuffix.NOT],
-    'toys.name': [FilterOperator.IN],
-
-    // Whitelist all operators on a single column
-    age: true,
+    id: [FilterOperator.EQ, FilterSuffix.NOT], // Enable individual operators
+    age: true, // Enable all operators on a single column
   },
 }
 ```
