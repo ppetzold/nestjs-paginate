@@ -387,7 +387,7 @@ const config: PaginateConfig<CatEntity> = {
     // Enable individual operators on a column
     id: [FilterOperator.EQ, FilterSuffix.NOT],
 
-    // Enable all operators on a single column
+    // Enable all operators on a column
     age: true,
   },
 }
