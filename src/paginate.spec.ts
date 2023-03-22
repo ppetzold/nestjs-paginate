@@ -752,6 +752,29 @@ describe('paginate', () => {
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.name=$not:Leche')
     })
 
+    it('should return based on a nested many-to-one where condition', async () => {
+        const config: PaginateConfig<CatToyEntity> = {
+            sortableColumns: ['id'],
+            relations: ['cat'],
+            where: {
+                cat: {
+                    id: cats[0].id,
+                },
+            },
+        }
+        const query: PaginateQuery = {
+            path: '',
+        }
+
+        const result = await paginate<CatToyEntity>(query, catToyRepo, config)
+
+        expect(result.meta.totalItems).toBe(3)
+        result.data.forEach((toy) => {
+            expect(toy.cat.id).toBe(cats[0].id)
+        })
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC')
+    })
+
     it('should return result based on filter on many-to-one relation', async () => {
         const config: PaginateConfig<CatToyEntity> = {
             relations: ['cat'],
