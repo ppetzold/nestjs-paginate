@@ -278,6 +278,22 @@ describe('paginate', () => {
         expect(result.data).toStrictEqual(cats.slice(0, 2))
     })
 
+    it('should limit cats by query', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            maxLimit: Number.MAX_SAFE_INTEGER,
+            defaultLimit: Number.MAX_SAFE_INTEGER,
+        }
+        const query: PaginateQuery = {
+            path: '',
+            limit: 2,
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        expect(result.data).toStrictEqual(cats.slice(0, 2))
+    })
+
     it('should return correct links for some results', async () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id'],
