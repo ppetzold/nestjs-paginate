@@ -55,6 +55,11 @@ export class Paginated<T> {
     }
 }
 
+export enum PaginationType {
+    LIMIT_AND_OFFSET = 'limit',
+    TAKE_AND_SKIP = 'take',
+}
+
 export interface PaginateConfig<T> {
     relations?: FindOptionsRelations<T> | RelationColumn<T>[]
     sortableColumns: Column<T>[]
@@ -70,6 +75,7 @@ export interface PaginateConfig<T> {
     }
     loadEagerRelations?: boolean
     withDeleted?: boolean
+    paginationType?: PaginationType
     relativePath?: boolean
     origin?: string
 }
@@ -107,7 +113,13 @@ export async function paginate<T extends ObjectLiteral>(
     }
 
     if (isPaginated) {
-        queryBuilder.limit(limit).offset((page - 1) * limit)
+        // Allow user to choose between limit/offset and take/skip.
+        // However, using take/skip can cause problems with sorting and selections.
+        if (config.paginationType === PaginationType.TAKE_AND_SKIP) {
+            queryBuilder.take(limit).skip((page - 1) * limit)
+        } else {
+            queryBuilder.limit(limit).offset((page - 1) * limit)
+        }
     }
 
     if (config.relations) {

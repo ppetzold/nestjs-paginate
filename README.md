@@ -258,6 +258,19 @@ const paginateConfig: PaginateConfig<CatEntity> {
 
   /**
    * Required: false
+   * Type: string
+   * Description: Allow user to choose between limit/offset and take/skip.
+   * Default: PaginationType.LIMIT_AND_OFFSET
+   *
+   * However, using take/skip can cause problems with sorting and selections.
+   * For more information see:
+   * [#4742](https://github.com/typeorm/typeorm/issues/4742)
+   * [#5670](https://github.com/typeorm/typeorm/issues/5670)
+   */
+  paginationType: PaginationType.TAKE_AND_SKIP,
+
+  /**
+   * Required: false
    * Type: boolean
    * Default: false
    * Description: Generate relative paths in the resource links.
