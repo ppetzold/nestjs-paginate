@@ -166,10 +166,35 @@ describe('paginate', () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id'],
             defaultSortBy: [['id', 'ASC']],
-            defaultLimit: 1,
         }
         const query: PaginateQuery = {
             path: '',
+        }
+
+        const queryBuilder = await dataSource
+            .createQueryBuilder()
+            .select('cats')
+            .from(CatEntity, 'cats')
+            .where('cats.color = :color', { color: 'white' })
+
+        const result = await paginate<CatEntity>(query, queryBuilder, config)
+
+        expect(result.data).toStrictEqual(cats.slice(3, 5))
+    })
+
+    it('should accept query builder and work with query filter', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            defaultSortBy: [['id', 'ASC']],
+            filterableColumns: {
+                'size.height': true,
+            },
+        }
+        const query: PaginateQuery = {
+            path: '',
+            filter: {
+                'size.height': '$gte:20',
+            },
         }
 
         const queryBuilder = await dataSource
