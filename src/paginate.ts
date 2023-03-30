@@ -62,7 +62,7 @@ export enum PaginationType {
 
 export interface PaginateConfig<T> {
     relations?: FindOptionsRelations<T> | RelationColumn<T>[]
-    sortableColumns: Column<T>[]
+    sortableColumns?: Column<T>[]
     nullSort?: 'first' | 'last'
     searchableColumns?: Column<T>[]
     select?: Column<T>[] | string[]
@@ -104,7 +104,7 @@ export async function paginate<T extends ObjectLiteral>(
 
     let [items, totalItems]: [T[], number] = [[], 0]
 
-    const queryBuilder = repo instanceof Repository ? repo.createQueryBuilder('__root') : repo
+    const queryBuilder: SelectQueryBuilder<T> = repo instanceof Repository ? repo.createQueryBuilder('__root') : repo
 
     if (repo instanceof Repository && !config.relations && config.loadEagerRelations === true) {
         if (!config.relations) {
@@ -158,21 +158,23 @@ export async function paginate<T extends ObjectLiteral>(
         nullSort = config.nullSort === 'last' ? 'NULLS LAST' : 'NULLS FIRST'
     }
 
-    if (config.sortableColumns.length < 1) {
-        logger.debug("Missing required 'sortableColumns' config.")
-        throw new ServiceUnavailableException()
-    }
+    if (config.sortableColumns) {
+        if (config.sortableColumns.length < 1) {
+            logger.debug("Missing required 'sortableColumns' config.")
+            throw new ServiceUnavailableException()
+        }
 
-    if (query.sortBy) {
-        for (const order of query.sortBy) {
-            if (isEntityKey(config.sortableColumns, order[0]) && ['ASC', 'DESC'].includes(order[1])) {
-                sortBy.push(order as Order<T>)
+        if (query.sortBy) {
+            for (const order of query.sortBy) {
+                if (isEntityKey(config.sortableColumns, order[0]) && ['ASC', 'DESC'].includes(order[1])) {
+                    sortBy.push(order as Order<T>)
+                }
             }
         }
-    }
 
-    if (!sortBy.length) {
-        sortBy.push(...(config.defaultSortBy || [[config.sortableColumns[0], 'ASC']]))
+        if (!sortBy.length) {
+            sortBy.push(...(config.defaultSortBy || [[config.sortableColumns[0], 'ASC']]))
+        }
     }
 
     for (const order of sortBy) {
