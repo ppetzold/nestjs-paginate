@@ -51,7 +51,7 @@
     "sqlite3": "^5.1.6",
     "ts-jest": "^29.0.5",
     "ts-node": "^10.9.1",
-    "typeorm": "^0.3.12",
+    "typeorm": "^0.3.11",
     "typescript": "^4.9.5"
   },
   "dependencies": {
