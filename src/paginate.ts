@@ -114,11 +114,11 @@ export async function paginate<T extends ObjectLiteral>(
 
     if (isPaginated) {
         // Allow user to choose between limit/offset and take/skip.
-        // However, using take/skip can cause problems with sorting and selections.
-        if (config.paginationType === PaginationType.TAKE_AND_SKIP) {
-            queryBuilder.take(limit).skip((page - 1) * limit)
-        } else {
+        // However, using limit/offset can cause problems when joining one-to-many etc.
+        if (config.paginationType === PaginationType.LIMIT_AND_OFFSET) {
             queryBuilder.limit(limit).offset((page - 1) * limit)
+        } else {
+            queryBuilder.take(limit).skip((page - 1) * limit)
         }
     }
 
