@@ -87,7 +87,8 @@ export const NO_PAGINATION = 0
 export async function paginate<T extends ObjectLiteral>(
     query: PaginateQuery,
     repo: Repository<T> | SelectQueryBuilder<T>,
-    config: PaginateConfig<T>
+    config: PaginateConfig<T>,
+    customCountQuery?: Repository<T> | SelectQueryBuilder<T>
 ): Promise<Paginated<T>> {
     const page = positiveNumberOrDefault(query.page, 1, 1)
 
@@ -262,7 +263,17 @@ export async function paginate<T extends ObjectLiteral>(
     }
 
     if (isPaginated) {
-        ;[items, totalItems] = await queryBuilder.getManyAndCount()
+        if (customCountQuery) {
+            const customCountQueryBuilder: SelectQueryBuilder<T> =
+                customCountQuery instanceof Repository
+                    ? customCountQuery.createQueryBuilder('__root')
+                    : customCountQuery
+
+            items = await queryBuilder.getMany()
+            totalItems = await customCountQueryBuilder.getCount()
+        } else {
+            ;[items, totalItems] = await queryBuilder.getManyAndCount()
+        }
     } else {
         items = await queryBuilder.getMany()
     }
