@@ -9,6 +9,12 @@ type Join<K, P> = K extends string
 
 type Prev = [never, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, ...0[]]
 
+// unwrap Promise type
+type UnwrapPromise<T> = T extends Promise<infer U> ? UnwrapPromise<U> : T
+
+// Unwrap Array type
+type UnwrapArray<T> = T extends Array<infer U> ? UnwrapArray<U> : T
+
 // TODO: puts some comments here, in this ternary of doom
 export type Column<T, D extends number = 2> = [D] extends [never]
     ? never
@@ -18,7 +24,11 @@ export type Column<T, D extends number = 2> = [D] extends [never]
               ? T[K] extends Date
                   ? `${K}`
                   : T[K] extends Array<infer U>
-                  ? `${K}` | Join<K, Column<U, Prev[D]>>
+                  ? `${K}` | Join<K, Column<UnwrapArray<U>, Prev[D]>>
+                  : T[K] extends Promise<infer U>
+                  ? U extends Array<infer V>
+                      ? `${K}` | Join<K, Column<UnwrapArray<V>, Prev[D]>>
+                      : `${K}` | Join<K, Column<UnwrapPromise<U>, Prev[D]>>
                   : `${K}` | Join<K, Column<T[K], Prev[D]>>
               : never
       }[keyof T]
