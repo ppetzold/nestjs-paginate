@@ -1930,8 +1930,10 @@ describe('paginate', () => {
 
     it('should return the specified columns only', async () => {
         const config: PaginateConfig<CatEntity> = {
-            sortableColumns: ['id'],
-            select: ['id', 'name'],
+            sortableColumns: ['createdAt'],
+            nullSort: 'last',
+            defaultSortBy: [['createdAt', 'DESC']],
+            select: ['id', 'name', 'createdAt'],
         }
         const query: PaginateQuery = {
             path: '',
@@ -1942,6 +1944,7 @@ describe('paginate', () => {
         result.data.forEach((cat) => {
             expect(cat.id).toBeDefined()
             expect(cat.name).toBeDefined()
+            expect(cat.createdAt).toBeDefined()
             expect(cat.color).not.toBeDefined()
         })
         expect(result.meta.select).toBe(undefined)

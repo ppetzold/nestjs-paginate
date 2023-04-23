@@ -54,10 +54,10 @@ export class CatEntity {
     home: CatHomeEntity
 
     @CreateDateColumn()
-    createdAt: string
+    createdAt: Date
 
     @DeleteDateColumn({ nullable: true })
-    deletedAt?: string
+    deletedAt?: Date
 
     @ManyToMany(() => CatEntity)
     @JoinTable()
