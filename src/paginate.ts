@@ -159,8 +159,9 @@ export async function paginate<T extends ObjectLiteral>(
     }
 
     if (config.sortableColumns.length < 1) {
-        logger.debug("Missing required 'sortableColumns' config.")
-        throw new ServiceUnavailableException()
+        const message = "Missing required 'sortableColumns' config."
+        logger.debug(message)
+        throw new ServiceUnavailableException(message)
     }
 
     if (query.sortBy) {
