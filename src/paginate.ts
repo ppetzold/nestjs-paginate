@@ -126,7 +126,10 @@ export async function paginate<T extends ObjectLiteral>(
         // relations: ["relation"]
         if (Array.isArray(config.relations)) {
             config.relations.forEach((relation) => {
-                queryBuilder.leftJoinAndSelect(`${queryBuilder.alias}.${relation}`, `${queryBuilder.alias}_${relation}`)
+                queryBuilder.leftJoinAndSelect(
+                    `${queryBuilder.alias}.${relation}`,
+                    `${queryBuilder.alias}_${relation}_rel`
+                )
             })
         } else {
             // relations: {relation:true}
