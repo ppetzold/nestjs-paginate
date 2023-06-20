@@ -137,9 +137,14 @@ export function fixColumnAlias(
 ): string {
     if (isRelation) {
         if (isVirtualProperty && query) {
-            return `(${query(`${alias}_${properties.propertyPath}`)})` // () is needed to avoid parameter conflict
+            return `(${query(`${alias}_${properties.propertyPath}_rel`)})` // () is needed to avoid parameter conflict
         } else if ((isVirtualProperty && !query) || properties.isNested) {
-            return `${alias}_${properties.propertyPath}_rel_${properties.propertyName}`
+            if (properties.propertyName.includes(".")) {
+                const [nestedRel, nestedCol] = properties.propertyName.split(".")
+                return `${alias}_${properties.propertyPath}_rel_${nestedRel}_rel.${nestedCol}`
+            } else {
+                return `${alias}_${properties.propertyPath}_rel_${properties.propertyName}`
+            }
         } else {
             return `${alias}_${properties.propertyPath}_rel.${properties.propertyName}`
         }
