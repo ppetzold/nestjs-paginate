@@ -148,7 +148,11 @@ export async function paginate<T extends ObjectLiteral>(
                     )
 
                     if (typeof relationSchema === 'object') {
-                        createQueryBuilderRelations(relationName, relationSchema, `${alias ?? prefix}_${relationName}_rel`)
+                        createQueryBuilderRelations(
+                            relationName,
+                            relationSchema,
+                            `${alias ?? prefix}_${relationName}_rel`
+                        )
                     }
                 })
             }
@@ -264,7 +268,7 @@ export async function paginate<T extends ObjectLiteral>(
     }
 
     if (isPaginated) {
-        [items, totalItems] = await queryBuilder.getManyAndCount()
+        ;[items, totalItems] = await queryBuilder.getManyAndCount()
     } else {
         items = await queryBuilder.getMany()
     }
