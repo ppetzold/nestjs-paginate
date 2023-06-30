@@ -49,7 +49,7 @@
     "reflect-metadata": "^0.1.13",
     "rxjs": "^7.8.1",
     "sqlite3": "^5.1.6",
-    "ts-jest": "^29.1.0",
+    "ts-jest": "^29.1.1",
     "ts-node": "^10.9.1",
     "typeorm": "^0.3.17",
     "typescript": "^4.9.5"
