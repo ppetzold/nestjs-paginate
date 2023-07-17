@@ -41,6 +41,7 @@ function fastifyContextFactory(query: FastifyRequest['query']): Partial<Executio
                         protocol: 'http',
                         hostname: 'localhost',
                         url: '/items?search=2423',
+                        originalUrl: '/items?search=2423',
                         query: query,
                     }),
             }),
