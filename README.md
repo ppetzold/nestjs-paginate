@@ -458,6 +458,33 @@ is resolved to:
 
 `WHERE ... AND (id = 5 OR id = 7) AND name = 'Milo' AND ...`
 
+## OpenApi documentation through `@nestjs/swagger` library
+
+This module provides a controller method decorator allowing to demonstrate search, ordering and pagination capabilities of your endpoint.
+
+To use this decorator:
+```typescript
+class CatsController {
+  @Get('/cats') 
+  @PaginatedEndpoint(YourEntityType, options)
+  public getCat(): void {
+   // ...
+  }
+}
+```
+
+`options` is an optional parameter of type `PaginatedEndpointOptions`.
+```typescript
+interface PaginatedEndpointOptions {
+  // Whether to include or not the `search` and `searchBy` query parameters in your endpoint documentation, default to `true`  
+  search?: boolean
+  // Whether to include or not the `sort` query parameter in your endpoint documentation, default to `true`
+  sort?: boolean
+  // Allowed filter properties allowed for this endpoint. Each property given results in creating a `filter.<PropertyName>` query parameter. Default to `[]`  
+  filterProperties?: string[] 
+}
+```
+
 ## Troubleshooting
 
 The package does not report error reasons in the response bodies. They are instead
