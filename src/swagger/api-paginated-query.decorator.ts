@@ -111,18 +111,6 @@ function Page() {
     })
 }
 
-function Path() {
-    return ApiQuery({
-        name: 'path',
-        description: `Path to the resource. If you provide invalid value the default will be applied
-        ${p('Example', 'https://api.example.com/api/v1')}
-        ${p(DEFAULT_VALUE_KEY, 'Current host that you do use for calling this API')}
-        `,
-        required: false,
-        type: 'string',
-    })
-}
-
 function Search(paginateConfig: PaginateConfig<any>) {
     if (!paginateConfig.searchableColumns) return
 
@@ -165,7 +153,6 @@ export const ApiPaginationQuery = (paginationConfig: PaginateConfig<any>) => {
             Search(paginationConfig),
             SearchBy(paginationConfig),
             Select(paginationConfig),
-            Path(),
         ].filter((v): v is MethodDecorator => v !== undefined)
     )
 }
