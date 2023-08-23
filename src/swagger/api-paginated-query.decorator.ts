@@ -104,7 +104,7 @@ function Page() {
         name: 'page',
         description: `Page number to retrieve.If you provide invalid value the default page number will applied
         ${p('Example', '1')}
-        ${p(DEFAULT_VALUE_KEY, '0')}
+        ${p(DEFAULT_VALUE_KEY, '1')}
         `,
         required: false,
         type: 'number',

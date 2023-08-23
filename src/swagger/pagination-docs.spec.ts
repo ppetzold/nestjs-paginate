@@ -72,7 +72,7 @@ describe('PaginatedEndpoint decorator', () => {
                 required: false,
                 in: 'query',
                 description:
-                    'Page number to retrieve.If you provide invalid value the default page number will applied\n        <p>\n             <b>Example: </b> 1\n          </p>\n        <p>\n             <b>Default Value: </b> 0\n          </p>\n        ',
+                    'Page number to retrieve.If you provide invalid value the default page number will applied\n        <p>\n             <b>Example: </b> 1\n          </p>\n        <p>\n             <b>Default Value: </b> 1\n          </p>\n        ',
                 schema: {
                     type: 'number',
                 },
@@ -153,7 +153,7 @@ describe('PaginatedEndpoint decorator', () => {
                 required: false,
                 in: 'query',
                 description:
-                    'Page number to retrieve.If you provide invalid value the default page number will applied\n        <p>\n             <b>Example: </b> 1\n          </p>\n        <p>\n             <b>Default Value: </b> 0\n          </p>\n        ',
+                    'Page number to retrieve.If you provide invalid value the default page number will applied\n        <p>\n             <b>Example: </b> 1\n          </p>\n        <p>\n             <b>Default Value: </b> 1\n          </p>\n        ',
                 schema: {
                     type: 'number',
                 },
