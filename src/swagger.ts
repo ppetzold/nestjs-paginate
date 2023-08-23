@@ -178,7 +178,6 @@ export const ApiOkResponsePaginated = <DTO extends Type<unknown>>(
                                         type: 'object',
                                         properties: Object.keys(cols).reduce(
                                             (acc, key) => {
-                                                // eslint-disable-next-line security/detect-object-injection
                                                 acc[key] = {
                                                     oneOf: [
                                                         {
