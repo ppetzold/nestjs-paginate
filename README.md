@@ -462,34 +462,36 @@ is resolved to:
 
 You can use two default decorators @ApiOkResponsePaginated and @ApiPagination to generate swagger documentation for your endpoints
 
-`@ApiOkResponsePaginated` is for response body, return http[](https://) status is 200
+`@ApiOkPaginatedResponse` is for response body, return http[](https://) status is 200
 
-`@ApiPagination` is for query params
+`@ApiPaginationQuery` is for query params
 
 
 ```typescript
   @Get()
-  @ApiOkResponsePaginated(
-    CustomUserRoleWithoutPermissionsDto,
-    ROLES_PAGINATION_CONFIG,
+  @ApiOkPaginatedResponse(
+    UserDto,
+    USER_PAGINATION_CONFIG,
   )
-  @ApiPagination(ROLES_PAGINATION_CONFIG)
+  @ApiPaginationQuery(USER_PAGINATION_CONFIG)
   async findAll(
     @Paginate()
     query: PaginateQuery,
-  ): Promise<Paginated<CustomUserRoleWithoutPermissionsDto>> {
-    return this.customUserRoleService
-      .findAll(query, ROLES_PAGINATION_CONFIG)
-      .then(({ data, ...other }) => {
-        const resultData = data.map((item) => {
-          return plainToClass(CustomUserRoleWithoutPermissionsDto, item);
-        });
+  ): Promise<Paginated<UserEntity>> {
 
-        return {
-          ...other,
-          data: resultData,
-        } as Paginated<CustomUserRoleWithoutPermissionsDto>;
-      });
+  }
+```
+
+There is also some syntax sugar for this, and you can use only one decorator `@PaginatedSwaggerDocs` for both response body and query params
+
+```typescript
+  @Get()
+  @PaginatedSwaggerDocs(UserDto, USER_PAGINATION_CONFIG)
+  async findAll(
+    @Paginate()
+    query: PaginateQuery,
+  ): Promise<Paginated<UserEntity>> {
+
   }
 ```
 
