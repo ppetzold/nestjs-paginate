@@ -1,9 +1,8 @@
-import {applyDecorators, Type} from '@nestjs/common';
-import {ApiExtraModels, ApiOkResponse, ApiProperty, getSchemaPath} from '@nestjs/swagger';
-import {ReferenceObject, SchemaObject,} from '@nestjs/swagger/dist/interfaces/open-api-spec.interface';
-import {PaginateConfig, Paginated} from "./paginate";
-import {Column, SortBy} from "./helper";
-
+import { applyDecorators, Type } from '@nestjs/common'
+import { ApiExtraModels, ApiOkResponse, ApiProperty, getSchemaPath } from '@nestjs/swagger'
+import { ReferenceObject, SchemaObject } from '@nestjs/swagger/dist/interfaces/open-api-spec.interface'
+import { PaginateConfig, Paginated } from './paginate'
+import { Column, SortBy } from './helper'
 
 export class PaginatedLinksDocumented {
     @ApiProperty({
@@ -11,35 +10,35 @@ export class PaginatedLinksDocumented {
         required: false,
         type: 'string',
     })
-    first?: string;
+    first?: string
 
     @ApiProperty({
         title: 'Link to previous page',
         required: false,
         type: 'string',
     })
-    previous?: string;
+    previous?: string
 
     @ApiProperty({
         title: 'Link to current page',
         required: false,
         type: 'string',
     })
-    current!: string;
+    current!: string
 
     @ApiProperty({
         title: 'Link to next page',
         required: false,
         type: 'string',
     })
-    next?: string;
+    next?: string
 
     @ApiProperty({
         title: 'Link to last page',
         required: false,
         type: 'string',
     })
-    last?: string;
+    last?: string
 }
 
 export class PaginatedMetaDocumented<T> {
@@ -48,28 +47,28 @@ export class PaginatedMetaDocumented<T> {
         required: true,
         type: 'number',
     })
-    itemsPerPage!: number;
+    itemsPerPage!: number
 
     @ApiProperty({
         title: 'Total number of items',
         required: true,
         type: 'number',
     })
-    totalItems!: number;
+    totalItems!: number
 
     @ApiProperty({
         title: 'Current requested page',
         required: true,
         type: 'number',
     })
-    currentPage!: number;
+    currentPage!: number
 
     @ApiProperty({
         title: 'Total number of pages',
         required: true,
         type: 'number',
     })
-    totalPages!: number;
+    totalPages!: number
 
     @ApiProperty({
         title: 'Sorting by columns',
@@ -90,7 +89,7 @@ export class PaginatedMetaDocumented<T> {
             },
         },
     })
-    sortBy!: SortBy<T>;
+    sortBy!: SortBy<T>
 
     @ApiProperty({
         title: 'Search by fields',
@@ -98,14 +97,14 @@ export class PaginatedMetaDocumented<T> {
         isArray: true,
         type: 'string',
     })
-    searchBy!: Column<T>[];
+    searchBy!: Column<T>[]
 
     @ApiProperty({
         title: 'Search term',
         required: false,
         type: 'string',
     })
-    search!: string;
+    search!: string
 
     @ApiProperty({
         title: 'List of selected fields',
@@ -113,7 +112,7 @@ export class PaginatedMetaDocumented<T> {
         isArray: true,
         type: 'string',
     })
-    select!: string[];
+    select!: string[]
 
     @ApiProperty({
         title: 'Filters that applied to the query',
@@ -122,8 +121,8 @@ export class PaginatedMetaDocumented<T> {
         type: 'object',
     })
     filter?: {
-        [p: string]: string | string[];
-    };
+        [p: string]: string | string[]
+    }
 }
 
 export class PaginatedDocumented<T> extends Paginated<T> {
@@ -132,38 +131,38 @@ export class PaginatedDocumented<T> extends Paginated<T> {
         required: true,
         title: 'Array of entities',
     })
-    override data!: T[];
+    override data!: T[]
 
     @ApiProperty({
         title: 'Pagination Metadata',
         required: true,
     })
-    override meta!: PaginatedMetaDocumented<T>;
+    override meta!: PaginatedMetaDocumented<T>
 
     @ApiProperty({
         title: 'Links to pages',
         required: true,
     })
-    override links!: PaginatedLinksDocumented;
+    override links!: PaginatedLinksDocumented
 }
 
 export const ApiOkResponsePaginated = <DTO extends Type<unknown>>(
     dataDto: DTO,
-    paginatedConfig: PaginateConfig<any>,
+    paginatedConfig: PaginateConfig<any>
 ) => {
-    const cols = paginatedConfig?.filterableColumns || {};
+    const cols = paginatedConfig?.filterableColumns || {}
 
     return applyDecorators(
         ApiExtraModels(PaginatedDocumented, dataDto),
         ApiOkResponse({
             schema: {
                 allOf: [
-                    {$ref: getSchemaPath(PaginatedDocumented)},
+                    { $ref: getSchemaPath(PaginatedDocumented) },
                     {
                         properties: {
                             data: {
                                 type: 'array',
-                                items: {$ref: getSchemaPath(dataDto)},
+                                items: { $ref: getSchemaPath(dataDto) },
                             },
                             meta: {
                                 properties: {
@@ -190,10 +189,10 @@ export const ApiOkResponsePaginated = <DTO extends Type<unknown>>(
                                                             },
                                                         },
                                                     ],
-                                                };
-                                                return acc;
+                                                }
+                                                return acc
                                             },
-                                            {} as Record<string, SchemaObject | ReferenceObject>,
+                                            {} as Record<string, SchemaObject | ReferenceObject>
                                         ),
                                     },
                                 },
@@ -202,6 +201,6 @@ export const ApiOkResponsePaginated = <DTO extends Type<unknown>>(
                     },
                 ],
             },
-        }),
-    );
-};
+        })
+    )
+}
