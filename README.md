@@ -458,6 +458,43 @@ is resolved to:
 
 `WHERE ... AND (id = 5 OR id = 7) AND name = 'Milo' AND ...`
 
+## Swagger
+
+You can use two default decorators @ApiOkResponsePaginated and @ApiPagination to generate swagger documentation for your endpoints
+
+`@ApiOkPaginatedResponse` is for response body, return http[](https://) status is 200
+
+`@ApiPaginationQuery` is for query params
+
+
+```typescript
+  @Get()
+  @ApiOkPaginatedResponse(
+    UserDto,
+    USER_PAGINATION_CONFIG,
+  )
+  @ApiPaginationQuery(USER_PAGINATION_CONFIG)
+  async findAll(
+    @Paginate()
+    query: PaginateQuery,
+  ): Promise<Paginated<UserEntity>> {
+
+  }
+```
+
+There is also some syntax sugar for this, and you can use only one decorator `@PaginatedSwaggerDocs` for both response body and query params
+
+```typescript
+  @Get()
+  @PaginatedSwaggerDocs(UserDto, USER_PAGINATION_CONFIG)
+  async findAll(
+    @Paginate()
+    query: PaginateQuery,
+  ): Promise<Paginated<UserEntity>> {
+
+  }
+```
+
 ## Troubleshooting
 
 The package does not report error reasons in the response bodies. They are instead
