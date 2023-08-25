@@ -128,6 +128,7 @@ export class PaginatedDocumented<T> extends Paginated<T> {
         isArray: true,
         required: true,
         title: 'Array of entities',
+        type: 'object'
     })
     override data!: T[]
 
