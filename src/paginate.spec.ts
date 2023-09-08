@@ -710,9 +710,42 @@ describe('paginate', () => {
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&search=Garfield')
     })
 
-    it('should load nested relations', async () => {
+    it('should load nested relations (object notation)', async () => {
         const config: PaginateConfig<CatEntity> = {
             relations: { home: { pillows: true } },
+            sortableColumns: ['id', 'name'],
+            searchableColumns: ['name'],
+        }
+        const query: PaginateQuery = {
+            path: '',
+            search: 'Garfield',
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        const cat = clone(cats[1])
+        const catHomesClone = clone(catHomes[1])
+        const catHomePillowsClone3 = clone(catHomePillows[3])
+        delete catHomePillowsClone3.home
+        const catHomePillowsClone4 = clone(catHomePillows[4])
+        delete catHomePillowsClone4.home
+        const catHomePillowsClone5 = clone(catHomePillows[5])
+        delete catHomePillowsClone5.home
+
+        catHomesClone.countCat = cats.filter((cat) => cat.id === catHomesClone.cat.id).length
+        catHomesClone.pillows = [catHomePillowsClone3, catHomePillowsClone4, catHomePillowsClone5]
+        cat.home = catHomesClone
+        delete cat.home.cat
+
+        expect(result.meta.search).toStrictEqual('Garfield')
+        expect(result.data).toStrictEqual([cat])
+        expect(result.data[0].home).toBeDefined()
+        expect(result.data[0].home.pillows).toStrictEqual(cat.home.pillows)
+    })
+
+    it('should load nested relations (array notation)', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            relations: ['home.pillows'],
             sortableColumns: ['id', 'name'],
             searchableColumns: ['name'],
         }

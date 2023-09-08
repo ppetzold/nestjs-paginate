@@ -6,6 +6,7 @@ import {
     FindOptionsRelations,
     ObjectLiteral,
     FindOptionsUtils,
+    FindOptionsRelationByString,
 } from 'typeorm'
 import { PaginateQuery } from './decorator'
 import { ServiceUnavailableException, Logger } from '@nestjs/common'
@@ -62,7 +63,7 @@ export enum PaginationType {
 }
 
 export interface PaginateConfig<T> {
-    relations?: FindOptionsRelations<T> | RelationColumn<T>[]
+    relations?: FindOptionsRelations<T> | RelationColumn<T>[] | FindOptionsRelationByString
     sortableColumns: Column<T>[]
     nullSort?: 'first' | 'last'
     searchableColumns?: Column<T>[]
