@@ -28,6 +28,7 @@ import {
     getQueryUrlComponents,
 } from './helper'
 import { addFilter, FilterOperator, FilterSuffix } from './filter'
+import { OrmUtils } from 'typeorm/util/OrmUtils'
 
 const logger: Logger = new Logger('nestjs-paginate')
 
@@ -123,27 +124,20 @@ export async function paginate<T extends ObjectLiteral>(
     }
 
     if (config.relations) {
-        // relations: ["relation"]
-        if (Array.isArray(config.relations)) {
-            config.relations.forEach((relation) => {
-                queryBuilder.leftJoinAndSelect(
-                    `${queryBuilder.alias}.${relation}`,
-                    `${queryBuilder.alias}_${relation}_rel`
-                )
-            })
-        } else {
-            // relations: {relation:true}
-            const createQueryBuilderRelations = (
-                prefix: string,
-                relations: FindOptionsRelations<T> | RelationColumn<T>[],
-                alias?: string
-            ) => {
-                Object.keys(relations).forEach((relationName) => {
-                    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-                    const relationSchema = relations![relationName]!
+        const relations = Array.isArray(config.relations)
+            ? OrmUtils.propertyPathsToTruthyObject(config.relations)
+            : config.relations
+        const createQueryBuilderRelations = (
+            prefix: string,
+            relations: FindOptionsRelations<T> | RelationColumn<T>[],
+            alias?: string
+        ) => {
+            Object.keys(relations).forEach((relationName) => {
+                // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+                const relationSchema = relations![relationName]!
 
-                    queryBuilder.leftJoinAndSelect(
-                        `${alias ?? prefix}.${relationName}`,
+                queryBuilder.leftJoinAndSelect(
+                    `${alias ?? prefix}.${relationName}`,
                         `${alias ?? prefix}_${relationName}_rel`
                     )
 
@@ -155,9 +149,8 @@ export async function paginate<T extends ObjectLiteral>(
                         )
                     }
                 })
-            }
-            createQueryBuilderRelations(queryBuilder.alias, config.relations)
         }
+        createQueryBuilderRelations(queryBuilder.alias, relations)
     }
 
     let nullSort: 'NULLS LAST' | 'NULLS FIRST' | undefined = undefined
