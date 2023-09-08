@@ -138,17 +138,13 @@ export async function paginate<T extends ObjectLiteral>(
 
                 queryBuilder.leftJoinAndSelect(
                     `${alias ?? prefix}.${relationName}`,
-                        `${alias ?? prefix}_${relationName}_rel`
-                    )
+                    `${alias ?? prefix}_${relationName}_rel`
+                )
 
-                    if (typeof relationSchema === 'object') {
-                        createQueryBuilderRelations(
-                            relationName,
-                            relationSchema,
-                            `${alias ?? prefix}_${relationName}_rel`
-                        )
-                    }
-                })
+                if (typeof relationSchema === 'object') {
+                    createQueryBuilderRelations(relationName, relationSchema, `${alias ?? prefix}_${relationName}_rel`)
+                }
+            })
         }
         createQueryBuilderRelations(queryBuilder.alias, relations)
     }
