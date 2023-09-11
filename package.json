@@ -61,7 +61,7 @@
   },
   "peerDependencies": {
     "@nestjs/common": "^10.2.4",
-    "@nestjs/swagger": "^7.1.10",
+    "@nestjs/swagger": "^7.1.11",
     "express": "^4.18.2",
     "fastify": "^4.22.2",
     "typeorm": "^0.3.17"
