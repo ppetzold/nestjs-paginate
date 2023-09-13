@@ -1,4 +1,4 @@
-import { Repository, In, DataSource, TypeORMError } from 'typeorm'
+import {Repository, In, DataSource, TypeORMError, Not} from 'typeorm'
 import { Paginated, paginate, PaginateConfig, NO_PAGINATION } from './paginate'
 import { PaginateQuery } from './decorator'
 import { HttpException } from '@nestjs/common'
@@ -865,6 +865,67 @@ describe('paginate', () => {
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC')
     })
 
+    it('should return valid data filtering by not id field many-to-one', async () => {
+        const config: PaginateConfig<CatToyEntity> = {
+            sortableColumns: ['id', 'name'],
+            relations: ['cat'],
+            where: {
+                cat: {
+                    name: cats[0].name,
+                },
+            },
+        }
+        const query: PaginateQuery = {
+            path: '',
+        }
+
+        const result = await paginate<CatToyEntity>(query, catToyRepo, config)
+
+        expect(result.meta.totalItems).toBe(3)
+        result.data.forEach((toy) => {
+            expect(toy.cat.id).toBe(cats[0].id)
+        })
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC')
+    })
+
+    it('should return result based on where one-to-many relation', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            relations: ['toys'],
+            sortableColumns: ['id', 'name'],
+            where: {
+                'toys': {
+                    name: 'Stuffed Mouse',
+                },
+            },
+        }
+
+        const query: PaginateQuery = {
+            path: '',
+            filter: {
+                'toys.name': '$not:Stuffed Mouse',
+            },
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        const cat1 = clone(cats[0])
+        const cat2 = clone(cats[1])
+        const catToys1 = clone(catToys[0])
+        const catToys2 = clone(catToys[2])
+        const catToys3 = clone(catToys[3])
+        delete catToys1.cat
+        delete catToys2.cat
+        delete catToys3.cat
+        cat1.toys = [catToys1, catToys2]
+        cat2.toys = [catToys3]
+
+        expect(result.meta.filter).toStrictEqual({
+            'toys.name': '$not:Stuffed Mouse',
+        })
+        expect(result.data).toStrictEqual([cat1, cat2])
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.toys.name=$not:Stuffed Mouse')
+    })
+
     it('should return result based on filter on many-to-one relation', async () => {
         const config: PaginateConfig<CatToyEntity> = {
             relations: ['cat'],
@@ -1477,7 +1538,9 @@ describe('paginate', () => {
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.cat.(size.height)=$btw:18,33')
     })
 
-    it('should return result based on where array and filter', async () => {
+    it('should return result based on where array and filter', async () =>
+
+    {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id'],
             where: [
