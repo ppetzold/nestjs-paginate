@@ -140,8 +140,14 @@ export function fixColumnAlias(
             return `(${query(`${alias}_${properties.propertyPath}_rel`)})` // () is needed to avoid parameter conflict
         } else if ((isVirtualProperty && !query) || properties.isNested) {
             if (properties.propertyName.includes('.')) {
-                const [nestedRel, nestedCol] = properties.propertyName.split('.')
-                return `${alias}_${properties.propertyPath}_rel_${nestedRel}_rel.${nestedCol}`
+                const propertyPath = properties.propertyName.split('.')
+                const nestedRelations = propertyPath
+                    .slice(0, -1)
+                    .map((v) => `${v}_rel`)
+                    .join('_')
+                const nestedCol = propertyPath[propertyPath.length - 1]
+
+                return `${alias}_${properties.propertyPath}_rel_${nestedRelations}.${nestedCol}`
             } else {
                 return `${alias}_${properties.propertyPath}_rel_${properties.propertyName}`
             }

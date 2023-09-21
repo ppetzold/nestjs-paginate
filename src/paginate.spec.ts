@@ -1,4 +1,4 @@
-import { Repository, In, DataSource, TypeORMError } from 'typeorm'
+import { Repository, In, DataSource, TypeORMError, Like } from 'typeorm'
 import { Paginated, paginate, PaginateConfig, NO_PAGINATION } from './paginate'
 import { PaginateQuery } from './decorator'
 import { HttpException } from '@nestjs/common'
@@ -16,6 +16,8 @@ import {
     isSuffix,
     OperatorSymbolToFunction,
 } from './filter'
+import { ToyShopEntity } from './__tests__/toy-shop.entity'
+import { ToyShopAddressEntity } from './__tests__/toy-shop-address.entity'
 
 const isoStringToDate = (isoString) => new Date(isoString)
 
@@ -23,10 +25,15 @@ describe('paginate', () => {
     let dataSource: DataSource
     let catRepo: Repository<CatEntity>
     let catToyRepo: Repository<CatToyEntity>
+    let toyShopRepo: Repository<ToyShopEntity>
+    let toyShopAddressRepository: Repository<ToyShopAddressEntity>
     let catHomeRepo: Repository<CatHomeEntity>
     let catHomePillowRepo: Repository<CatHomePillowEntity>
     let cats: CatEntity[]
     let catToys: CatToyEntity[]
+    let catToysWithoutShop: CatToyEntity[]
+    let toyShopsAddresses: ToyShopAddressEntity[]
+    let toysShops: ToyShopEntity[]
     let catHomes: CatHomeEntity[]
     let catHomePillows: CatHomePillowEntity[]
 
@@ -47,13 +54,22 @@ describe('paginate', () => {
                   }),
             synchronize: true,
             logging: ['error'],
-            entities: [CatEntity, CatToyEntity, CatHomeEntity, CatHomePillowEntity],
+            entities: [
+                CatEntity,
+                CatToyEntity,
+                ToyShopAddressEntity,
+                CatHomeEntity,
+                CatHomePillowEntity,
+                ToyShopEntity,
+            ],
         })
         await dataSource.initialize()
         catRepo = dataSource.getRepository(CatEntity)
         catToyRepo = dataSource.getRepository(CatToyEntity)
         catHomeRepo = dataSource.getRepository(CatHomeEntity)
         catHomePillowRepo = dataSource.getRepository(CatHomePillowEntity)
+        toyShopRepo = dataSource.getRepository(ToyShopEntity)
+        toyShopAddressRepository = dataSource.getRepository(ToyShopAddressEntity)
 
         cats = await catRepo.save([
             catRepo.create({
@@ -97,12 +113,41 @@ describe('paginate', () => {
                 size: { height: 10, width: 5, length: 15 },
             }),
         ])
+
+        toyShopsAddresses = await toyShopAddressRepository.save([
+            toyShopAddressRepository.create({ address: '123 Main St' }),
+        ])
+
+        toysShops = await toyShopRepo.save([
+            toyShopRepo.create({ shopName: 'Best Toys', address: toyShopsAddresses[0] }),
+            toyShopRepo.create({ shopName: 'Lovely Toys' }),
+        ])
+
         catToys = await catToyRepo.save([
             catToyRepo.create({ name: 'Fuzzy Thing', cat: cats[0], size: { height: 10, width: 10, length: 10 } }),
-            catToyRepo.create({ name: 'Stuffed Mouse', cat: cats[0], size: { height: 5, width: 5, length: 12 } }),
-            catToyRepo.create({ name: 'Mouse', cat: cats[0], size: { height: 6, width: 4, length: 13 } }),
+            catToyRepo.create({
+                name: 'Stuffed Mouse',
+                shop: toysShops[0],
+                cat: cats[0],
+                size: { height: 5, width: 5, length: 12 },
+            }),
+            catToyRepo.create({
+                name: 'Mouse',
+                shop: toysShops[1],
+                cat: cats[0],
+                size: { height: 6, width: 4, length: 13 },
+            }),
             catToyRepo.create({ name: 'String', cat: cats[1], size: { height: 1, width: 1, length: 50 } }),
         ])
+
+        catToysWithoutShop = catToys.map(({ shop: _, ...other }) => {
+            const newInstance = new CatToyEntity()
+            for (const otherKey in other) {
+                newInstance[otherKey] = other[otherKey]
+            }
+            return newInstance
+        })
+
         catHomes = await catHomeRepo.save([
             catHomeRepo.create({ name: 'Box', cat: cats[0] }),
             catHomeRepo.create({ name: 'House', cat: cats[1] }),
@@ -594,7 +639,7 @@ describe('paginate', () => {
         const result = await paginate<CatToyEntity>(query, catToyRepo, config)
 
         expect(result.meta.search).toStrictEqual('Milo')
-        expect(result.data).toStrictEqual([catToys[0], catToys[1], catToys[2]])
+        expect(result.data).toStrictEqual([catToysWithoutShop[0], catToysWithoutShop[1], catToysWithoutShop[2]])
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&search=Milo')
     })
 
@@ -616,9 +661,9 @@ describe('paginate', () => {
         const result = await paginate<CatEntity>(query, catRepo, config)
 
         expect(result.meta.search).toStrictEqual('Mouse')
-        const toy = clone(catToys[1])
+        const toy = clone(catToysWithoutShop[1])
         delete toy.cat
-        const toy2 = clone(catToys[2])
+        const toy2 = clone(catToysWithoutShop[2])
         delete toy2.cat
 
         expect(result.data).toStrictEqual([Object.assign(clone(cats[0]), { toys: [toy2, toy] })])
@@ -661,13 +706,15 @@ describe('paginate', () => {
         const result = await paginate<CatToyEntity>(query, catToyRepo, config)
 
         expect(result.meta.search).toStrictEqual('Milo')
-        expect(result.data).toStrictEqual([catToys[0], catToys[1], catToys[2]].sort((a, b) => b.cat.id - a.cat.id))
+        expect(result.data).toStrictEqual(
+            [catToysWithoutShop[0], catToysWithoutShop[1], catToysWithoutShop[2]].sort((a, b) => b.cat.id - a.cat.id)
+        )
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=cat.id:DESC&search=Milo')
     })
 
     it('should return result based on sort on one-to-many relation', async () => {
         const config: PaginateConfig<CatEntity> = {
-            relations: ['toys'],
+            relations: ['toys', 'toys.shop', 'toys.shop.address'],
             sortableColumns: ['id', 'name', 'toys.id'],
             searchableColumns: ['name', 'toys.name'],
         }
@@ -684,6 +731,9 @@ describe('paginate', () => {
         delete toy1.cat
         const toy2 = clone(catToys[2])
         delete toy2.cat
+
+        delete result.data[0].toys[0].shop.address
+
         expect(result.data).toStrictEqual([Object.assign(clone(cats[0]), { toys: [toy2, toy1] })])
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=toys.id:DESC&search=Mouse')
     })
@@ -865,6 +915,103 @@ describe('paginate', () => {
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC')
     })
 
+    it('should return valid data filtering by not id field many-to-one', async () => {
+        const config: PaginateConfig<CatToyEntity> = {
+            sortableColumns: ['id', 'name'],
+            relations: ['cat'],
+            where: {
+                cat: {
+                    name: cats[0].name,
+                },
+            },
+        }
+        const query: PaginateQuery = {
+            path: '',
+        }
+
+        const result = await paginate<CatToyEntity>(query, catToyRepo, config)
+
+        expect(result.meta.totalItems).toBe(3)
+        result.data.forEach((toy) => {
+            expect(toy.cat.id).toBe(cats[0].id)
+        })
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC')
+    })
+
+    it('should return result based on where one-to-many relation', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            relations: ['toys'],
+            sortableColumns: ['id', 'name'],
+            where: {
+                toys: {
+                    name: 'Stuffed Mouse',
+                },
+            },
+        }
+
+        const query: PaginateQuery = {
+            path: '',
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        expect(result.data.length).toBe(1)
+        expect(result.data[0].toys.length).toBe(1)
+        expect(result.data[0].toys[0].name).toBe('Stuffed Mouse')
+    })
+
+    it('should return all cats with a toys from the lovely shop', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            relations: ['toys', 'toys.shop'],
+            sortableColumns: ['id', 'name'],
+            where: {
+                toys: {
+                    shop: {
+                        shopName: 'Lovely Toys',
+                    },
+                },
+            },
+        }
+
+        const query: PaginateQuery = {
+            path: '',
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        expect(result.data.length).toBe(1)
+        expect(result.data[0].toys.length).toBe(1)
+        expect(result.data[0].toys[0].shop.id).toStrictEqual(toysShops[1].id)
+        expect(result.data[0].toys[0].name).toBe('Mouse')
+    })
+
+    it('should return all cats from shop where street name like 123', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            relations: ['toys', 'toys.shop', 'toys.shop.address'],
+            sortableColumns: ['id', 'name'],
+            where: {
+                toys: {
+                    shop: {
+                        address: {
+                            address: Like('%123%'),
+                        },
+                    },
+                },
+            },
+        }
+
+        const query: PaginateQuery = {
+            path: '',
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        expect(result.data.length).toBe(1)
+        expect(result.data[0].toys.length).toBe(1)
+        expect(result.data[0].toys[0].shop).toStrictEqual(toysShops[0])
+        expect(result.data[0].toys[0].name).toBe('Stuffed Mouse')
+    })
+
     it('should return result based on filter on many-to-one relation', async () => {
         const config: PaginateConfig<CatToyEntity> = {
             relations: ['cat'],
@@ -908,9 +1055,9 @@ describe('paginate', () => {
 
         const cat1 = clone(cats[0])
         const cat2 = clone(cats[1])
-        const catToys1 = clone(catToys[0])
-        const catToys2 = clone(catToys[2])
-        const catToys3 = clone(catToys[3])
+        const catToys1 = clone(catToysWithoutShop[0])
+        const catToys2 = clone(catToysWithoutShop[2])
+        const catToys3 = clone(catToysWithoutShop[3])
         delete catToys1.cat
         delete catToys2.cat
         delete catToys3.cat
@@ -1062,7 +1209,7 @@ describe('paginate', () => {
         copyCats[0].home = copyHomes[0]
         copyCats[1].home = copyHomes[1]
 
-        const copyToys = catToys.map((toy: CatToyEntity) => {
+        const copyToys = catToysWithoutShop.map((toy: CatToyEntity) => {
             const copy = clone(toy)
             delete copy.cat
             return copy
@@ -1095,16 +1242,16 @@ describe('paginate', () => {
 
         const result = await paginate<CatEntity>(query, catRepo, config)
 
-        const toy0 = clone(catToys[0])
+        const toy0 = clone(catToysWithoutShop[0])
         delete toy0.cat
 
-        const toy1 = clone(catToys[1])
+        const toy1 = clone(catToysWithoutShop[1])
         delete toy1.cat
 
-        const toy2 = clone(catToys[2])
+        const toy2 = clone(catToysWithoutShop[2])
         delete toy2.cat
 
-        const toy3 = clone(catToys[3])
+        const toy3 = clone(catToysWithoutShop[3])
         delete toy3.cat
 
         const orderedCats = [
@@ -1136,7 +1283,7 @@ describe('paginate', () => {
         }
 
         const result = await paginate<CatToyEntity>(query, catToyRepo, config)
-        const orderedToys = [catToys[3], catToys[0], catToys[2], catToys[1]]
+        const orderedToys = [catToysWithoutShop[3], catToysWithoutShop[0], catToysWithoutShop[2], catToysWithoutShop[1]]
 
         expect(result.data).toStrictEqual(orderedToys)
         expect(result.links.current).toBe(
@@ -1279,7 +1426,12 @@ describe('paginate', () => {
 
         const result = await paginate<CatToyEntity>(query, catToyRepo, config)
         expect(result.meta.search).toStrictEqual('1')
-        expect(result.data).toStrictEqual([catToys[3], catToys[0], catToys[1], catToys[2]])
+        expect(result.data).toStrictEqual([
+            catToysWithoutShop[3],
+            catToysWithoutShop[0],
+            catToysWithoutShop[1],
+            catToysWithoutShop[2],
+        ])
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=cat.(size.height):DESC&search=1')
     })
 
