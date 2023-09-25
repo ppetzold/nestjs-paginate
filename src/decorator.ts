@@ -24,11 +24,10 @@ export interface PaginateQuery {
 
 const singleSplit = (param: string, res: any[]) => res.push(param)
 
-const multipleSplit = (param: string, res: any[]) => {
-    const items = param.split(':')
-    if (items.length === 2) {
-        res.push(items as [string, string])
-    }
+const parseSort = (params: string[]) => {
+    return params.map((param): [string, 'ASC' | 'DESC'] =>
+        param.startsWith('-') ? [param.slice(1), 'DESC'] : [param, 'ASC']
+    )
 }
 
 const multipleAndCommaSplit = (param: string, res: any[]) => {
@@ -57,6 +56,14 @@ function parseFamilyParam<T>(family: unknown, key: string, parser: (value: strin
     }
 }
 
+function parseListParam<T>(queryParam: unknown, parserLogic: (param: string[]) => T[]): T[] | undefined {
+    if (isString(queryParam)) {
+        return parserLogic(queryParam.split(','))
+    } else {
+        return undefined
+    }
+}
+
 export const Paginate = createParamDecorator((_data: unknown, ctx: ExecutionContext): PaginateQuery => {
     const request: ExpressRequest | FastifyRequest = ctx.switchToHttp().getRequest()
     const query = request.query as Record<string, unknown>
@@ -72,7 +79,7 @@ export const Paginate = createParamDecorator((_data: unknown, ctx: ExecutionCont
     const path = urlParts.protocol + '//' + urlParts.host + urlParts.pathname
 
     const searchBy = parseParam<string>(query.searchBy, singleSplit)
-    const sortBy = parseParam<[string, string]>(query.sortBy, multipleSplit)
+    const sortBy = parseListParam<[string, 'ASC' | 'DESC']>(query.sort, parseSort)
     const select = parseParam<string>(query.select, multipleAndCommaSplit)
 
     const filter = mapKeys(

@@ -87,7 +87,7 @@ describe('Decorator', () => {
     it('should handle express defined query fields', () => {
         const context = expressContextFactory({
             page: { number: '1', size: '20' },
-            sortBy: ['id:ASC', 'createdAt:DESC'],
+            sort: 'id,-createdAt',
             search: 'white',
             'filter.name': '$not:$eq:Kitty',
             'filter.createdAt': ['$gte:2020-01-01', '$lte:2020-12-31'],
@@ -117,7 +117,7 @@ describe('Decorator', () => {
     it('should handle express partially defined query families', () => {
         const context = expressContextFactory({
             page: { number: '1' },
-            sortBy: ['id:ASC', 'createdAt:DESC'],
+            sort: 'id,-createdAt',
             search: 'white',
             'filter.name': '$not:$eq:Kitty',
             'filter.createdAt': ['$gte:2020-01-01', '$lte:2020-12-31'],
@@ -150,7 +150,7 @@ describe('Decorator', () => {
                 number: '1',
                 size: '20',
             },
-            sortBy: ['id:ASC', 'createdAt:DESC'],
+            sort: 'id,-createdAt',
             search: 'white',
             'filter.name': '$not:$eq:Kitty',
             'filter.createdAt': ['$gte:2020-01-01', '$lte:2020-12-31'],
@@ -183,7 +183,7 @@ describe('Decorator', () => {
                 number: '1',
                 size: '20',
             },
-            sortBy: ['id:ASC', 'createdAt:DESC'],
+            sort: 'id,-createdAt',
             search: 'white',
             'filter.name': '$not:$eq:Kitty',
             'filter.createdAt': ['$gte:2020-01-01', '$lte:2020-12-31'],
