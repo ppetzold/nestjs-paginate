@@ -1,32 +1,33 @@
 import {
+    Brackets,
+    FindOperator,
+    FindOptionsRelationByString,
+    FindOptionsRelations,
+    FindOptionsUtils,
+    FindOptionsWhere,
+    ObjectLiteral,
     Repository,
     SelectQueryBuilder,
-    Brackets,
-    FindOptionsWhere,
-    FindOptionsRelations,
-    ObjectLiteral,
-    FindOptionsUtils,
-    FindOptionsRelationByString,
 } from 'typeorm'
 import { PaginateQuery } from './decorator'
-import { ServiceUnavailableException, Logger } from '@nestjs/common'
+import { Logger, ServiceUnavailableException } from '@nestjs/common'
 import { mapKeys } from 'lodash'
 import { stringify } from 'querystring'
 import { WherePredicateOperator } from 'typeorm/query-builder/WhereClause'
 import {
-    checkIsRelation,
     checkIsEmbedded,
+    checkIsRelation,
     Column,
     extractVirtualProperty,
     fixColumnAlias,
     getPropertiesByColumnName,
+    getQueryUrlComponents,
+    includesAllPrimaryKeyColumns,
+    isEntityKey,
     Order,
     positiveNumberOrDefault,
     RelationColumn,
     SortBy,
-    includesAllPrimaryKeyColumns,
-    isEntityKey,
-    getQueryUrlComponents,
 } from './helper'
 import { addFilter, FilterOperator, FilterSuffix } from './filter'
 import { OrmUtils } from 'typeorm/util/OrmUtils'
@@ -46,7 +47,9 @@ export class Paginated<T> {
         searchBy: Column<T>[]
         search: string
         select: string[]
-        filter?: { [column: string]: string | string[] }
+        filter?: {
+            [column: string]: string | string[]
+        }
     }
     links: {
         first?: string
@@ -85,6 +88,47 @@ export interface PaginateConfig<T> {
 export const DEFAULT_MAX_LIMIT = 100
 export const DEFAULT_LIMIT = 20
 export const NO_PAGINATION = 0
+
+function generateWhereStatement<T>(
+    queryBuilder: SelectQueryBuilder<T>,
+    obj: FindOptionsWhere<T> | FindOptionsWhere<T>[]
+) {
+    const toTransform = Array.isArray(obj) ? obj : [obj]
+    return toTransform.map((item) => flattenWhereAndTransform(queryBuilder, item).join(' AND ')).join(' OR ')
+}
+
+function flattenWhereAndTransform<T>(
+    queryBuilder: SelectQueryBuilder<T>,
+    obj: FindOptionsWhere<T>,
+    separator = '.',
+    parentKey = ''
+) {
+    return Object.entries(obj).flatMap(([key, value]) => {
+        if (obj.hasOwnProperty(key)) {
+            const joinedKey = parentKey ? `${parentKey}${separator}${key}` : key
+
+            if (typeof value === 'object' && value !== null && !(value instanceof FindOperator)) {
+                return flattenWhereAndTransform(queryBuilder, value as FindOptionsWhere<T>, separator, joinedKey)
+            } else {
+                const property = getPropertiesByColumnName(joinedKey)
+                const { isVirtualProperty, query: virtualQuery } = extractVirtualProperty(queryBuilder, property)
+                const isRelation = checkIsRelation(queryBuilder, property.propertyPath)
+                const isEmbedded = checkIsEmbedded(queryBuilder, property.propertyPath)
+                const alias = fixColumnAlias(
+                    property,
+                    queryBuilder.alias,
+                    isRelation,
+                    isVirtualProperty,
+                    isEmbedded,
+                    virtualQuery
+                )
+                return queryBuilder['createWhereConditionExpression'](
+                    queryBuilder['getWherePredicateCondition'](alias, value)
+                )
+            }
+        }
+    })
+}
 
 export async function paginate<T extends ObjectLiteral>(
     query: PaginateQuery,
@@ -199,8 +243,9 @@ export async function paginate<T extends ObjectLiteral>(
         queryBuilder.select(cols)
     }
 
-    if (config.where) {
-        queryBuilder.andWhere(new Brackets((qb) => qb.andWhere(config.where)))
+    if (config.where && repo instanceof Repository) {
+        const baseWhereStr = generateWhereStatement(queryBuilder, config.where)
+        queryBuilder.andWhere(`(${baseWhereStr})`)
     }
 
     if (config.withDeleted) {
