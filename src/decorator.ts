@@ -49,6 +49,14 @@ function parseParam<T>(queryParam: unknown, parserLogic: (param: string, res: an
     return res.length ? res : undefined
 }
 
+function parseFamilyParam<T>(family: unknown, key: string, parser: (value: string) => T): T | undefined {
+    if (!(typeof family === 'object') || family[key] === undefined) {
+        return undefined
+    } else {
+        return parser(family[key].toString())
+    }
+}
+
 export const Paginate = createParamDecorator((_data: unknown, ctx: ExecutionContext): PaginateQuery => {
     const request: ExpressRequest | FastifyRequest = ctx.switchToHttp().getRequest()
     const query = request.query as Record<string, unknown>
@@ -76,10 +84,9 @@ export const Paginate = createParamDecorator((_data: unknown, ctx: ExecutionCont
         ) as Dictionary<string | string[]>,
         (_param, name) => name.replace('filter.', '')
     )
-
     return {
-        page: query.page ? parseInt(query.page.toString(), 10) : undefined,
-        limit: query.limit ? parseInt(query.limit.toString(), 10) : undefined,
+        page: parseFamilyParam(query.page, 'number', (value) => parseInt(value, 10)),
+        limit: parseFamilyParam(query.page, 'size', (value) => parseInt(value, 10)),
         sortBy,
         search: query.search ? query.search.toString() : undefined,
         searchBy,
