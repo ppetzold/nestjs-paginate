@@ -1,5 +1,5 @@
 import { ROUTE_ARGS_METADATA } from '@nestjs/common/constants'
-import { HttpArgumentsHost, CustomParamFactory, ExecutionContext } from '@nestjs/common/interfaces'
+import { CustomParamFactory, ExecutionContext, HttpArgumentsHost } from '@nestjs/common/interfaces'
 import { Request as ExpressRequest } from 'express'
 import { FastifyRequest } from 'fastify'
 import { Paginate, PaginateQuery } from './decorator'
@@ -14,87 +14,104 @@ function getParamDecoratorFactory<T>(decorator: Function): CustomParamFactory {
     const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, Test, 'test')
     return args[Object.keys(args)[0]].factory
 }
-const decoratorfactory = getParamDecoratorFactory<PaginateQuery>(Paginate)
+const decoratorFactory = getParamDecoratorFactory<PaginateQuery>(Paginate)
+
+const emptyQuery = {
+    page: undefined,
+    limit: undefined,
+    sortBy: undefined,
+    search: undefined,
+    searchBy: undefined,
+    filter: undefined,
+    select: undefined,
+    path: 'http://localhost/items',
+} as const
+
+function resultFactory(defined: Partial<typeof emptyQuery>): typeof emptyQuery {
+    return Object.assign({}, emptyQuery, defined)
+}
 
 function expressContextFactory(query: ExpressRequest['query']): Partial<ExecutionContext> {
-    const mockContext: Partial<ExecutionContext> = {
+    return {
         switchToHttp: (): HttpArgumentsHost =>
             Object({
                 getRequest: (): Partial<ExpressRequest> =>
                     Object({
                         protocol: 'http',
                         get: () => 'localhost',
-                        originalUrl: '/items?search=2423',
-                        query: query,
+                        originalUrl: '/items?@search=2423',
+                        query,
                     }),
             }),
     }
-    return mockContext
 }
 
 function fastifyContextFactory(query: FastifyRequest['query']): Partial<ExecutionContext> {
-    const mockContext: Partial<ExecutionContext> = {
+    return {
         switchToHttp: (): HttpArgumentsHost =>
             Object({
                 getRequest: (): Partial<FastifyRequest> =>
                     Object({
                         protocol: 'http',
                         hostname: 'localhost',
-                        url: '/items?search=2423',
-                        originalUrl: '/items?search=2423',
-                        query: query,
+                        url: '/items?@search=2423',
+                        originalUrl: '/items?@search=2423',
+                        query,
                     }),
             }),
     }
-    return mockContext
 }
 
 describe('Decorator', () => {
     it('should handle express undefined query fields', () => {
         const context = expressContextFactory({})
 
-        const result: PaginateQuery = decoratorfactory(null, context)
+        const result: PaginateQuery = decoratorFactory(null, context)
 
-        expect(result).toStrictEqual({
-            page: undefined,
-            limit: undefined,
-            sortBy: undefined,
-            search: undefined,
-            searchBy: undefined,
-            filter: undefined,
-            select: undefined,
-            path: 'http://localhost/items',
-        })
+        expect(result).toStrictEqual(resultFactory({}))
     })
 
     it('should handle fastify undefined query fields', () => {
         const context = fastifyContextFactory({})
 
-        const result: PaginateQuery = decoratorfactory(null, context)
+        const result: PaginateQuery = decoratorFactory(null, context)
 
-        expect(result).toStrictEqual({
-            page: undefined,
-            limit: undefined,
-            sortBy: undefined,
-            search: undefined,
-            searchBy: undefined,
-            filter: undefined,
-            select: undefined,
-            path: 'http://localhost/items',
+        expect(result).toStrictEqual(resultFactory({}))
+    })
+
+    it('should parse @search object', () => {
+        const context = expressContextFactory({
+            ['@search']: {
+                query: '432',
+                fields: 'field1,field2',
+            },
         })
+
+        const result: PaginateQuery = decoratorFactory(null, context)
+
+        expect(result).toStrictEqual(resultFactory({ search: '432', searchBy: ['field1', 'field2'] }))
+    })
+
+    it('should parse @search query', () => {
+        const context = expressContextFactory({
+            ['@search']: '432',
+        })
+
+        const result: PaginateQuery = decoratorFactory(null, context)
+
+        expect(result).toStrictEqual(resultFactory({ search: '432', searchBy: undefined }))
     })
 
     it('should handle express defined query fields', () => {
         const context = expressContextFactory({
             page: { number: '1', size: '20' },
             sort: 'id,-createdAt',
-            search: 'white',
-            'filter.name': '$not:$eq:Kitty',
-            'filter.createdAt': ['$gte:2020-01-01', '$lte:2020-12-31'],
-            select: ['name', 'createdAt'],
+            ['@search']: 'white',
+            filter: { name: '$not:$eq:Kitty', createdAt: ['$gte:2020-01-01', '$lte:2020-12-31'] },
+            select: 'name,createdAt',
         })
 
-        const result: PaginateQuery = decoratorfactory(null, context)
+        const result: PaginateQuery = decoratorFactory(null, context)
 
         expect(result).toStrictEqual({
             page: 1,
@@ -118,13 +135,12 @@ describe('Decorator', () => {
         const context = expressContextFactory({
             page: { number: '1' },
             sort: 'id,-createdAt',
-            search: 'white',
-            'filter.name': '$not:$eq:Kitty',
-            'filter.createdAt': ['$gte:2020-01-01', '$lte:2020-12-31'],
-            select: ['name', 'createdAt'],
+            ['@search']: 'white',
+            filter: { name: '$not:$eq:Kitty', createdAt: ['$gte:2020-01-01', '$lte:2020-12-31'] },
+            select: 'name,createdAt',
         })
 
-        const result: PaginateQuery = decoratorfactory(null, context)
+        const result: PaginateQuery = decoratorFactory(null, context)
 
         expect(result).toStrictEqual({
             page: 1,
@@ -151,13 +167,12 @@ describe('Decorator', () => {
                 size: '20',
             },
             sort: 'id,-createdAt',
-            search: 'white',
-            'filter.name': '$not:$eq:Kitty',
-            'filter.createdAt': ['$gte:2020-01-01', '$lte:2020-12-31'],
-            select: ['name', 'createdAt'],
+            ['@search']: 'white',
+            filter: { name: '$not:$eq:Kitty', createdAt: ['$gte:2020-01-01', '$lte:2020-12-31'] },
+            select: 'name,createdAt',
         })
 
-        const result: PaginateQuery = decoratorfactory(null, context)
+        const result: PaginateQuery = decoratorFactory(null, context)
 
         expect(result).toStrictEqual({
             page: 1,
@@ -184,13 +199,12 @@ describe('Decorator', () => {
                 size: '20',
             },
             sort: 'id,-createdAt',
-            search: 'white',
-            'filter.name': '$not:$eq:Kitty',
-            'filter.createdAt': ['$gte:2020-01-01', '$lte:2020-12-31'],
-            select: ['name', 'createdAt'],
+            ['@search']: 'white',
+            filter: { name: '$not:$eq:Kitty', createdAt: ['$gte:2020-01-01', '$lte:2020-12-31'] },
+            select: 'name,createdAt',
         })
 
-        const result: PaginateQuery = decoratorfactory(null, context)
+        const result: PaginateQuery = decoratorFactory(null, context)
 
         expect(result).toStrictEqual({
             page: 1,
