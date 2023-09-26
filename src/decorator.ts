@@ -1,7 +1,7 @@
 import { createParamDecorator, ExecutionContext } from '@nestjs/common'
 import type { Request as ExpressRequest } from 'express'
 import type { FastifyRequest } from 'fastify'
-import { pickBy, Dictionary, isString, mapKeys } from 'lodash'
+import { pickBy, isString, mapValues, pick } from 'lodash'
 
 function isRecord(data: unknown): data is Record<string, unknown> {
     return data !== null && typeof data === 'object' && !Array.isArray(data)
@@ -102,27 +102,28 @@ export const Paginate = createParamDecorator((_data: unknown, ctx: ExecutionCont
     const urlParts = new URL(originalUrl)
     const path = urlParts.protocol + '//' + urlParts.host + urlParts.pathname
 
-    const searchBy = parseParam<string>(query.searchBy, singleSplit)
-    const sortBy = parseListParam<[string, 'ASC' | 'DESC']>(query.sort, parseSort)
-    const select = parseParam<string>(query.select, multipleAndCommaSplit)
+    // Parse both `@search=something` and `@search[query]=something&@search[fields]=field1,field2`
+    // to {query: string, fields: string[]}
+    const searchQuery = parseString(query['@search'])
+    const search =
+        typeof query['@search'] === 'object'
+            ? parseFamilyParams<{ query?: string; fields?: string[] }>(query['@search'], {
+                  query: parseString,
+                  fields: parseListParam,
+              })
+            : searchQuery
+            ? { query: searchQuery }
+            : (searchQuery as null | undefined)
 
-    const filter = mapKeys(
-        pickBy(
-            query,
-            (param, name) =>
-                name.includes('filter.') &&
-                (isString(param) || (Array.isArray(param) && (param as any[]).every((p) => isString(p))))
-        ) as Dictionary<string | string[]>,
-        (_param, name) => name.replace('filter.', '')
-    )
+    // Assemble the PaginateQuery
     return {
-        page: parseFamilyParam(query.page, 'number', (value) => parseInt(value, 10)),
-        limit: parseFamilyParam(query.page, 'size', (value) => parseInt(value, 10)),
-        sortBy,
-        search: query.search ? query.search.toString() : undefined,
-        searchBy,
-        filter: Object.keys(filter).length ? filter : undefined,
-        select,
+        page: parseFamilyParam(query.page, 'number', parseInteger),
+        limit: parseFamilyParam(query.page, 'size', parseInteger),
+        sortBy: parseListParam<[string, 'ASC' | 'DESC']>(query.sort, parseSort),
+        search: search?.query,
+        searchBy: search?.fields,
+        filter: parseFamily(query.filter, parseOneOrManyString),
+        select: parseListParam(query.select),
         path,
     }
 })
