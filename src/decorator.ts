@@ -22,11 +22,11 @@ export interface PaginateQuery {
     path: string
 }
 
-const parseInteger = (param: unknown): number | null | undefined =>
-    param === undefined || param === null ? (param as null | undefined) : parseInt(param as string, 10)
-const parseString = (param: unknown): string | null | undefined =>
-    param === undefined || param === null ? (param as null | undefined) : String(param)
-const parseOneOrManyString = (param: unknown): string[] | string | null | undefined =>
+const parseInteger = (param: unknown): number  | undefined =>
+    param === undefined || param === null ? undefined: parseInt(param as string, 10)
+const parseString = (param: unknown): string  | undefined =>
+    param === undefined || param === null ? undefined : String(param)
+const parseOneOrManyString = (param: unknown): string[] | string  | undefined =>
     Array.isArray(param) ? param.map(parseString) : parseString(param)
 const parseSort = (params: string[]) => {
     return params.map((param): [string, 'ASC' | 'DESC'] =>
@@ -34,8 +34,8 @@ const parseSort = (params: string[]) => {
     )
 }
 
-function parseFamilyParam(family: unknown, key: string): string | null | undefined
-function parseFamilyParam<T>(family: unknown, key: string, parser: (value: string) => T): T | null | undefined
+function parseFamilyParam(family: unknown, key: string): string  | undefined
+function parseFamilyParam<T>(family: unknown, key: string, parser: (value: string) => T): T  | undefined
 function parseFamilyParam<T>(
     family: unknown,
     key: string,
@@ -61,7 +61,7 @@ function parseFamilyParams<K extends { [key: string]: any }>(
     }
 }
 
-function parseFamily(family: unknown): Record<string, string | null | undefined> | undefined
+function parseFamily(family: unknown): Record<string, string  | undefined> | undefined
 function parseFamily<T>(family: unknown, parser: (value: string) => T): Record<string, T> | undefined
 function parseFamily<T>(
     family: unknown,
@@ -113,7 +113,7 @@ export const Paginate = createParamDecorator((_data: unknown, ctx: ExecutionCont
               })
             : searchQuery
             ? { query: searchQuery }
-            : (searchQuery as null | undefined)
+            : undefined
 
     // Assemble the PaginateQuery
     return {
