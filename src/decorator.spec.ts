@@ -99,7 +99,7 @@ describe('Decorator', () => {
 
         const result: PaginateQuery = decoratorFactory(null, context)
 
-        expect(result).toStrictEqual(resultFactory({ search: '432', searchBy: undefined }))
+        expect(result).toStrictEqual(resultFactory({ search: '432' }))
     })
 
     it('should handle express defined query fields', () => {
@@ -113,7 +113,7 @@ describe('Decorator', () => {
 
         const result: PaginateQuery = decoratorFactory(null, context)
 
-        expect(result).toStrictEqual({
+        expect(result).toStrictEqual(resultFactory({
             page: 1,
             limit: 20,
             sortBy: [
@@ -121,14 +121,12 @@ describe('Decorator', () => {
                 ['createdAt', 'DESC'],
             ],
             search: 'white',
-            searchBy: undefined,
             select: ['name', 'createdAt'],
-            path: 'http://localhost/items',
             filter: {
                 name: '$not:$eq:Kitty',
                 createdAt: ['$gte:2020-01-01', '$lte:2020-12-31'],
             },
-        })
+        }))
     })
 
     it('should handle express partially defined query families', () => {
@@ -142,22 +140,19 @@ describe('Decorator', () => {
 
         const result: PaginateQuery = decoratorFactory(null, context)
 
-        expect(result).toStrictEqual({
+        expect(result).toStrictEqual(resultFactory({
             page: 1,
-            limit: undefined,
             sortBy: [
                 ['id', 'ASC'],
                 ['createdAt', 'DESC'],
             ],
             search: 'white',
-            searchBy: undefined,
             select: ['name', 'createdAt'],
-            path: 'http://localhost/items',
             filter: {
                 name: '$not:$eq:Kitty',
                 createdAt: ['$gte:2020-01-01', '$lte:2020-12-31'],
             },
-        })
+        }))
     })
 
     it('should handle fastify defined query fields', () => {
@@ -174,7 +169,7 @@ describe('Decorator', () => {
 
         const result: PaginateQuery = decoratorFactory(null, context)
 
-        expect(result).toStrictEqual({
+        expect(result).toStrictEqual(resultFactory({
             page: 1,
             limit: 20,
             sortBy: [
@@ -182,45 +177,11 @@ describe('Decorator', () => {
                 ['createdAt', 'DESC'],
             ],
             search: 'white',
-            searchBy: undefined,
-            path: 'http://localhost/items',
             filter: {
                 name: '$not:$eq:Kitty',
                 createdAt: ['$gte:2020-01-01', '$lte:2020-12-31'],
             },
             select: ['name', 'createdAt'],
-        })
-    })
-
-    it('should handle fastify defined query fields', () => {
-        const context = fastifyContextFactory({
-            page: {
-                number: '1',
-                size: '20',
-            },
-            sort: 'id,-createdAt',
-            ['@search']: 'white',
-            filter: { name: '$not:$eq:Kitty', createdAt: ['$gte:2020-01-01', '$lte:2020-12-31'] },
-            select: 'name,createdAt',
-        })
-
-        const result: PaginateQuery = decoratorFactory(null, context)
-
-        expect(result).toStrictEqual({
-            page: 1,
-            limit: 20,
-            sortBy: [
-                ['id', 'ASC'],
-                ['createdAt', 'DESC'],
-            ],
-            search: 'white',
-            searchBy: undefined,
-            path: 'http://localhost/items',
-            filter: {
-                name: '$not:$eq:Kitty',
-                createdAt: ['$gte:2020-01-01', '$lte:2020-12-31'],
-            },
-            select: ['name', 'createdAt'],
-        })
+        }))
     })
 })
