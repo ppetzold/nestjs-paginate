@@ -22,43 +22,67 @@ export interface PaginateQuery {
     path: string
 }
 
-const singleSplit = (param: string, res: any[]) => res.push(param)
-
+const parseInteger = (param: unknown): number | null | undefined =>
+    param === undefined || param === null ? (param as null | undefined) : parseInt(param as string, 10)
+const parseString = (param: unknown): string | null | undefined =>
+    param === undefined || param === null ? (param as null | undefined) : String(param)
+const parseOneOrManyString = (param: unknown): string[] | string | null | undefined =>
+    Array.isArray(param) ? param.map(parseString) : parseString(param)
 const parseSort = (params: string[]) => {
     return params.map((param): [string, 'ASC' | 'DESC'] =>
         param.startsWith('-') ? [param.slice(1), 'DESC'] : [param, 'ASC']
     )
 }
 
-const multipleAndCommaSplit = (param: string, res: any[]) => {
-    const set = new Set<string>(param.split(','))
-    set.forEach((item) => res.push(item))
-}
-
-function parseParam<T>(queryParam: unknown, parserLogic: (param: string, res: any[]) => void): T[] | undefined {
-    const res = []
-    if (queryParam) {
-        const params = !Array.isArray(queryParam) ? [queryParam] : queryParam
-        for (const param of params) {
-            if (isString(param)) {
-                parserLogic(param, res)
-            }
-        }
-    }
-    return res.length ? res : undefined
-}
-
-function parseFamilyParam<T>(family: unknown, key: string, parser: (value: string) => T): T | undefined {
-    if (!(typeof family === 'object') || family[key] === undefined) {
+function parseFamilyParam(family: unknown, key: string): string | null | undefined
+function parseFamilyParam<T>(family: unknown, key: string, parser: (value: string) => T): T | null | undefined
+function parseFamilyParam<T>(
+    family: unknown,
+    key: string,
+    parser: (value: string) => T = parseString as (value: string) => T
+): T | undefined {
+    if (!(typeof family === 'object')) {
         return undefined
     } else {
-        return parser(family[key].toString())
+        return parser(family[key])
     }
 }
 
-function parseListParam<T>(queryParam: unknown, parserLogic: (param: string[]) => T[]): T[] | undefined {
+function parseFamilyParams<K extends { [key: string]: any }>(
+    family: K,
+    members: (keyof K)[] | { [key in keyof K]: (value: unknown) => K[key] }
+): K | undefined {
+    if (!(typeof family === 'object')) {
+        return undefined
+    } else if (Array.isArray(members)) {
+        return mapValues(pick(family, members), parseString) as K
+    } else {
+        return mapValues(pick(family, Object.keys(members)), (value, key) => members[key](value)) as K
+    }
+}
+
+function parseFamily(family: unknown): Record<string, string | null | undefined> | undefined
+function parseFamily<T>(family: unknown, parser: (value: string) => T): Record<string, T> | undefined
+function parseFamily<T>(
+    family: unknown,
+    parser: (value: string) => T = parseString as (value: string) => T
+): Record<string, T> | undefined {
+    if (!(typeof family === 'object')) {
+        return undefined
+    } else {
+        return mapValues(
+            pickBy(family, (value, key) => !key.startsWith('@')),
+            parser
+        ) as Record<string, T>
+    }
+}
+
+function parseListParam(queryParam: unknown): string[] | undefined
+function parseListParam<T>(queryParam: unknown, parserLogic: (param: string[]) => T[]): T[] | undefined
+function parseListParam<T>(queryParam: unknown, parserLogic?: (param: string[]) => T[]): T[] | undefined {
     if (isString(queryParam)) {
-        return parserLogic(queryParam.split(','))
+        const params = queryParam.split(',')
+        return parserLogic ? parserLogic(params) : (params as T[])
     } else {
         return undefined
     }
