@@ -1,5 +1,5 @@
-import { Repository, In, DataSource, TypeORMError, Like } from 'typeorm'
-import { Paginated, paginate, PaginateConfig, NO_PAGINATION } from './paginate'
+import { DataSource, In, Like, Repository, TypeORMError } from 'typeorm'
+import { NO_PAGINATION, paginate, PaginateConfig, Paginated } from './paginate'
 import { PaginateQuery } from './decorator'
 import { HttpException } from '@nestjs/common'
 import { CatEntity, CutenessLevel } from './__tests__/cat.entity'
@@ -8,13 +8,13 @@ import { CatHomeEntity } from './__tests__/cat-home.entity'
 import { CatHomePillowEntity } from './__tests__/cat-home-pillow.entity'
 import { clone } from 'lodash'
 import {
-    parseFilterToken,
     FilterComparator,
     FilterOperator,
     FilterSuffix,
     isOperator,
     isSuffix,
     OperatorSymbolToFunction,
+    parseFilterToken,
 } from './filter'
 import { ToyShopEntity } from './__tests__/toy-shop.entity'
 import { ToyShopAddressEntity } from './__tests__/toy-shop-address.entity'
@@ -1034,6 +1034,66 @@ describe('paginate', () => {
         })
         expect(result.data).toStrictEqual([catToys[3]])
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.cat.name=$not:Milo')
+    })
+
+    it('should be possible to filter by relation without loading it', async () => {
+        const config: PaginateConfig<CatToyEntity> = {
+            relations: ['cat'],
+            sortableColumns: ['id'],
+            where: { cat: { toys: { name: catToys[0].name } } },
+        }
+        const query: PaginateQuery = {
+            path: '',
+        }
+
+        const result = await paginate<CatToyEntity>(query, catToyRepo, config)
+
+        expect(result.data.length).toStrictEqual(3)
+    })
+
+    it('should be possible to filter by relation without loading it 4th level', async () => {
+        const config: PaginateConfig<CatToyEntity> = {
+            relations: ['cat'],
+            sortableColumns: ['id'],
+            where: { cat: { toys: { shop: { address: { address: Like('%123%') } } } } },
+        }
+        const query: PaginateQuery = {
+            path: '',
+        }
+
+        const result = await paginate<CatToyEntity>(query, catToyRepo, config)
+
+        expect(result.data.length).toStrictEqual(3)
+    })
+
+    it('should be possible to filter by relation without loading it 4th level with load eager', async () => {
+        const config: PaginateConfig<CatToyEntity> = {
+            loadEagerRelations: true,
+            sortableColumns: ['id'],
+            where: { cat: { toys: { shop: { address: { address: Like('%123%') } } } } },
+        }
+        const query: PaginateQuery = {
+            path: '',
+        }
+
+        const result = await paginate<CatToyEntity>(query, catToyRepo, config)
+
+        expect(result.data.length).toStrictEqual(3)
+    })
+
+    it('should be possible to filter by relation without including any relations', async () => {
+        const config: PaginateConfig<CatToyEntity> = {
+            loadEagerRelations: false,
+            sortableColumns: ['id'],
+            where: { cat: { toys: { shop: { address: { address: Like('%123%') } } } } },
+        }
+        const query: PaginateQuery = {
+            path: '',
+        }
+
+        const result = await paginate<CatToyEntity>(query, catToyRepo, config)
+
+        expect(result.data.length).toStrictEqual(3)
     })
 
     it('should return result based on filter on one-to-many relation', async () => {
