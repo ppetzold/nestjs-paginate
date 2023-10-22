@@ -2485,6 +2485,111 @@ describe('paginate', () => {
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.id=$not:$in:1,2,5')
     })
 
+    it('should use searchBy in query param when ignoreSearchByInQueryParam is not defined', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            searchableColumns: ['name', 'color']
+        }
+        const query: PaginateQuery = {
+            path: '',
+            search: "Milo",
+            searchBy: ['color']
+        }
+        
+        const result = await paginate<CatEntity>(query, catRepo, config)
+        expect(result.data.length).toEqual(0)
+        expect(result.meta.searchBy).toStrictEqual(['color'])
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&search=Milo&searchBy=color')
+    })
+
+    it('should use searchBy in query param when ignoreSearchByInQueryParam is set to false', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            ignoreSearchByInQueryParam: false,
+            searchableColumns: ['name', 'color']
+        }
+        const query: PaginateQuery = {
+            path: '',
+            search: "Milo",
+            searchBy: ['color']
+        }
+        
+        const result = await paginate<CatEntity>(query, catRepo, config)
+        expect(result.data.length).toEqual(0)
+        expect(result.meta.searchBy).toStrictEqual(['color'])
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&search=Milo&searchBy=color')
+    })
+
+    it('should ignore searchBy in query param when ignoreSearchByInQueryParam is set to true', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            ignoreSearchByInQueryParam: true,
+            searchableColumns: ['name', 'color']
+        }
+        const query: PaginateQuery = {
+            path: '',
+            search: "Milo",
+            searchBy: ['color']
+        }
+        
+        const result = await paginate<CatEntity>(query, catRepo, config)
+        expect(result.data.length).toEqual(1)
+        expect(result.data).toStrictEqual([cats[0]])
+        expect(result.meta.searchBy).toStrictEqual(['name', 'color'])
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&search=Milo')
+    })
+
+    it('should use select in query param when ignoreSelectInQueryParam is not defined', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            select: ['id', 'name', 'color']
+        }
+        const query: PaginateQuery = {
+            path: '',
+            select: ['id', 'color']
+        }
+        
+        const result = await paginate<CatEntity>(query, catRepo, config)
+        expect(result.data[0]).toEqual({id: cats[0].id, color: cats[0].color})
+        expect(result.meta.select).toStrictEqual(['id', 'color'])
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&select=id,color')
+    })
+
+    it('should use select in query param when ignoreSelectInQueryParam is set to false', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            ignoreSelectInQueryParam: false,
+            select: ['id', 'name', 'color']
+        }
+        const query: PaginateQuery = {
+            path: '',
+            select: ['id', 'color']
+        }
+        
+        const result = await paginate<CatEntity>(query, catRepo, config)
+        expect(result.data[0]).toEqual({id: cats[0].id, color: cats[0].color})
+        expect(result.meta.select).toStrictEqual(['id', 'color'])
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&select=id,color')
+    })
+
+    it('should ignore select in query param when ignoreSelectInQueryParam is set to true', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            ignoreSelectInQueryParam: true,
+            select: ['id', 'name', 'color']
+        }
+        const query: PaginateQuery = {
+            path: '',
+            select: ['id', 'color']
+        }
+        
+        const result = await paginate<CatEntity>(query, catRepo, config)
+        expect(result.data[0]).toEqual({id: cats[0].id, color: cats[0].color, name: cats[0].name})
+        expect(result.meta.select).toEqual(undefined)
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC')
+    })
+
+
     describe('should return result based on date column filter', () => {
         it('with $not and $null operators', async () => {
             const config: PaginateConfig<CatEntity> = {
