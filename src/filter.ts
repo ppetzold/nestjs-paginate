@@ -313,11 +313,26 @@ export function addFilter<T>(
     filterableColumns?: { [column: string]: (FilterOperator | FilterSuffix)[] | true }
 ): SelectQueryBuilder<T> {
     const filter = parseFilter(query, filterableColumns)
-    return qb.andWhere(
+
+    const filterEntries = Object.entries(filter)
+    const orFilters = filterEntries.filter(([_, value]) => value.some((v) => v.comparator === '$or'))
+    const andFilters = filterEntries.filter(([_, value]) => value.some((v) => v.comparator !== '$or'))
+
+    qb.andWhere(
         new Brackets((qb: SelectQueryBuilder<T>) => {
-            for (const column in filter) {
+            for (const [column] of orFilters) {
                 addWhereCondition(qb, column, filter)
             }
         })
     )
+
+    qb.andWhere(
+        new Brackets((qb: SelectQueryBuilder<T>) => {
+            for (const [column] of andFilters) {
+                addWhereCondition(qb, column, filter)
+            }
+        })
+    )
+
+    return qb
 }

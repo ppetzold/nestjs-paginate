@@ -2129,6 +2129,33 @@ describe('paginate', () => {
         )
     })
 
+    it('should return result based on two ors and an and with two cats', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            filterableColumns: {
+                age: [FilterOperator.BTW],
+                name: true,
+                color: true,
+            },
+        }
+        const query: PaginateQuery = {
+            path: '',
+            filter: {
+                name: '$or:Milo',
+                color: '$or:white',
+                age: '$btw:1,10',
+            },
+        }
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        expect(result.data).toStrictEqual(
+            cats.filter((cat) => (cat.name === 'Milo' || cat.color === 'white') && cat.age)
+        )
+        expect(result.links.current).toBe(
+            '?page=1&limit=20&sortBy=id:ASC&filter.name=$or:Milo&filter.color=$or:white&filter.age=$btw:1,10'
+        )
+    })
+
     it("should return all columns if select doesn't contain all primary columns", async () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id', 'name'],
