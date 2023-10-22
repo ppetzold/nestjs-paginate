@@ -274,7 +274,9 @@ export async function paginate<T extends ObjectLiteral>(
     // When we partial select the columns (main or relation) we must add the primary key column otherwise
     // typeorm will not be able to map the result.
     const selectParams =
-        config.select && query.select && !config.ignoreSelectInQueryParam ? config.select.filter((column) => query.select.includes(column)) : config.select
+        config.select && query.select && !config.ignoreSelectInQueryParam
+            ? config.select.filter((column) => query.select.includes(column))
+            : config.select
     if (selectParams?.length > 0 && includesAllPrimaryKeyColumns(queryBuilder, selectParams)) {
         const cols: string[] = selectParams.reduce((cols, currentCol) => {
             const columnProperties = getPropertiesByColumnName(currentCol)
@@ -364,7 +366,9 @@ export async function paginate<T extends ObjectLiteral>(
     const searchQuery = query.search ? `&search=${query.search}` : ''
 
     const searchByQuery =
-        query.searchBy && searchBy.length && !config.ignoreSearchByInQueryParam ? searchBy.map((column) => `&searchBy=${column}`).join('') : ''
+        query.searchBy && searchBy.length && !config.ignoreSearchByInQueryParam
+            ? searchBy.map((column) => `&searchBy=${column}`).join('')
+            : ''
 
     // Only expose select in meta data if query select differs from config select
     const isQuerySelected = selectParams?.length !== config.select?.length
