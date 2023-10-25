@@ -280,6 +280,22 @@ const paginateConfig: PaginateConfig<CatEntity> {
    * Description: Overrides the origin of absolute resource links if set.
    */
   origin: 'http://cats.example',
+
+  /**
+   * Required: false
+   * Type: boolean
+   * Default: false
+   * Description: Prevent `searchBy` query param from limiting search scope further. Search will depend upon `searchableColumns` config option only
+   */
+  ignoreSearchByInQueryParam: true,
+
+  /**
+   * Required: false
+   * Type: boolean
+   * Default: false
+   * Description: Prevent `select` query param from limiting selection further. Partial selection will depend upon `select` config option only
+   */
+  ignoreSelectInQueryParam: true,
 }
 ```
 
@@ -465,7 +481,6 @@ You can use two default decorators @ApiOkResponsePaginated and @ApiPagination to
 `@ApiOkPaginatedResponse` is for response body, return http[](https://) status is 200
 
 `@ApiPaginationQuery` is for query params
-
 
 ```typescript
   @Get()
