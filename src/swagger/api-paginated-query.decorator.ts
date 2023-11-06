@@ -21,8 +21,8 @@ export function SortBy(paginationConfig: PaginateConfig<any>) {
         : 'No default sorting specified, the result order is not guaranteed'
 
     const sortBy = paginationConfig.sortableColumns.reduce((prev, curr) => {
-        return [...prev, `${curr}:ASC`, `${curr}:DESC`];
-    }, []);
+        return [...prev, `${curr}:ASC`, `${curr}:DESC`]
+    }, [])
 
     return ApiQuery({
         name: 'sortBy',
