@@ -20,9 +20,14 @@ export function SortBy(paginationConfig: PaginateConfig<any>) {
         ? paginationConfig.defaultSortBy.map(([col, order]) => `${col}:${order}`).join(',')
         : 'No default sorting specified, the result order is not guaranteed'
 
+    const sortBy = paginationConfig.sortableColumns.reduce((prev, curr) => {
+        return [...prev, `${curr}:ASC`, `${curr}:DESC`]
+    }, [])
+
     return ApiQuery({
         name: 'sortBy',
         isArray: true,
+        enum: sortBy,
         description: `Parameter to sort by.
       <p>To sort by multiple fields, just provide query param multiple types. The order in url defines an order of sorting</p>
       ${p('Format', 'fieldName:DIRECTION')}

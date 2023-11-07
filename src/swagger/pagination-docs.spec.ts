@@ -97,6 +97,7 @@ describe('PaginatedEndpoint decorator', () => {
                     type: 'array',
                     items: {
                         type: 'string',
+                        enum: ['id:ASC', 'id:DESC'],
                     },
                 },
             },
@@ -204,6 +205,7 @@ describe('PaginatedEndpoint decorator', () => {
                     type: 'array',
                     items: {
                         type: 'string',
+                        enum: ['id:ASC', 'id:DESC'],
                     },
                 },
             },
