@@ -18,6 +18,8 @@ import {
 } from './filter'
 import { ToyShopEntity } from './__tests__/toy-shop.entity'
 import { ToyShopAddressEntity } from './__tests__/toy-shop-address.entity'
+import * as process from 'process'
+import { CatHairEntity } from './__tests__/cat-hair.entity'
 
 const isoStringToDate = (isoString) => new Date(isoString)
 
@@ -25,6 +27,7 @@ describe('paginate', () => {
     let dataSource: DataSource
     let catRepo: Repository<CatEntity>
     let catToyRepo: Repository<CatToyEntity>
+    let catHairRepo: Repository<CatHairEntity>
     let toyShopRepo: Repository<ToyShopEntity>
     let toyShopAddressRepository: Repository<ToyShopAddressEntity>
     let catHomeRepo: Repository<CatHomeEntity>
@@ -36,17 +39,18 @@ describe('paginate', () => {
     let toysShops: ToyShopEntity[]
     let catHomes: CatHomeEntity[]
     let catHomePillows: CatHomePillowEntity[]
+    let catHairs: CatHairEntity[] = []
 
     beforeAll(async () => {
         dataSource = new DataSource({
             ...(process.env.DB === 'postgres'
                 ? {
                       type: 'postgres',
-                      host: 'localhost',
-                      port: 5432,
-                      username: 'root',
-                      password: 'pass',
-                      database: 'test',
+                      host: process.env.DB_HOST || 'localhost',
+                      port: +process.env.DB_PORT || 5432,
+                      username: process.env.DB_USERNAME || 'root',
+                      password: process.env.DB_PASSWORD || 'pass',
+                      database: process.env.DB_DATABASE || 'test',
                   }
                 : {
                       type: 'sqlite',
@@ -61,6 +65,7 @@ describe('paginate', () => {
                 CatHomeEntity,
                 CatHomePillowEntity,
                 ToyShopEntity,
+                process.env.DB === 'postgres' ? CatHairEntity : undefined,
             ],
         })
         await dataSource.initialize()
@@ -163,6 +168,18 @@ describe('paginate', () => {
 
         // add friends to Milo
         await catRepo.save({ ...cats[0], friends: cats.slice(1) })
+
+        catHairs = []
+
+        if (process.env.DB === 'postgres') {
+            catHairRepo = dataSource.getRepository(CatHairEntity)
+            catHairs = await catHairRepo.save([
+                catHairRepo.create({ name: 'short', colors: ['white', 'brown', 'black'] }),
+                catHairRepo.create({ name: 'long', colors: ['white', 'brown'] }),
+                catHairRepo.create({ name: 'buzzed', colors: ['white'] }),
+                catHairRepo.create({ name: 'none' }),
+            ])
+        }
     })
 
     if (process.env.DB === 'postgres') {
@@ -2812,6 +2829,61 @@ describe('paginate', () => {
             }
         })
     })
+
+    if (process.env.DB === 'postgres') {
+        describe('should return results for an array column', () => {
+            it.each`
+                operator        | data         | expectedIndexes
+                ${'$not:$null'} | ${undefined} | ${[0, 1, 2, 3]}
+                ${'$lt'}        | ${2}         | ${[2, 3]}
+                ${'$lte'}       | ${2}         | ${[1, 2, 3]}
+                ${'$btw'}       | ${'1,2'}     | ${[1, 2]}
+                ${'$gte'}       | ${2}         | ${[0, 1]}
+                ${'$gt'}        | ${2}         | ${[0]}
+            `('with $operator operator', async ({ operator, data, expectedIndexes }) => {
+                const config: PaginateConfig<CatHairEntity> = {
+                    sortableColumns: ['id'],
+                    filterableColumns: {
+                        colors: true,
+                    },
+                }
+
+                const queryFilter = `${operator}${data ? `:${data}` : ''}`
+                const query: PaginateQuery = {
+                    path: '',
+                    filter: {
+                        colors: queryFilter,
+                    },
+                }
+
+                const result = await paginate<CatHairEntity>(query, catHairRepo, config)
+
+                expect(result.meta.filter).toStrictEqual({
+                    colors: queryFilter,
+                })
+                expect(result.data).toStrictEqual(expectedIndexes.map((index) => catHairs[index]))
+                expect(result.links.current).toBe(`?page=1&limit=20&sortBy=id:ASC&filter.colors=${queryFilter}`)
+            })
+
+            it('should work with search', async () => {
+                const config: PaginateConfig<CatHairEntity> = {
+                    sortableColumns: ['id'],
+                    searchableColumns: ['colors'],
+                }
+
+                const query: PaginateQuery = {
+                    path: '',
+                    search: 'brown',
+                }
+
+                const result = await paginate<CatHairEntity>(query, catHairRepo, config)
+
+                expect(result.meta.search).toStrictEqual('brown')
+                expect(result.data).toStrictEqual([catHairs[0], catHairs[1]])
+                expect(result.links.current).toBe(`?page=1&limit=20&sortBy=id:ASC&search=brown`)
+            })
+        })
+    }
 
     if (process.env.DB !== 'postgres') {
         describe('should return result based on virtual column', () => {

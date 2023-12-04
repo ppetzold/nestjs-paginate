@@ -126,6 +126,13 @@ export function checkIsEmbedded(qb: SelectQueryBuilder<unknown>, propertyPath: s
     return !!qb?.expressionMap?.mainAlias?.metadata?.hasEmbeddedWithPropertyPath(propertyPath)
 }
 
+export function checkIsArray(qb: SelectQueryBuilder<unknown>, propertyName: string): boolean {
+    if (!qb || !propertyName) {
+        return false
+    }
+    return !!qb?.expressionMap?.mainAlias?.metadata.findColumnWithPropertyName(propertyName)?.isArray
+}
+
 // This function is used to fix the column alias when using relation, embedded or virtual properties
 export function fixColumnAlias(
     properties: ColumnProperties,

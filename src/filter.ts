@@ -18,6 +18,7 @@ import {
 import { WherePredicateOperator } from 'typeorm/query-builder/WhereClause'
 import { PaginateQuery } from './decorator'
 import {
+    checkIsArray,
     checkIsEmbedded,
     checkIsRelation,
     extractVirtualProperty,
@@ -162,6 +163,8 @@ export function addWhereCondition<T>(qb: SelectQueryBuilder<T>, column: string, 
     const { isVirtualProperty, query: virtualQuery } = extractVirtualProperty(qb, columnProperties)
     const isRelation = checkIsRelation(qb, columnProperties.propertyPath)
     const isEmbedded = checkIsEmbedded(qb, columnProperties.propertyPath)
+    const isArray = checkIsArray(qb, columnProperties.propertyName)
+
     const alias = fixColumnAlias(columnProperties, qb.alias, isRelation, isVirtualProperty, isEmbedded, virtualQuery)
     filter[column].forEach((columnFilter: Filter, index: number) => {
         const columnNamePerIteration = `${columnProperties.column}${index}`
@@ -175,6 +178,9 @@ export function addWhereCondition<T>(qb: SelectQueryBuilder<T>, column: string, 
         const parameters = fixQueryParam(alias, columnNamePerIteration, columnFilter, condition, {
             [columnNamePerIteration]: columnFilter.findOperator.value,
         })
+        if (isArray && condition.parameters?.length && !['not', 'isNull'].includes(condition.operator)) {
+            condition.parameters[0] = `cardinality(${condition.parameters[0]})`
+        }
         if (columnFilter.comparator === FilterComparator.OR) {
             qb.orWhere(qb['createWhereConditionExpression'](condition), parameters)
         } else {
