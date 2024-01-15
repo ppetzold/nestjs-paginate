@@ -20,6 +20,7 @@ import { ToyShopEntity } from './__tests__/toy-shop.entity'
 import { ToyShopAddressEntity } from './__tests__/toy-shop-address.entity'
 import * as process from 'process'
 import { CatHairEntity } from './__tests__/cat-hair.entity'
+import { PermissionEntity, RoleEntity, UserEntity } from './__tests__/i517.entity'
 
 const isoStringToDate = (isoString) => new Date(isoString)
 
@@ -40,6 +41,12 @@ describe('paginate', () => {
     let catHomes: CatHomeEntity[]
     let catHomePillows: CatHomePillowEntity[]
     let catHairs: CatHairEntity[] = []
+    let userEntityRepo: Repository<UserEntity>
+    let roleEntityRepo: Repository<RoleEntity>
+    let permissionEntityRepo: Repository<PermissionEntity>
+    let users: UserEntity[]
+    let roles: RoleEntity[]
+    let permissions: PermissionEntity[]
 
     beforeAll(async () => {
         dataSource = new DataSource({
@@ -65,6 +72,9 @@ describe('paginate', () => {
                 CatHomeEntity,
                 CatHomePillowEntity,
                 ToyShopEntity,
+                UserEntity,
+                RoleEntity,
+                PermissionEntity,
                 process.env.DB === 'postgres' ? CatHairEntity : undefined,
             ],
         })
@@ -75,7 +85,29 @@ describe('paginate', () => {
         catHomePillowRepo = dataSource.getRepository(CatHomePillowEntity)
         toyShopRepo = dataSource.getRepository(ToyShopEntity)
         toyShopAddressRepository = dataSource.getRepository(ToyShopAddressEntity)
-
+        userEntityRepo = dataSource.getRepository(UserEntity)
+        roleEntityRepo = dataSource.getRepository(RoleEntity)
+        permissionEntityRepo = dataSource.getRepository(PermissionEntity)
+        roles = await roleEntityRepo.save([
+            {
+                name: 'SUPER_ADMIN',
+                description: '超级管理员',
+                editable: false,
+            },
+            {
+                name: 'NORMAL_USER',
+                description: '普通用户',
+                editable: false,
+            },
+        ])
+        users = await userEntityRepo.save([
+            userEntityRepo.create({
+                username: 'admin',
+                password: 'admin',
+                phone: '12345678901',
+                roles: [roles[0]],
+            }),
+        ])
         cats = await catRepo.save([
             catRepo.create({
                 name: 'Milo',
@@ -2432,6 +2464,29 @@ describe('paginate', () => {
         expect(result.data[0].toys).toBeDefined()
 
         expect(result.data[0].toys).toHaveLength(1)
+    })
+
+    it('#517 error', async () => {
+        const PAGINATE_USER_CONFIG: PaginateConfig<UserEntity> = {
+            relations: ['roles'],
+            select: [
+                'id',
+                'phone',
+                'email',
+                'createdAt',
+                'updatedAt',
+                'emailValidated',
+                'phoneValidated',
+                'avatar',
+                'realName',
+                'username',
+                'status',
+                'roles',
+            ],
+            sortableColumns: ['createdAt', 'updatedAt'],
+        }
+        const res = await paginate<UserEntity>({ path: '' }, userEntityRepo, PAGINATE_USER_CONFIG)
+        expect(res.data.length).toBe(1000000000000000000)
     })
 
     it('should search nested relations', async () => {
