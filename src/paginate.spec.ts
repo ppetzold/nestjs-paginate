@@ -2461,7 +2461,26 @@ describe('paginate', () => {
     it('#517 error', async () => {
         const PAGINATE_USER_CONFIG: PaginateConfig<UserEntity> = {
             relations: ['roles'],
-            select: ['roles', 'id'],
+            select: ['roles', 'id'], // id and roles will cause error
+            sortableColumns: ['username'],
+        }
+        const res = await paginate<UserEntity>({ path: '' }, userEntityRepo, PAGINATE_USER_CONFIG)
+        expect(res.data.length).toBe(1)
+    })
+
+    it('#517 error only select id', async () => {
+        const PAGINATE_USER_CONFIG: PaginateConfig<UserEntity> = {
+            select: ['id'],
+            sortableColumns: ['username'],
+        }
+        const res = await paginate<UserEntity>({ path: '' }, userEntityRepo, PAGINATE_USER_CONFIG)
+        expect(res.data.length).toBe(1)
+    })
+
+    it('#517 error only select roles', async () => {
+        const PAGINATE_USER_CONFIG: PaginateConfig<UserEntity> = {
+            relations: ['roles'],
+            select: ['roles'],
             sortableColumns: ['username'],
         }
         const res = await paginate<UserEntity>({ path: '' }, userEntityRepo, PAGINATE_USER_CONFIG)
