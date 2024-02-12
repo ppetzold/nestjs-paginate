@@ -144,6 +144,7 @@ function SearchBy(paginateConfig: PaginateConfig<any>) {
         ${li('Available Fields', paginateConfig.searchableColumns)}
         `,
         required: false,
+        isArray: true,
         type: 'string',
     })
 }

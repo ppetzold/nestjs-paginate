@@ -226,7 +226,10 @@ describe('PaginatedEndpoint decorator', () => {
                 description:
                     'List of fields to search by term to filter result values\n        <p>\n             <b>Example: </b> name\n          </p>\n        <p>\n             <b>Default Value: </b> By default all fields mentioned below will be used to search by term\n          </p>\n        <h4>Available Fields</h4><ul><li>name</li></ul>\n        ',
                 schema: {
-                    type: 'string',
+                    type: 'array',
+                    items: {
+                        type: 'string',
+                    },
                 },
             },
             {
