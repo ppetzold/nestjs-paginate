@@ -273,10 +273,13 @@ export async function paginate<T extends ObjectLiteral>(
 
     // When we partial select the columns (main or relation) we must add the primary key column otherwise
     // typeorm will not be able to map the result.
-    const selectParams =
+    let selectParams =
         config.select && query.select && !config.ignoreSelectInQueryParam
             ? config.select.filter((column) => query.select.includes(column))
             : config.select
+    if (!includesAllPrimaryKeyColumns(queryBuilder, query.select)) {
+        selectParams = config.select
+    }
     if (selectParams?.length > 0 && includesAllPrimaryKeyColumns(queryBuilder, selectParams)) {
         const cols: string[] = selectParams.reduce((cols, currentCol) => {
             const columnProperties = getPropertiesByColumnName(currentCol)
