@@ -512,7 +512,7 @@ describe('paginate', () => {
 
         const result = await paginate<CatEntity>(query, catRepo, config)
 
-        expect(result.meta.sortBy).toStrictEqual([['id', 'DESC']])
+        expect(result.meta.sort).toStrictEqual([['id', 'DESC']])
         expect(result.data).toStrictEqual(cats.slice(0).reverse())
     })
 
@@ -529,7 +529,7 @@ describe('paginate', () => {
         const result = await paginate<CatEntity>(query, catRepo, config)
         const expectedResult = [...cats.slice(0, -1).reverse(), cats.slice(-1)[0]]
 
-        expect(result.meta.sortBy).toStrictEqual([['age', 'ASC']])
+        expect(result.meta.sort).toStrictEqual([['age', 'ASC']])
         expect(result.data).toStrictEqual(expectedResult)
     })
 
@@ -547,7 +547,7 @@ describe('paginate', () => {
 
         const expectedResult = [cats[cats.length - 1], ...cats.slice(0, cats.length - 1).reverse()]
 
-        expect(result.meta.sortBy).toStrictEqual([['age', 'ASC']])
+        expect(result.meta.sort).toStrictEqual([['age', 'ASC']])
         expect(result.data).toStrictEqual(expectedResult)
     })
 
@@ -565,7 +565,7 @@ describe('paginate', () => {
 
         const result = await paginate<CatEntity>(query, catRepo, config)
 
-        expect(result.meta.sortBy).toStrictEqual([
+        expect(result.meta.sort).toStrictEqual([
             ['color', 'DESC'],
             ['name', 'ASC'],
         ])
@@ -586,7 +586,7 @@ describe('paginate', () => {
 
         const result = await paginate<CatEntity>(query, catRepo, config)
 
-        expect(result.meta.sortBy).toStrictEqual([
+        expect(result.meta.sort).toStrictEqual([
             ['cutenessLevel', 'ASC'],
             ['name', 'ASC'],
         ])
@@ -698,7 +698,7 @@ describe('paginate', () => {
         }
 
         const result = await paginate<CatHomeEntity>(query, catHomeRepo, config)
-        expect(result.meta.sortBy).toStrictEqual([['cat.id', 'DESC']])
+        expect(result.meta.sort).toStrictEqual([['cat.id', 'DESC']])
 
         const catHomesClone = clone([catHomes[0], catHomes[1]])
         catHomesClone[0].countCat = cats.filter((cat) => cat.id === catHomesClone[0].cat.id).length
@@ -879,7 +879,9 @@ describe('paginate', () => {
         expect(result.meta.search.query).toStrictEqual(searchTerm)
         expect(result.meta.search.fields).toStrictEqual(['color'])
         expect(result.data).toStrictEqual(expectedResultData)
-        expect(result.links.current).toBe('?page[number]=1&page[size]=20&sort=id&@search[query]=white&@search[fields]=color')
+        expect(result.links.current).toBe(
+            '?page[number]=1&page[size]=20&sort=id&@search[query]=white&@search[fields]=color'
+        )
     })
 
     it('should return result based on where config and filter', async () => {
@@ -947,7 +949,7 @@ describe('paginate', () => {
         }
 
         const result = await paginate<CatToyEntity>(query, catToyRepo, config)
-        
+
         expect(result.meta.page.totalItems).toBe(3)
         result.data.forEach((toy) => {
             expect(toy.cat.id).toBe(cats[0].id)
@@ -2177,7 +2179,7 @@ describe('paginate', () => {
             cats.filter((cat) => (cat.name === 'Milo' || cat.color === 'white') && cat.age)
         )
         expect(result.links.current).toBe(
-            '?page=1&limit=20&sortBy=id:ASC&filter.name=$or:Milo&filter.color=$or:white&filter.age=$btw:1,10'
+            '?page[number]=1&page[size]=20&sort=id&filter[name]=$or:Milo&filter[color]=$or:white&filter[age]=$btw:1,10'
         )
     })
 
@@ -2550,8 +2552,10 @@ describe('paginate', () => {
 
         const result = await paginate<CatEntity>(query, catRepo, config)
         expect(result.data.length).toEqual(0)
-        expect(result.meta.searchBy).toStrictEqual(['color'])
-        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&search=Milo&searchBy=color')
+        expect(result.meta.search).toStrictEqual({ fields: ['color'], query: 'Milo' })
+        expect(result.links.current).toBe(
+            '?page[number]=1&page[size]=20&sort=id&@search[query]=Milo&@search[fields]=color'
+        )
     })
 
     it('should use searchBy in query param when ignoreSearchByInQueryParam is set to false', async () => {
@@ -2568,8 +2572,10 @@ describe('paginate', () => {
 
         const result = await paginate<CatEntity>(query, catRepo, config)
         expect(result.data.length).toEqual(0)
-        expect(result.meta.searchBy).toStrictEqual(['color'])
-        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&search=Milo&searchBy=color')
+        expect(result.meta.search).toStrictEqual({ fields: ['color'], query: 'Milo' })
+        expect(result.links.current).toBe(
+            '?page[number]=1&page[size]=20&sort=id&@search[query]=Milo&@search[fields]=color'
+        )
     })
 
     it('should ignore searchBy in query param when ignoreSearchByInQueryParam is set to true', async () => {
@@ -2587,8 +2593,8 @@ describe('paginate', () => {
         const result = await paginate<CatEntity>(query, catRepo, config)
         expect(result.data.length).toEqual(1)
         expect(result.data).toStrictEqual([cats[0]])
-        expect(result.meta.searchBy).toStrictEqual(['name', 'color'])
-        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&search=Milo')
+        expect(result.meta.search).toStrictEqual({ fields: ['name', 'color'], query: 'Milo' })
+        expect(result.links.current).toBe('?page[number]=1&page[size]=20&sort=id&@search[query]=Milo')
     })
 
     it('should use select in query param when ignoreSelectInQueryParam is not defined', async () => {
@@ -2604,7 +2610,7 @@ describe('paginate', () => {
         const result = await paginate<CatEntity>(query, catRepo, config)
         expect(result.data[0]).toEqual({ id: cats[0].id, color: cats[0].color })
         expect(result.meta.select).toStrictEqual(['id', 'color'])
-        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&select=id,color')
+        expect(result.links.current).toBe('?page[number]=1&page[size]=20&sort=id&select=id,color')
     })
 
     it('should use select in query param when ignoreSelectInQueryParam is set to false', async () => {
@@ -2621,7 +2627,7 @@ describe('paginate', () => {
         const result = await paginate<CatEntity>(query, catRepo, config)
         expect(result.data[0]).toEqual({ id: cats[0].id, color: cats[0].color })
         expect(result.meta.select).toStrictEqual(['id', 'color'])
-        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&select=id,color')
+        expect(result.links.current).toBe('?page[number]=1&page[size]=20&sort=id&select=id,color')
     })
 
     it('should ignore select in query param when ignoreSelectInQueryParam is set to true', async () => {
@@ -2638,7 +2644,7 @@ describe('paginate', () => {
         const result = await paginate<CatEntity>(query, catRepo, config)
         expect(result.data[0]).toEqual({ id: cats[0].id, color: cats[0].color, name: cats[0].name })
         expect(result.meta.select).toEqual(undefined)
-        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC')
+        expect(result.links.current).toBe('?page[number]=1&page[size]=20&sort=id')
     })
 
     describe('should return result based on date column filter', () => {
@@ -2874,7 +2880,7 @@ describe('paginate', () => {
                     colors: queryFilter,
                 })
                 expect(result.data).toStrictEqual(expectedIndexes.map((index) => catHairs[index]))
-                expect(result.links.current).toBe(`?page=1&limit=20&sortBy=id:ASC&filter.colors=${queryFilter}`)
+                expect(result.links.current).toBe(`?page[number]=1&page[size]=20&sort=id&filter[colors]=${queryFilter}`)
             })
 
             it('should work with search', async () => {
@@ -2892,7 +2898,7 @@ describe('paginate', () => {
 
                 expect(result.meta.search).toStrictEqual('brown')
                 expect(result.data).toStrictEqual([catHairs[0], catHairs[1]])
-                expect(result.links.current).toBe(`?page=1&limit=20&sortBy=id:ASC&search=brown`)
+                expect(result.links.current).toBe(`?page[number]=1&page[size]=20&sort=id&search=brown`)
             })
         })
     }

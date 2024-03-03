@@ -22,20 +22,23 @@ export interface PaginateQuery {
     path: string
 }
 
-const parseInteger = (param: unknown): number  | undefined =>
-    param === undefined || param === null ? undefined: parseInt(param as string, 10)
-const parseString = (param: unknown): string  | undefined =>
+const parseInteger = (param: unknown): number | undefined =>
+    param === undefined || param === null ? undefined : parseInt(param as string, 10)
+
+const parseString = (param: unknown): string | undefined =>
     param === undefined || param === null ? undefined : String(param)
-const parseOneOrManyString = (param: unknown): string[] | string  | undefined =>
+
+const parseOneOrManyString = (param: unknown): string[] | string | undefined =>
     Array.isArray(param) ? param.map(parseString) : parseString(param)
+
 const parseSort = (params: string[]) => {
     return params.map((param): [string, 'ASC' | 'DESC'] =>
         param.startsWith('-') ? [param.slice(1), 'DESC'] : [param, 'ASC']
     )
 }
 
-function parseFamilyParam(family: unknown, key: string): string  | undefined
-function parseFamilyParam<T>(family: unknown, key: string, parser: (value: string) => T): T  | undefined
+function parseFamilyParam(family: unknown, key: string): string | undefined
+function parseFamilyParam<T>(family: unknown, key: string, parser: (value: string) => T): T | undefined
 function parseFamilyParam<T>(
     family: unknown,
     key: string,
@@ -61,7 +64,7 @@ function parseFamilyParams<K extends { [key: string]: any }>(
     }
 }
 
-function parseFamily(family: unknown): Record<string, string  | undefined> | undefined
+function parseFamily(family: unknown): Record<string, string | undefined> | undefined
 function parseFamily<T>(family: unknown, parser: (value: string) => T): Record<string, T> | undefined
 function parseFamily<T>(
     family: unknown,

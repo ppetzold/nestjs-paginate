@@ -45,7 +45,7 @@ export class Paginated<T> {
             totalItems: number
             totalPages: number
         }
-        sortBy: SortBy<T>
+        sort: SortBy<T>
         search: { query: string; fields: Column<T>[] }
         select: string[]
         filter?: {
@@ -173,6 +173,10 @@ function flattenWhereAndTransform<T>(
     })
 }
 
+export function isRepository<T>(repo: unknown): repo is Repository<T> {
+    return !!(repo as { manager: unknown }).manager
+}
+
 export async function paginate<T extends ObjectLiteral>(
     query: PaginateQuery,
     repo: Repository<T> | SelectQueryBuilder<T>,
@@ -188,14 +192,14 @@ export async function paginate<T extends ObjectLiteral>(
 
     const limit = isPaginated ? Math.min(queryLimit || defaultLimit, maxLimit || DEFAULT_MAX_LIMIT) : NO_PAGINATION
 
-    const sortBy = [] as SortBy<T>
+    const sort = [] as SortBy<T>
     const searchBy: Column<T>[] = []
 
     let [items, totalItems]: [T[], number] = [[], 0]
 
-    const queryBuilder = repo instanceof Repository ? repo.createQueryBuilder('__root') : repo
+    const queryBuilder = isRepository(repo) ? repo.createQueryBuilder('__root') : repo
 
-    if (repo instanceof Repository && !config.relations && config.loadEagerRelations === true) {
+    if (isRepository(repo) && !config.relations && config.loadEagerRelations === true) {
         if (!config.relations) {
             FindOptionsUtils.joinEagerRelations(queryBuilder, queryBuilder.alias, repo.metadata)
         }
@@ -251,16 +255,16 @@ export async function paginate<T extends ObjectLiteral>(
     if (query.sortBy) {
         for (const order of query.sortBy) {
             if (isEntityKey(config.sortableColumns, order[0]) && ['ASC', 'DESC'].includes(order[1])) {
-                sortBy.push(order as Order<T>)
+                sort.push(order as Order<T>)
             }
         }
     }
 
-    if (!sortBy.length) {
-        sortBy.push(...(config.defaultSortBy || [[config.sortableColumns[0], 'ASC']]))
+    if (!sort.length) {
+        sort.push(...(config.defaultSortBy || [[config.sortableColumns[0], 'ASC']]))
     }
 
-    for (const order of sortBy) {
+    for (const order of sort) {
         const columnProperties = getPropertiesByColumnName(order[0])
         const { isVirtualProperty } = extractVirtualProperty(queryBuilder, columnProperties)
         const isRelation = checkIsRelation(queryBuilder, columnProperties.propertyPath)
@@ -366,11 +370,13 @@ export async function paginate<T extends ObjectLiteral>(
         path = queryOrigin + queryPath
     }
 
-    const sortByQuery = '&sort=' + sortBy.map((order) => `${order[1] === 'DESC' ? '-' : ''}${order[0]}`).join(',')
+    const sortByQuery = '&sort=' + sort.map((order) => `${order[1] === 'DESC' ? '-' : ''}${order[0]}`).join(',')
     const searchQuery = query.search ? `&@search[query]=${query.search}` : ''
 
     const searchByQuery =
-        query.searchBy && searchBy.length && !config.ignoreSearchByInQueryParam ? searchBy.map((column) => `&@search[fields]=${column}`).join('') : ''
+        query.searchBy && searchBy.length && !config.ignoreSearchByInQueryParam
+            ? searchBy.map((column) => `&@search[fields]=${column}`).join('')
+            : ''
 
     // Only expose select in meta data if query select differs from config select
     const isQuerySelected = selectParams?.length !== config.select?.length
@@ -401,7 +407,7 @@ export async function paginate<T extends ObjectLiteral>(
                 totalItems: isPaginated ? totalItems : items.length,
                 totalPages,
             },
-            sortBy,
+            sort,
             search: {
                 query: query.search,
                 fields: query.search ? searchBy : undefined,
