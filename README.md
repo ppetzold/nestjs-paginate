@@ -33,7 +33,7 @@ The following code exposes a route that can be utilized like so:
 #### Endpoint
 
 ```url
-http://localhost:3000/cats?limit=5&page=2&sortBy=color:DESC&search=i&filter.age=$gte:3&select=id,name,color,age
+http://localhost:3000/cats?page[number]=2&page[size]=5&sort=-color&@search=i&filter[age]=$gte:3&select=id,name,color,age
 ```
 
 #### Result
@@ -84,11 +84,11 @@ http://localhost:3000/cats?limit=5&page=2&sortBy=color:DESC&search=i&filter.age=
     }
   },
   "links": {
-    "first": "http://localhost:3000/cats?limit=5&page=1&sortBy=color:DESC&search=i&filter.age=$gte:3",
-    "previous": "http://localhost:3000/cats?limit=5&page=1&sortBy=color:DESC&search=i&filter.age=$gte:3",
-    "current": "http://localhost:3000/cats?limit=5&page=2&sortBy=color:DESC&search=i&filter.age=$gte:3",
-    "next": "http://localhost:3000/cats?limit=5&page=3&sortBy=color:DESC&search=i&filter.age=$gte:3",
-    "last": "http://localhost:3000/cats?limit=5&page=3&sortBy=color:DESC&search=i&filter.age=$gte:3"
+    "first": "http://localhost:3000/cats?page[number]=1&page[size]=5&sort=-color&@search=i&filter[age]=$gte:3&select=id,name,color,age",
+    "previous": "http://localhost:3000/cats?page[number]=1&page[size]=5&sort=-color&@search=i&filter[age]=$gte:3&select=id,name,color,age",
+    "current": "http://localhost:3000/cats?page[number]=2&page[size]=5&sort=-color&@search=i&filter[age]=$gte:3&select=id,name,color,age",
+    "next": "http://localhost:3000/cats?page[number]=3&page[size]=5&sort=-color&@search=i&filter[age]=$gte:3&select=id,name,color,age",
+    "last": "http://localhost:3000/cats?page[number]=3&page[size]=5&sort=-color&@search=i&filter[age]=$gte:3&select=id,name,color,age"
   }
 }
 ```
@@ -323,7 +323,7 @@ Similar as with repositories, you can utilize `relations` as a simplified left-j
 #### Endpoint
 
 ```url
-http://localhost:3000/cats?filter.toys.name=$in:Mouse,String
+http://localhost:3000/cats?filter[toys][name]=$in:Mouse,String
 ```
 
 #### Code
@@ -359,7 +359,7 @@ Similar as with relations, you can specify nested relations for sorting, filteri
 #### Endpoint
 
 ```url
-http://localhost:3000/cats?filter.home.pillows.color=pink
+http://localhost:3000/cats?filter[home][pillows][color=pink
 ```
 
 #### Code
@@ -428,27 +428,27 @@ const config: PaginateConfig<CatEntity> = {
 }
 ```
 
-`?filter.name=$eq:Milo` is equivalent with `?filter.name=Milo`
+`?filter[name]=$eq:Milo` is equivalent with `?filter[name]=Milo`
 
-`?filter.age=$btw:4,6` where column `age` is between `4` and `6`
+`?filter[age]=$btw:4,6` where column `age` is between `4` and `6`
 
-`?filter.id=$not:$in:2,5,7` where column `id` is **not** `2`, `5` or `7`
+`?filter[id]=$not:$in:2,5,7` where column `id` is **not** `2`, `5` or `7`
 
-`?filter.summary=$not:$ilike:term` where column `summary` does **not** contain `term`
+`?filter[summary]=$not:$ilike:term` where column `summary` does **not** contain `term`
 
-`?filter.summary=$sw:term` where column `summary` starts with `term`
+`?filter[summary]=$sw:term` where column `summary` starts with `term`
 
-`?filter.seenAt=$null` where column `seenAt` is `NULL`
+`?filter[seenAt]=$null` where column `seenAt` is `NULL`
 
-`?filter.seenAt=$not:$null` where column `seenAt` is **not** `NULL`
+`?filter[seenAt]=$not:$null` where column `seenAt` is **not** `NULL`
 
-`?filter.createdAt=$btw:2022-02-02,2022-02-10` where column `createdAt` is between the dates `2022-02-02` and `2022-02-10`
+`?filter[createdAt]=$btw:2022-02-02,2022-02-10` where column `createdAt` is between the dates `2022-02-02` and `2022-02-10`
 
-`?filter.createdAt=$lt:2022-12-20T10:00:00.000Z` where column `createdAt` is before iso date `2022-12-20T10:00:00.000Z`
+`?filter[createdAt]=$lt:2022-12-20T10:00:00.000Z` where column `createdAt` is before iso date `2022-12-20T10:00:00.000Z`
 
-`?filter.roles=$contains:moderator` where column `roles` is an array and contains the value `moderator`
+`?filter[roles]=$contains:moderator` where column `roles` is an array and contains the value `moderator`
 
-`?filter.roles=$contains:moderator,admin` where column `roles` is an array and contains the values `moderator` and `admin`
+`?filter[roles]=$contains:moderator,admin` where column `roles` is an array and contains the values `moderator` and `admin`
 
 ## Multi Filters
 
@@ -456,19 +456,19 @@ Multi filters are filters that can be applied to a single column with a comparat
 
 ### Examples
 
-`?filter.createdAt=$gt:2022-02-02&filter.createdAt=$lt:2022-02-10` where column `createdAt` is after `2022-02-02` **and** before `2022-02-10`
+`?filter[createdAt]=$gt:2022-02-02&filter[createdAt]=$lt:2022-02-10` where column `createdAt` is after `2022-02-02` **and** before `2022-02-10`
 
-`?filter.id=$contains:moderator&filter.id=$or:$contains:admin` where column `roles` is an array and contains `moderator` **or** `admin`
+`?filter[id]=$contains:moderator&filter[id]=$or:$contains:admin` where column `roles` is an array and contains `moderator` **or** `admin`
 
-`?filter.id=$gt:3&filter.id=$and:$lt:5&filter.id=$or:$eq:7` where column `id` is greater than `3` **and** less than `5` **or** equal to `7`
+`?filter[id]=$gt:3&filter[id]=$and:$lt:5&filter[id]=$or:$eq:7` where column `id` is greater than `3` **and** less than `5` **or** equal to `7`
 
 **Note:** The `$and` comparators are not required. The above example is equivalent to:
 
-`?filter.id=$gt:3&filter.id=$lt:5&filter.id=$or:$eq:7`
+`?filter[id]=$gt:3&filter[id]=$lt:5&filter[id]=$or:$eq:7`
 
 **Note:** The first comparator on the the first filter is ignored because the filters are grouped by the column name and chained with an `$and` to other filters.
 
-`...&filter.id=5&filter.id=$or:7&filter.name=Milo&...`
+`...&filter[id]=5&filter[id]=$or:7&filter[name]=Milo&...`
 
 is resolved to:
 
@@ -476,11 +476,12 @@ is resolved to:
 
 ## Swagger
 
-You can use two default decorators @ApiOkResponsePaginated and @ApiPagination to generate swagger documentation for your endpoints
+You can use two default decorators `@ApiOkResponsePaginated` and `@ApiPagination`
+to generate swagger documentation for your endpoints.
 
-`@ApiOkPaginatedResponse` is for response body, return http[](https://) status is 200
+`@ApiOkPaginatedResponse` is for response body, http status is 200.
 
-`@ApiPaginationQuery` is for query params
+`@ApiPaginationQuery` is for query params.
 
 ```typescript
   @Get()
@@ -497,7 +498,7 @@ You can use two default decorators @ApiOkResponsePaginated and @ApiPagination to
   }
 ```
 
-There is also some syntax sugar for this, and you can use only one decorator `@PaginatedSwaggerDocs` for both response body and query params
+There is also some syntax sugar for this, and you can use only one decorator `@PaginatedSwaggerDocs` for both response body and query params:
 
 ```typescript
   @Get()
