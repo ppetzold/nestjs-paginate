@@ -55,7 +55,7 @@
     "ts-jest": "^29.1.2",
     "ts-node": "^10.9.2",
     "typeorm": "^0.3.17",
-    "typescript": "^5.3.3"
+    "typescript": "^5.4.2"
   },
   "dependencies": {
     "lodash": "^4.17.21"
