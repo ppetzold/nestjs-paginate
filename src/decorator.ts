@@ -51,7 +51,7 @@ function parseParam<T>(queryParam: unknown, parserLogic: (param: string, res: an
 
 export const Paginate = createParamDecorator((_data: unknown, ctx: ExecutionContext): PaginateQuery => {
     const request: ExpressRequest | FastifyRequest = ctx.switchToHttp().getRequest()
-    const query = request.query as Record<string, unknown>
+    const query = (ctx.contextType === 'rpc' ? request : request.query) as Record<string, unknown>
 
     // Determine if Express or Fastify to rebuild the original url and reduce down to protocol, host and base url
     let originalUrl: string
