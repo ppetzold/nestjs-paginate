@@ -68,36 +68,38 @@ describe('PaginatedEndpoint decorator', () => {
         const params = openApiDefinition.paths['/test'].get.parameters
         expect(params).toStrictEqual([
             {
-                name: 'page',
+                name: 'page[number]',
                 required: false,
                 in: 'query',
                 description:
-                    'Page number to retrieve.If you provide invalid value the default page number will applied\n        <p>\n             <b>Example: </b> 1\n          </p>\n        <p>\n             <b>Default Value: </b> 1\n          </p>\n        ',
+                    'Page number to retrieve. If you provide an invalid value the default page number will applied.\n        <p>\n             <b>Example: </b> 1\n          </p>\n        <p>\n             <b>Default Value: </b> 1\n          </p>\n        ',
                 schema: {
                     type: 'number',
                 },
             },
             {
-                name: 'limit',
+                name: 'page[size]',
                 required: false,
                 in: 'query',
                 description:
-                    'Number of records per page.\n      <p>\n             <b>Example: </b> 20\n          </p>\n      <p>\n             <b>Default Value: </b> 20\n          </p>\n      <p>\n             <b>Max Value: </b> 100\n          </p>\n\n      If provided value is greater than max value, max value will be applied.\n      ',
+                    'Number of records per page.\n      <p>\n             <b>Example: </b> 20\n          </p>\n      <p>\n             <b>Default Value: </b> 20\n          </p>\n      <p>\n             <b>Max Value: </b> 100\n          </p>\n\n      If the provided value is greater than the maximum value, the maximum value will be applied.\n      ',
                 schema: {
                     type: 'number',
                 },
             },
             {
-                name: 'sortBy',
+                name: 'sort',
                 required: false,
                 in: 'query',
+                explode: false,
+                style: 'form',
                 description:
-                    'Parameter to sort by.\n      <p>To sort by multiple fields, just provide query param multiple types. The order in url defines an order of sorting</p>\n      <p>\n             <b>Format: </b> fieldName:DIRECTION\n          </p>\n      <p>\n             <b>Example: </b> sortBy=id:DESC&sortBy=createdAt:ASC\n          </p>\n      <p>\n             <b>Default Value: </b> No default sorting specified, the result order is not guaranteed\n          </p>\n      <h4>Available Fields</h4><ul><li>id</li></ul>\n      ',
+                    'Comma separated list of field names to sort by. Add a minus to use a field name for a descending sort.\n      <p>\n             <b>Format: </b> fieldName OR -fieldName\n          </p>\n      <p>\n             <b>Example: </b> sort=-id,createdAt\n          </p>\n      <p>\n             <b>Default Value: </b> No default sorting specified, the result order is not guaranteed\n          </p>\n      <h4>Available Fields</h4><ul><li>id</li></ul>\n      ',
                 schema: {
                     type: 'array',
                     items: {
                         type: 'string',
-                        enum: ['id:ASC', 'id:DESC'],
+                        enum: ['id', '-id'],
                     },
                 },
             },
@@ -150,31 +152,31 @@ describe('PaginatedEndpoint decorator', () => {
         const params = openApiDefinition.paths['/test'].get.parameters
         expect(params).toStrictEqual([
             {
-                name: 'page',
+                name: 'page[number]',
                 required: false,
                 in: 'query',
                 description:
-                    'Page number to retrieve.If you provide invalid value the default page number will applied\n        <p>\n             <b>Example: </b> 1\n          </p>\n        <p>\n             <b>Default Value: </b> 1\n          </p>\n        ',
+                    'Page number to retrieve. If you provide an invalid value the default page number will applied.\n        <p>\n             <b>Example: </b> 1\n          </p>\n        <p>\n             <b>Default Value: </b> 1\n          </p>\n        ',
                 schema: {
                     type: 'number',
                 },
             },
             {
-                name: 'limit',
+                name: 'page[size]',
                 required: false,
                 in: 'query',
                 description:
-                    'Number of records per page.\n      <p>\n             <b>Example: </b> 20\n          </p>\n      <p>\n             <b>Default Value: </b> 20\n          </p>\n      <p>\n             <b>Max Value: </b> 100\n          </p>\n\n      If provided value is greater than max value, max value will be applied.\n      ',
+                    'Number of records per page.\n      <p>\n             <b>Example: </b> 20\n          </p>\n      <p>\n             <b>Default Value: </b> 20\n          </p>\n      <p>\n             <b>Max Value: </b> 100\n          </p>\n\n      If the provided value is greater than the maximum value, the maximum value will be applied.\n      ',
                 schema: {
                     type: 'number',
                 },
             },
             {
-                name: 'filter.id',
+                name: 'filter[id]',
                 required: false,
                 in: 'query',
                 description:
-                    'Filter by id query param.\n          <p>\n             <b>Format: </b> filter.id={$not}:OPERATION:VALUE\n          </p>\n          <p>\n             <b>Example: </b> filter.id=$not:$like:John Doe&filter.id=like:John\n          </p>\n          <h4>Available Operations</h4><ul><li>$and</li>\n<li>$or</li>\n<li>$not</li>\n<li>$eq</li>\n<li>$gt</li>\n<li>$gte</li>\n<li>$in</li>\n<li>$null</li>\n<li>$lt</li>\n<li>$lte</li>\n<li>$btw</li>\n<li>$ilike</li>\n<li>$sw</li>\n<li>$contains</li></ul>',
+                    'Filter by id query param.\n          <p>\n             <b>Format: </b> filter[id]={$not}:OPERATION:VALUE\n          </p>\n          <p>\n             <b>Example: </b> filter[id]=$not:$like:John Doe&filter[id]=like:John\n          </p>\n          <h4>Available Operations</h4><ul><li>$and</li>\n<li>$or</li>\n<li>$not</li>\n<li>$eq</li>\n<li>$gt</li>\n<li>$gte</li>\n<li>$in</li>\n<li>$null</li>\n<li>$lt</li>\n<li>$lte</li>\n<li>$btw</li>\n<li>$ilike</li>\n<li>$sw</li>\n<li>$contains</li></ul>',
                 schema: {
                     type: 'array',
                     items: {
@@ -183,11 +185,11 @@ describe('PaginatedEndpoint decorator', () => {
                 },
             },
             {
-                name: 'filter.name',
+                name: 'filter[name]',
                 required: false,
                 in: 'query',
                 description:
-                    'Filter by name query param.\n          <p>\n             <b>Format: </b> filter.name={$not}:OPERATION:VALUE\n          </p>\n          <p>\n             <b>Example: </b> filter.name=$not:$like:John Doe&filter.name=like:John\n          </p>\n          <h4>Available Operations</h4><ul><li>$eq</li>\n<li>$not</li></ul>',
+                    'Filter by name query param.\n          <p>\n             <b>Format: </b> filter[name]={$not}:OPERATION:VALUE\n          </p>\n          <p>\n             <b>Example: </b> filter[name]=$not:$like:John Doe&filter[name]=like:John\n          </p>\n          <h4>Available Operations</h4><ul><li>$eq</li>\n<li>$not</li></ul>',
                 schema: {
                     type: 'array',
                     items: {
@@ -196,38 +198,42 @@ describe('PaginatedEndpoint decorator', () => {
                 },
             },
             {
-                name: 'sortBy',
+                name: 'sort',
                 required: false,
+                explode: false,
+                style: 'form',
                 in: 'query',
                 description:
-                    'Parameter to sort by.\n      <p>To sort by multiple fields, just provide query param multiple types. The order in url defines an order of sorting</p>\n      <p>\n             <b>Format: </b> fieldName:DIRECTION\n          </p>\n      <p>\n             <b>Example: </b> sortBy=id:DESC&sortBy=createdAt:ASC\n          </p>\n      <p>\n             <b>Default Value: </b> id:DESC\n          </p>\n      <h4>Available Fields</h4><ul><li>id</li></ul>\n      ',
+                    'Comma separated list of field names to sort by. Add a minus to use a field name for a descending sort.\n      <p>\n             <b>Format: </b> fieldName OR -fieldName\n          </p>\n      <p>\n             <b>Example: </b> sort=-id,createdAt\n          </p>\n      <p>\n             <b>Default Value: </b> -id\n          </p>\n      <h4>Available Fields</h4><ul><li>id</li></ul>\n      ',
                 schema: {
                     type: 'array',
                     items: {
                         type: 'string',
-                        enum: ['id:ASC', 'id:DESC'],
+                        enum: ['id', '-id'],
                     },
                 },
             },
             {
-                name: 'search',
+                name: '@search[query]',
                 required: false,
                 in: 'query',
                 description:
-                    'Search term to filter result values\n        <p>\n             <b>Example: </b> John\n          </p>\n        <p>\n             <b>Default Value: </b> No default value\n          </p>\n        ',
+                    'Search term to filter result values across all searchable fields.\n        <p>\n             <b>Example: </b> John\n          </p>\n        <p>\n             <b>Default Value: </b> No default value\n          </p>\n        ',
                 schema: {
                     type: 'string',
                 },
             },
             {
-                name: 'searchBy',
+                name: '@search[fields]',
                 required: false,
+                explode: false,
                 in: 'query',
                 description:
                     'List of fields to search by term to filter result values\n        <p>\n             <b>Example: </b> name\n          </p>\n        <p>\n             <b>Default Value: </b> By default all fields mentioned below will be used to search by term\n          </p>\n        <h4>Available Fields</h4><ul><li>name</li></ul>\n        ',
                 schema: {
                     type: 'array',
                     items: {
+                        enum: ['name'],
                         type: 'string',
                     },
                 },
