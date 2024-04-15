@@ -45,7 +45,7 @@ export class Paginated<T> {
             totalItems: number
             totalPages: number
         }
-        sort: SortBy<T>
+        sort: string
         search: { query: string; fields: Column<T>[] }
         select: string[]
         filter?: {
@@ -192,7 +192,7 @@ export async function paginate<T extends ObjectLiteral>(
 
     const limit = isPaginated ? Math.min(queryLimit || defaultLimit, maxLimit || DEFAULT_MAX_LIMIT) : NO_PAGINATION
 
-    const sort = [] as SortBy<T>
+    const sortBy = [] as SortBy<T>
     const searchBy: Column<T>[] = []
 
     let [items, totalItems]: [T[], number] = [[], 0]
@@ -255,16 +255,16 @@ export async function paginate<T extends ObjectLiteral>(
     if (query.sortBy) {
         for (const order of query.sortBy) {
             if (isEntityKey(config.sortableColumns, order[0]) && ['ASC', 'DESC'].includes(order[1])) {
-                sort.push(order as Order<T>)
+                sortBy.push(order as Order<T>)
             }
         }
     }
 
-    if (!sort.length) {
-        sort.push(...(config.defaultSortBy || [[config.sortableColumns[0], 'ASC']]))
+    if (!sortBy.length) {
+        sortBy.push(...(config.defaultSortBy || [[config.sortableColumns[0], 'ASC']]))
     }
 
-    for (const order of sort) {
+    for (const order of sortBy) {
         const columnProperties = getPropertiesByColumnName(order[0])
         const { isVirtualProperty } = extractVirtualProperty(queryBuilder, columnProperties)
         const isRelation = checkIsRelation(queryBuilder, columnProperties.propertyPath)
@@ -370,7 +370,7 @@ export async function paginate<T extends ObjectLiteral>(
         path = queryOrigin + queryPath
     }
 
-    const sortByQuery = '&sort=' + sort.map((order) => `${order[1] === 'DESC' ? '-' : ''}${order[0]}`).join(',')
+    const sortByQuery = '&sort=' + sortBy.map((order) => `${order[1] === 'DESC' ? '-' : ''}${order[0]}`).join(',')
     const searchQuery = query.search ? `&@search[query]=${query.search}` : ''
 
     const searchByQuery =
@@ -407,7 +407,7 @@ export async function paginate<T extends ObjectLiteral>(
                 totalItems: isPaginated ? totalItems : items.length,
                 totalPages,
             },
-            sort,
+            sort: sortBy.map((order) => (order[1] == 'DESC' ? '-' : '') + order[0]).join(','),
             search: {
                 query: query.search,
                 fields: query.search ? searchBy : undefined,
