@@ -22,6 +22,7 @@ import {
     fixColumnAlias,
     getPropertiesByColumnName,
     getQueryUrlComponents,
+    hasColumnWithPropertyPath,
     includesAllPrimaryKeyColumns,
     isEntityKey,
     Order,
@@ -264,10 +265,20 @@ export async function paginate<T extends ObjectLiteral>(
         const { isVirtualProperty } = extractVirtualProperty(queryBuilder, columnProperties)
         const isRelation = checkIsRelation(queryBuilder, columnProperties.propertyPath)
         const isEmbeded = checkIsEmbedded(queryBuilder, columnProperties.propertyPath)
-        let alias = fixColumnAlias(columnProperties, queryBuilder.alias, isRelation, isVirtualProperty, isEmbeded)
+        const doesFieldExists = hasColumnWithPropertyPath(queryBuilder, columnProperties)
+
+        let alias = ''
+
+        if (doesFieldExists) {
+            alias = fixColumnAlias(columnProperties, queryBuilder.alias, isRelation, isVirtualProperty, isEmbeded)
+        } else {
+            alias = columnProperties.propertyName
+        }
+
         if (isVirtualProperty) {
             alias = `"${alias}"`
         }
+
         queryBuilder.addOrderBy(alias, order[1], nullSort)
     }
 
