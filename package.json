@@ -61,10 +61,10 @@
     "lodash": "^4.17.21"
   },
   "peerDependencies": {
-    "@nestjs/common": "^10.3.8",
-    "@nestjs/swagger": "^7.3.0",
-    "express": "^4.19.2",
-    "fastify": "^4.26.2",
+    "@nestjs/common": "^10.0.0",
+    "@nestjs/swagger": "^7.0.0",
+    "express": "^4.0.0",
+    "fastify": "^4.0.0",
     "typeorm": "^0.3.17"
   },
   "jest": {
@@ -80,7 +80,9 @@
     },
     "coverageDirectory": "../coverage",
     "testEnvironment": "node",
-    "setupFiles": ["<rootDir>/../jest.setup.ts"]
+    "setupFiles": [
+      "<rootDir>/../jest.setup.ts"
+    ]
   },
   "repository": {
     "type": "git",
