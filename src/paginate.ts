@@ -39,13 +39,14 @@ export { FilterOperator, FilterSuffix }
 export class Paginated<T> {
     data: T[]
     meta: {
-        itemsPerPage: number
-        totalItems: number
-        currentPage: number
-        totalPages: number
-        sortBy: SortBy<T>
-        searchBy: Column<T>[]
-        search: string
+        page: {
+            number: number
+            size: number
+            totalItems: number
+            totalPages: number
+        }
+        sort: string
+        search: { query: string; fields: Column<T>[] }
         select: string[]
         filter?: {
             [column: string]: string | string[]
@@ -172,6 +173,10 @@ function flattenWhereAndTransform<T>(
     })
 }
 
+export function isRepository<T>(repo: unknown): repo is Repository<T> {
+    return !!(repo as { manager: unknown }).manager
+}
+
 export async function paginate<T extends ObjectLiteral>(
     query: PaginateQuery,
     repo: Repository<T> | SelectQueryBuilder<T>,
@@ -192,9 +197,9 @@ export async function paginate<T extends ObjectLiteral>(
 
     let [items, totalItems]: [T[], number] = [[], 0]
 
-    const queryBuilder = repo instanceof Repository ? repo.createQueryBuilder('__root') : repo
+    const queryBuilder = isRepository(repo) ? repo.createQueryBuilder('__root') : repo
 
-    if (repo instanceof Repository && !config.relations && config.loadEagerRelations === true) {
+    if (isRepository(repo) && !config.relations && config.loadEagerRelations === true) {
         if (!config.relations) {
             FindOptionsUtils.joinEagerRelations(queryBuilder, queryBuilder.alias, repo.metadata)
         }
@@ -365,12 +370,12 @@ export async function paginate<T extends ObjectLiteral>(
         path = queryOrigin + queryPath
     }
 
-    const sortByQuery = sortBy.map((order) => `&sortBy=${order.join(':')}`).join('')
-    const searchQuery = query.search ? `&search=${query.search}` : ''
+    const sortByQuery = '&sort=' + sortBy.map((order) => `${order[1] === 'DESC' ? '-' : ''}${order[0]}`).join(',')
+    const searchQuery = query.search ? `&@search[query]=${query.search}` : ''
 
     const searchByQuery =
         query.searchBy && searchBy.length && !config.ignoreSearchByInQueryParam
-            ? searchBy.map((column) => `&searchBy=${column}`).join('')
+            ? searchBy.map((column) => `&@search[fields]=${column}`).join('')
             : ''
 
     // Only expose select in meta data if query select differs from config select
@@ -380,29 +385,33 @@ export async function paginate<T extends ObjectLiteral>(
     const filterQuery = query.filter
         ? '&' +
           stringify(
-              mapKeys(query.filter, (_param, name) => 'filter.' + name),
+              mapKeys(query.filter, (_param, name) => `filter[${name}]`),
               '&',
               '=',
               { encodeURIComponent: (str) => str }
           )
         : ''
 
-    const options = `&limit=${limit}${sortByQuery}${searchQuery}${searchByQuery}${selectQuery}${filterQuery}`
+    const options = `&page[size]=${limit}${sortByQuery}${searchQuery}${searchByQuery}${selectQuery}${filterQuery}`
 
-    const buildLink = (p: number): string => path + '?page=' + p + options
+    const buildLink = (p: number): string => path + '?page[number]=' + p + options
 
     const totalPages = isPaginated ? Math.ceil(totalItems / limit) : 1
 
     const results: Paginated<T> = {
         data: items,
         meta: {
-            itemsPerPage: isPaginated ? limit : items.length,
-            totalItems: isPaginated ? totalItems : items.length,
-            currentPage: page,
-            totalPages,
-            sortBy,
-            search: query.search,
-            searchBy: query.search ? searchBy : undefined,
+            page: {
+                number: page,
+                size: isPaginated ? limit : items.length,
+                totalItems: isPaginated ? totalItems : items.length,
+                totalPages,
+            },
+            sort: sortBy.map((order) => (order[1] == 'DESC' ? '-' : '') + order[0]).join(','),
+            search: {
+                query: query.search,
+                fields: query.search ? searchBy : undefined,
+            },
             select: isQuerySelected ? selectParams : undefined,
             filter: query.filter,
         },

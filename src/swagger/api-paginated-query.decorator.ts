@@ -17,21 +17,20 @@ function li(key: string | 'Available Fields', values: string[]) {
 
 export function SortBy(paginationConfig: PaginateConfig<any>) {
     const defaultSortMessage = paginationConfig.defaultSortBy
-        ? paginationConfig.defaultSortBy.map(([col, order]) => `${col}:${order}`).join(',')
+        ? paginationConfig.defaultSortBy.map(([col, order]) => (order === 'ASC' ? col : `-${col}`)).join(',')
         : 'No default sorting specified, the result order is not guaranteed'
 
-    const sortBy = paginationConfig.sortableColumns.reduce((prev, curr) => {
-        return [...prev, `${curr}:ASC`, `${curr}:DESC`]
-    }, [])
+    const sortBy = paginationConfig.sortableColumns.flatMap((col) => [col, `-${col}`])
 
     return ApiQuery({
-        name: 'sortBy',
+        name: 'sort',
         isArray: true,
         enum: sortBy,
-        description: `Parameter to sort by.
-      <p>To sort by multiple fields, just provide query param multiple types. The order in url defines an order of sorting</p>
-      ${p('Format', 'fieldName:DIRECTION')}
-      ${p('Example', 'sortBy=id:DESC&sortBy=createdAt:ASC')}
+        style: 'form',
+        explode: false,
+        description: `Comma separated list of field names to sort by. Add a minus to use a field name for a descending sort.
+      ${p('Format', 'fieldName OR -fieldName')}
+      ${p('Example', 'sort=-id,createdAt')}
       ${p('Default Value', defaultSortMessage)}
       ${li('Available Fields', paginationConfig.sortableColumns)}
       `,
@@ -40,15 +39,27 @@ export function SortBy(paginationConfig: PaginateConfig<any>) {
     })
 }
 
-function Limit(paginationConfig: PaginateConfig<any>) {
+function PageNumber() {
     return ApiQuery({
-        name: 'limit',
+        name: 'page[number]',
+        description: `Page number to retrieve. If you provide an invalid value the default page number will applied.
+        ${p('Example', '1')}
+        ${p(DEFAULT_VALUE_KEY, '1')}
+        `,
+        required: false,
+        type: 'number',
+    })
+}
+
+function PageSize(paginationConfig: PaginateConfig<any>) {
+    return ApiQuery({
+        name: 'page[size]',
         description: `Number of records per page.
       ${p('Example', '20')}
       ${p(DEFAULT_VALUE_KEY, paginationConfig?.defaultLimit?.toString() || DEFAULT_LIMIT.toString())}
       ${p('Max Value', paginationConfig.maxLimit?.toString() || DEFAULT_MAX_LIMIT.toString())}
 
-      If provided value is greater than max value, max value will be applied.
+      If the provided value is greater than the maximum value, the maximum value will be applied.
       `,
         required: false,
         type: 'number',
@@ -79,6 +90,7 @@ function Where(paginationConfig: PaginateConfig<any>) {
 
     const allColumnsDecorators = Object.entries(paginationConfig.filterableColumns)
         .map(([fieldName, filterOperations]) => {
+            const queryName = `[${fieldName.replace(/\./, '][')}]`
             const operations =
                 filterOperations === true || filterOperations === undefined
                     ? [
@@ -89,10 +101,10 @@ function Where(paginationConfig: PaginateConfig<any>) {
                     : filterOperations.map((fo) => fo.toString())
 
             return ApiQuery({
-                name: `filter.${fieldName}`,
+                name: `filter${queryName}`,
                 description: `Filter by ${fieldName} query param.
-          ${p('Format', `filter.${fieldName}={$not}:OPERATION:VALUE`)}
-          ${p('Example', `filter.${fieldName}=$not:$like:John Doe&filter.${fieldName}=like:John`)}
+          ${p('Format', `filter${queryName}={$not}:OPERATION:VALUE`)}
+          ${p('Example', `filter${queryName}=$not:$like:John Doe&filter${queryName}=like:John`)}
           ${li('Available Operations', operations)}`,
                 required: false,
                 type: 'string',
@@ -104,24 +116,12 @@ function Where(paginationConfig: PaginateConfig<any>) {
     return applyDecorators(...allColumnsDecorators)
 }
 
-function Page() {
-    return ApiQuery({
-        name: 'page',
-        description: `Page number to retrieve.If you provide invalid value the default page number will applied
-        ${p('Example', '1')}
-        ${p(DEFAULT_VALUE_KEY, '1')}
-        `,
-        required: false,
-        type: 'number',
-    })
-}
-
-function Search(paginateConfig: PaginateConfig<any>) {
+function SearchQuery(paginateConfig: PaginateConfig<any>) {
     if (!paginateConfig.searchableColumns) return
 
     return ApiQuery({
-        name: 'search',
-        description: `Search term to filter result values
+        name: '@search[query]',
+        description: `Search term to filter result values across all searchable fields.
         ${p('Example', 'John')}
         ${p(DEFAULT_VALUE_KEY, 'No default value')}
         `,
@@ -130,11 +130,11 @@ function Search(paginateConfig: PaginateConfig<any>) {
     })
 }
 
-function SearchBy(paginateConfig: PaginateConfig<any>) {
+function SearchFields(paginateConfig: PaginateConfig<any>) {
     if (!paginateConfig.searchableColumns) return
 
     return ApiQuery({
-        name: 'searchBy',
+        name: '@search[fields]',
         description: `List of fields to search by term to filter result values
         ${p(
             'Example',
@@ -145,6 +145,8 @@ function SearchBy(paginateConfig: PaginateConfig<any>) {
         `,
         required: false,
         isArray: true,
+        enum: paginateConfig.searchableColumns,
+        explode: false,
         type: 'string',
     })
 }
@@ -152,12 +154,12 @@ function SearchBy(paginateConfig: PaginateConfig<any>) {
 export const ApiPaginationQuery = (paginationConfig: PaginateConfig<any>) => {
     return applyDecorators(
         ...[
-            Page(),
-            Limit(paginationConfig),
+            PageNumber(),
+            PageSize(paginationConfig),
             Where(paginationConfig),
             SortBy(paginationConfig),
-            Search(paginationConfig),
-            SearchBy(paginationConfig),
+            SearchQuery(paginationConfig),
+            SearchFields(paginationConfig),
             Select(paginationConfig),
         ].filter((v): v is MethodDecorator => v !== undefined)
     )

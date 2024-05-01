@@ -39,13 +39,20 @@ class PaginatedLinksDocumented {
     last?: string
 }
 
-export class PaginatedMetaDocumented<T> {
+class PaginatedPageDocumented {
+    @ApiProperty({
+        title: 'Number of the page',
+        required: true,
+        type: 'number',
+    })
+    number!: number
+
     @ApiProperty({
         title: 'Number of items per page',
         required: true,
         type: 'number',
     })
-    itemsPerPage!: number
+    size!: number
 
     @ApiProperty({
         title: 'Total number of items',
@@ -55,54 +62,51 @@ export class PaginatedMetaDocumented<T> {
     totalItems!: number
 
     @ApiProperty({
-        title: 'Current requested page',
-        required: true,
-        type: 'number',
-    })
-    currentPage!: number
-
-    @ApiProperty({
         title: 'Total number of pages',
         required: true,
         type: 'number',
     })
     totalPages!: number
+}
 
+class PaginatedSearchDocumented<T> {
     @ApiProperty({
-        title: 'Sorting by columns',
-        required: false,
-        type: 'array',
-        items: {
-            type: 'array',
-            items: {
-                oneOf: [
-                    {
-                        type: 'string',
-                    },
-                    {
-                        type: 'string',
-                        enum: ['ASC', 'DESC'],
-                    },
-                ],
-            },
-        },
-    })
-    sortBy!: SortBy<T>
-
-    @ApiProperty({
-        title: 'Search by fields',
+        title: 'Search fields',
         required: false,
         isArray: true,
         type: 'string',
     })
-    searchBy!: Column<T>[]
+    fields!: Column<T>[]
 
     @ApiProperty({
         title: 'Search term',
         required: false,
         type: 'string',
     })
-    search!: string
+    query!: string
+}
+
+export class PaginatedMetaDocumented<T> {
+    @ApiProperty({
+        title: 'Page query',
+        required: true,
+        type: 'object',
+    })
+    page!: PaginatedPageDocumented
+
+    @ApiProperty({
+        title: 'Sort query',
+        required: false,
+        type: 'string',
+    })
+    sort!: string
+
+    @ApiProperty({
+        title: 'Search query',
+        required: false,
+        type: 'string',
+    })
+    search!: PaginatedSearchDocumented<T>
 
     @ApiProperty({
         title: 'List of selected fields',
