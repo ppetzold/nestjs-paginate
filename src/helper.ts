@@ -109,7 +109,17 @@ export function hasColumnWithPropertyPath(
     if (!qb || !columnProperties) {
         return false
     }
-    return !!qb.expressionMap.mainAlias?.metadata?.hasColumnWithPropertyPath(columnProperties.propertyName)
+
+    const qbMetadata = qb.expressionMap.mainAlias?.metadata
+
+    return (
+        // match column name
+        qbMetadata.hasColumnWithPropertyPath(columnProperties.propertyName) ||
+        // match column with alias
+        qbMetadata.hasColumnWithPropertyPath(columnProperties.column) ||
+        // match relation column
+        qbMetadata.hasColumnWithPropertyPath(columnProperties.propertyPath)
+    )
 }
 
 export function checkIsRelation(qb: SelectQueryBuilder<unknown>, propertyPath: string): boolean {
