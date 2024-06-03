@@ -1,3 +1,6 @@
+import { Logger, ServiceUnavailableException } from '@nestjs/common'
+import { mapKeys } from 'lodash'
+import { stringify } from 'querystring'
 import {
     Brackets,
     FindOperator,
@@ -9,11 +12,10 @@ import {
     Repository,
     SelectQueryBuilder,
 } from 'typeorm'
-import { PaginateQuery } from './decorator'
-import { Logger, ServiceUnavailableException } from '@nestjs/common'
-import { mapKeys } from 'lodash'
-import { stringify } from 'querystring'
 import { WherePredicateOperator } from 'typeorm/query-builder/WhereClause'
+import { OrmUtils } from 'typeorm/util/OrmUtils'
+import { PaginateQuery } from './decorator'
+import { addFilter, FilterOperator, FilterSuffix } from './filter'
 import {
     checkIsEmbedded,
     checkIsRelation,
@@ -22,6 +24,7 @@ import {
     fixColumnAlias,
     getPropertiesByColumnName,
     getQueryUrlComponents,
+    hasColumnWithPropertyPath,
     includesAllPrimaryKeyColumns,
     isEntityKey,
     Order,
@@ -29,8 +32,6 @@ import {
     RelationColumn,
     SortBy,
 } from './helper'
-import { addFilter, FilterOperator, FilterSuffix } from './filter'
-import { OrmUtils } from 'typeorm/util/OrmUtils'
 
 const logger: Logger = new Logger('nestjs-paginate')
 
@@ -264,10 +265,20 @@ export async function paginate<T extends ObjectLiteral>(
         const { isVirtualProperty } = extractVirtualProperty(queryBuilder, columnProperties)
         const isRelation = checkIsRelation(queryBuilder, columnProperties.propertyPath)
         const isEmbeded = checkIsEmbedded(queryBuilder, columnProperties.propertyPath)
-        let alias = fixColumnAlias(columnProperties, queryBuilder.alias, isRelation, isVirtualProperty, isEmbeded)
+        const doesFieldExists = hasColumnWithPropertyPath(queryBuilder, columnProperties)
+
+        let alias = ''
+
+        if (doesFieldExists) {
+            alias = fixColumnAlias(columnProperties, queryBuilder.alias, isRelation, isVirtualProperty, isEmbeded)
+        } else {
+            alias = columnProperties.propertyName
+        }
+
         if (isVirtualProperty) {
             alias = `"${alias}"`
         }
+
         queryBuilder.addOrderBy(alias, order[1], nullSort)
     }
 

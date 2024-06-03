@@ -19,20 +19,20 @@ type UnwrapArray<T> = T extends Array<infer U> ? UnwrapArray<U> : T
 export type Column<T, D extends number = 2> = [D] extends [never]
     ? never
     : T extends Record<string, any>
-    ? {
-          [K in keyof T]-?: K extends string
-              ? T[K] extends Date
-                  ? `${K}`
-                  : T[K] extends Array<infer U>
-                  ? `${K}` | Join<K, Column<UnwrapArray<U>, Prev[D]>>
-                  : T[K] extends Promise<infer U>
-                  ? U extends Array<infer V>
-                      ? `${K}` | Join<K, Column<UnwrapArray<V>, Prev[D]>>
-                      : `${K}` | Join<K, Column<UnwrapPromise<U>, Prev[D]>>
-                  : `${K}` | Join<K, Column<T[K], Prev[D]>>
-              : never
-      }[keyof T]
-    : ''
+      ? {
+            [K in keyof T]-?: K extends string
+                ? T[K] extends Date
+                    ? `${K}`
+                    : T[K] extends Array<infer U>
+                      ? `${K}` | Join<K, Column<UnwrapArray<U>, Prev[D]>>
+                      : T[K] extends Promise<infer U>
+                        ? U extends Array<infer V>
+                            ? `${K}` | Join<K, Column<UnwrapArray<V>, Prev[D]>>
+                            : `${K}` | Join<K, Column<UnwrapPromise<U>, Prev[D]>>
+                        : `${K}` | Join<K, Column<T[K], Prev[D]>>
+                : never
+        }[keyof T]
+      : ''
 
 export type RelationColumn<T> = Extract<
     Column<T>,
@@ -109,7 +109,17 @@ export function hasColumnWithPropertyPath(
     if (!qb || !columnProperties) {
         return false
     }
-    return !!qb.expressionMap.mainAlias?.metadata?.hasColumnWithPropertyPath(columnProperties.propertyName)
+
+    const qbMetadata = qb.expressionMap.mainAlias?.metadata
+
+    return (
+        // match column name
+        qbMetadata.hasColumnWithPropertyPath(columnProperties.propertyName) ||
+        // match column with alias
+        qbMetadata.hasColumnWithPropertyPath(columnProperties.column) ||
+        // match relation column
+        qbMetadata.hasColumnWithPropertyPath(columnProperties.propertyPath)
+    )
 }
 
 export function checkIsRelation(qb: SelectQueryBuilder<unknown>, propertyPath: string): boolean {
