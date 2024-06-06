@@ -1,5 +1,5 @@
 import { ROUTE_ARGS_METADATA } from '@nestjs/common/constants'
-import { HttpArgumentsHost, CustomParamFactory, ExecutionContext, ContextType } from '@nestjs/common/interfaces'
+import { CustomParamFactory, ExecutionContext, HttpArgumentsHost } from '@nestjs/common/interfaces'
 import { Request as ExpressRequest } from 'express'
 import { FastifyRequest } from 'fastify'
 import { Paginate, PaginateQuery } from './decorator'
