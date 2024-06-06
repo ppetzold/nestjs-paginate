@@ -1,7 +1,7 @@
 import { createParamDecorator, ExecutionContext } from '@nestjs/common'
 import type { Request as ExpressRequest } from 'express'
-import type { FastifyRequest } from 'fastify'
 import { pickBy, Dictionary, isString, mapKeys } from 'lodash'
+import { FastifyRequest } from 'fastify'
 
 function isRecord(data: unknown): data is Record<string, unknown> {
     return data !== null && typeof data === 'object' && !Array.isArray(data)
@@ -55,7 +55,7 @@ export const Paginate = createParamDecorator((_data: unknown, ctx: ExecutionCont
 
     switch (ctx.getType()) {
         case 'http':
-            const request = ctx.switchToHttp().getRequest()
+            const request: ExpressRequest | FastifyRequest = ctx.switchToHttp().getRequest()
 
             // Determine if Express or Fastify to rebuild the original url and reduce down to protocol, host and base url
             let originalUrl: string
