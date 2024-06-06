@@ -1,7 +1,7 @@
 import { createParamDecorator, ExecutionContext } from '@nestjs/common'
 import type { Request as ExpressRequest } from 'express'
+import type { FastifyRequest } from 'fastify'
 import { Dictionary, isString, mapKeys, pickBy } from 'lodash'
-import { FastifyRequest } from 'fastify'
 
 function isRecord(data: unknown): data is Record<string, unknown> {
     return data !== null && typeof data === 'object' && !Array.isArray(data)
