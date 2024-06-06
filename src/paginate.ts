@@ -380,8 +380,8 @@ export async function paginate<T extends ObjectLiteral>(
     const options = `&limit=${limit}${sortByQuery}${searchQuery}${searchByQuery}${selectQuery}${filterQuery}`
 
     let path: string = null
-    if (query.path) {
-        // `query.path` does not exist in RPC/WS requests
+    if (query.path !== null) {
+        // `query.path` does not exist in RPC/WS requests and is set to null then.
         const { queryOrigin, queryPath } = getQueryUrlComponents(query.path)
         if (config.relativePath) {
             path = queryPath
@@ -409,15 +409,16 @@ export async function paginate<T extends ObjectLiteral>(
             filter: query.filter,
         },
         // If there is no `path`, don't build links.
-        links: path
-            ? {
-                  first: page == 1 ? undefined : buildLink(1),
-                  previous: page - 1 < 1 ? undefined : buildLink(page - 1),
-                  current: buildLink(page),
-                  next: page + 1 > totalPages ? undefined : buildLink(page + 1),
-                  last: page == totalPages || !totalItems ? undefined : buildLink(totalPages),
-              }
-            : ({} as Paginated<T>['links']),
+        links:
+            path !== null
+                ? {
+                      first: page == 1 ? undefined : buildLink(1),
+                      previous: page - 1 < 1 ? undefined : buildLink(page - 1),
+                      current: buildLink(page),
+                      next: page + 1 > totalPages ? undefined : buildLink(page + 1),
+                      last: page == totalPages || !totalItems ? undefined : buildLink(totalPages),
+                  }
+                : ({} as Paginated<T>['links']),
     }
 
     return Object.assign(new Paginated<T>(), results)
