@@ -56,6 +56,7 @@ export const Paginate = createParamDecorator((_data: unknown, ctx: ExecutionCont
     switch (ctx.getType()) {
         case 'http':
             const request: ExpressRequest | FastifyRequest = ctx.switchToHttp().getRequest()
+            query = request.query as Record<string, unknown>
 
             // Determine if Express or Fastify to rebuild the original url and reduce down to protocol, host and base url
             let originalUrl: string
