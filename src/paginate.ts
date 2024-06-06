@@ -70,16 +70,16 @@ export interface PaginateConfig<T> {
     sortableColumns: Column<T>[]
     nullSort?: 'first' | 'last'
     searchableColumns?: Column<T>[]
-    // eslint-disable-next-line @typescript-eslint/ban-types
     // see https://github.com/microsoft/TypeScript/issues/29729 for (string & {})
+    // eslint-disable-next-line @typescript-eslint/ban-types
     select?: (Column<T> | (string & {}))[]
     maxLimit?: number
     defaultSortBy?: SortBy<T>
     defaultLimit?: number
     where?: FindOptionsWhere<T> | FindOptionsWhere<T>[]
     filterableColumns?: {
-        // eslint-disable-next-line @typescript-eslint/ban-types
         // see https://github.com/microsoft/TypeScript/issues/29729 for (string & {})
+        // eslint-disable-next-line @typescript-eslint/ban-types
         [key in Column<T> | (string & {})]?: (FilterOperator | FilterSuffix)[] | true
     }
     loadEagerRelations?: boolean

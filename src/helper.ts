@@ -1,6 +1,5 @@
 import { SelectQueryBuilder } from 'typeorm'
 import { ColumnMetadata } from 'typeorm/metadata/ColumnMetadata'
-import { Type } from '@nestjs/common'
 
 /**
  * Joins 2 keys as `K`, `K.P`, `K.(P` or `K.P)`
