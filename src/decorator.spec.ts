@@ -1,5 +1,5 @@
 import { ROUTE_ARGS_METADATA } from '@nestjs/common/constants'
-import { HttpArgumentsHost, CustomParamFactory, ExecutionContext } from '@nestjs/common/interfaces'
+import { CustomParamFactory, ExecutionContext, HttpArgumentsHost } from '@nestjs/common/interfaces'
 import { Request as ExpressRequest } from 'express'
 import { FastifyRequest } from 'fastify'
 import { Paginate, PaginateQuery } from './decorator'
@@ -18,6 +18,7 @@ const decoratorfactory = getParamDecoratorFactory<PaginateQuery>(Paginate)
 
 function expressContextFactory(query: ExpressRequest['query']): Partial<ExecutionContext> {
     const mockContext: Partial<ExecutionContext> = {
+        getType: <ContextType>() => 'http' as ContextType,
         switchToHttp: (): HttpArgumentsHost =>
             Object({
                 getRequest: (): Partial<ExpressRequest> =>
@@ -34,6 +35,7 @@ function expressContextFactory(query: ExpressRequest['query']): Partial<Executio
 
 function fastifyContextFactory(query: FastifyRequest['query']): Partial<ExecutionContext> {
     const mockContext: Partial<ExecutionContext> = {
+        getType: <ContextType>() => 'http' as ContextType,
         switchToHttp: (): HttpArgumentsHost =>
             Object({
                 getRequest: (): Partial<FastifyRequest> =>
