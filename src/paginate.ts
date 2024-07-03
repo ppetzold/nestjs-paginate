@@ -277,13 +277,19 @@ export async function paginate<T extends ObjectLiteral>(
         const isRelation = checkIsRelation(queryBuilder, columnProperties.propertyPath)
         const isEmbeded = checkIsEmbedded(queryBuilder, columnProperties.propertyPath)
         let alias = fixColumnAlias(columnProperties, queryBuilder.alias, isRelation, isVirtualProperty, isEmbeded)
-        if (isVirtualProperty) {
-            alias = `\`${alias}\``
-        }
-        if (isMMDb && nullSort) {
-            queryBuilder.addOrderBy(`${alias} ${nullSort}`)
+
+        if (isMMDb) {
+            if (isVirtualProperty) {
+                alias = `\`${alias}\``
+            }
+            if (nullSort) {
+                queryBuilder.addOrderBy(`${alias} ${nullSort}`)
+            }
             queryBuilder.addOrderBy(alias, order[1])
         } else {
+            if (isVirtualProperty) {
+                alias = `"${alias}"`
+            }
             queryBuilder.addOrderBy(alias, order[1], nullSort as 'NULLS FIRST' | 'NULLS LAST' | undefined)
         }
     }
