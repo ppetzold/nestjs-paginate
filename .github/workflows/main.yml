@@ -12,22 +12,41 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [14.x, 16.x, 18.x]
+        node-version: [16.x, 18.x, 20.x]
+
+    services:
+      postgres:
+        image: postgres:latest
+        env:
+          POSTGRES_USER: root
+          POSTGRES_PASSWORD: pass
+          POSTGRES_DB: test
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Use Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
       - run: npm ci
       - run: npm run format:ci
       - run: npm run lint
       - run: npm run build
+
+      # TODO: run postgres and sqlite in parallel
+      - run: DB=postgres npm run test
+
       - run: npm run test:cov
-      - run: bash <(curl -s https://codecov.io/bash)
+        if: github.event_name == 'push' && matrix.node-version == '20.x'
+      - run: 'bash <(curl -s https://codecov.io/bash)'
       - name: Semantic Release
-        if: github.event_name == 'push' && matrix.node-version == '18.x'
+        if: github.event_name == 'push' && matrix.node-version == '20.x'
         uses: cycjimmy/semantic-release-action@v3
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}

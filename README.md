@@ -14,8 +14,8 @@ Pagination and filtering helper method for TypeORM repositories or query builder
 - Sort by multiple columns
 - Search across columns
 - Select columns
-- Filter using operators (`$eq`, `$not`, `$null`, `$in`, `$gt`, `$gte`, `$lt`, `$lte`, `$btw`, `$ilike`, `$sw`)
-- Include relations
+- Filter using operators (`$eq`, `$not`, `$null`, `$in`, `$gt`, `$gte`, `$lt`, `$lte`, `$btw`, `$ilike`, `$sw`, `$contains`)
+- Include relations and nested relations
 - Virtual column support
 
 ## Installation
@@ -93,18 +93,12 @@ http://localhost:3000/cats?limit=5&page=2&sortBy=color:DESC&search=i&filter.age=
 }
 ```
 
-Array values for filter operators such as `$in` should be provided as comma-separated values:
-
-```
-http://localhost:3000/cats?filter.name=$in:George,Milo
-```
-
 #### Code
 
 ```ts
 import { Controller, Injectable, Get } from '@nestjs/common'
 import { InjectRepository } from '@nestjs/typeorm'
-import { FilterOperator, Paginate, PaginateQuery, paginate, Paginated } from 'nestjs-paginate'
+import { FilterOperator, FilterSuffix, Paginate, PaginateQuery, paginate, Paginated } from 'nestjs-paginate'
 import { Repository, Entity, PrimaryGeneratedColumn, Column } from 'typeorm'
 
 @Entity()
@@ -120,6 +114,12 @@ export class CatEntity {
 
   @Column('int')
   age: number
+
+  @Column({ nullable: true })
+  lastVetVisit: Date | null
+
+  @CreateDateColumn()
+  createdAt: string
 }
 
 @Injectable()
@@ -133,10 +133,12 @@ export class CatsService {
     return paginate(query, this.catsRepository, {
       sortableColumns: ['id', 'name', 'color', 'age'],
       nullSort: 'last',
-      searchableColumns: ['name', 'color', 'age'],
       defaultSortBy: [['id', 'DESC']],
+      searchableColumns: ['name', 'color', 'age'],
+      select: ['id', 'name', 'color', 'age', 'lastVetVisit'],
       filterableColumns: {
-        age: [FilterOperator.GTE, FilterOperator.LTE],
+        name: [FilterOperator.EQ, FilterSuffix.NOT],
+        age: true,
       },
     })
   }
@@ -167,9 +169,8 @@ const paginateConfig: PaginateConfig<CatEntity> {
   /**
    * Required: false
    * Type: 'first' | 'last'
-   * Default: 'first'
-   * Description: (ONLY WORKS WITH POSTGRES) Define whether to put null values
-   * at the beginning or end of the result set.
+   * Description: Define whether to put null values at the beginning
+   * or end of the result set.
    */
   nullSort: 'last',
 
@@ -191,12 +192,13 @@ const paginateConfig: PaginateConfig<CatEntity> {
 
   /**
    * Required: false
-   * Type: TypeORM partial selection
+   * Type: (keyof CatEntity)[]
    * Default: None
+   * Description: TypeORM partial selection. Limit selection further by using `select` query param.
    * https://typeorm.io/select-query-builder#partial-selection
    * Note: You must include the primary key in the selection.
    */
-  select: ['name', 'color'],
+  select: ['id', 'name', 'color'],
 
   /**
    * Required: false
@@ -240,10 +242,29 @@ const paginateConfig: PaginateConfig<CatEntity> {
   /**
    * Required: false
    * Type: boolean
+   * Default: false
+   * Description: Load eager relations using TypeORM's eager property.
+   * Only works if `relations` is not defined.
+   */
+  loadEagerRelations: true,
+
+  /**
+   * Required: false
+   * Type: boolean
    * Description: Disables the global condition of "non-deleted" for the entity with delete date columns.
    * https://typeorm.io/select-query-builder#querying-deleted-rows
    */
   withDeleted: false,
+
+  /**
+   * Required: false
+   * Type: string
+   * Description: Allow user to choose between limit/offset and take/skip.
+   * Default: PaginationType.TAKE_AND_SKIP
+   *
+   * However, using limit/offset can cause problems with relations.
+   */
+  paginationType: PaginationType.LIMIT_AND_OFFSET,
 
   /**
    * Required: false
@@ -259,46 +280,22 @@ const paginateConfig: PaginateConfig<CatEntity> {
    * Description: Overrides the origin of absolute resource links if set.
    */
   origin: 'http://cats.example',
-}
-```
 
-## Eager loading
+  /**
+   * Required: false
+   * Type: boolean
+   * Default: false
+   * Description: Prevent `searchBy` query param from limiting search scope further. Search will depend upon `searchableColumns` config option only
+   */
+  ignoreSearchByInQueryParam: true,
 
-Eager loading should work with typeorm's eager property out the box. Like so
-
-```typescript
-import { Entity, OneToMany } from 'typeorm'
-
-@Entity()
-export class CatEntity {
-  @PrimaryGeneratedColumn()
-  id: number
-
-  @Column('text')
-  name: string
-
-  @Column('text')
-  color: string
-
-  @Column('int')
-  age: number
-
-  @OneToMany(() => CatToyEntity, (catToy) => catToy.cat, {
-    eager: true,
-  })
-  toys: CatToyEntity[]
-}
-
-// service
-class CatService {
-  constructor(private readonly catsRepository: Repository<CatEntity>) {}
-
-  public findAll(query: PaginateQuery): Promise<Paginated<CatEntity>> {
-    return paginate(query, this.catsRepository, {
-      sortableColumns: ['id', 'name', 'color', 'age'],
-      loadEagerRelations: true, // set this property as true to enable the eager loading
-    })
-  }
+  /**
+   * Required: false
+   * Type: boolean
+   * Default: false
+   * Description: Prevent `select` query param from limiting selection further. Partial selection will depend upon `select` config option only
+   */
+  ignoreSelectInQueryParam: true,
 }
 ```
 
@@ -343,11 +340,93 @@ const config: PaginateConfig<CatEntity> = {
 const result = await paginate<CatEntity>(query, catRepo, config)
 ```
 
-## Single Filters
+**Note:** Embedded columns on relations have to be wrapped with brackets:
+
+```typescript
+const config: PaginateConfig<CatEntity> = {
+  sortableColumns: ['id', 'name', 'toys.(size.height)', 'toys.(size.width)'],
+  searchableColumns: ['name'],
+  relations: ['toys'],
+}
+```
+
+## Usage with Nested Relations
+
+Similar as with relations, you can specify nested relations for sorting, filtering and searching:
+
+### Example
+
+#### Endpoint
+
+```url
+http://localhost:3000/cats?filter.home.pillows.color=pink
+```
+
+#### Code
+
+```typescript
+const config: PaginateConfig<CatEntity> = {
+  relations: { home: { pillows: true } },
+  sortableColumns: ['id', 'name', 'home.pillows.color'],
+  searchableColumns: ['name', 'home.pillows.color'],
+  filterableColumns: {
+    'home.pillows.color': [FilterOperator.EQ],
+  },
+}
+
+const result = await paginate<CatEntity>(query, catRepo, config)
+```
+
+## Usage with Eager Loading
+
+Eager loading should work with TypeORM's eager property out of the box:
+
+### Example
+
+#### Code
+
+```typescript
+@Entity()
+export class CatEntity {
+  // ...
+
+  @OneToMany(() => CatToyEntity, (catToy) => catToy.cat, {
+    eager: true,
+  })
+  toys: CatToyEntity[]
+}
+
+const config: PaginateConfig<CatEntity> = {
+  loadEagerRelations: true,
+  sortableColumns: ['id', 'name', 'toys.name'],
+  filterableColumns: {
+    'toys.name': [FilterOperator.IN],
+  },
+}
+
+const result = await paginate<CatEntity>(query, catRepo, config)
+```
+
+## Filters
 
 Filter operators must be whitelisted per column in `PaginateConfig`.
 
 ### Examples
+
+#### Code
+
+```typescript
+const config: PaginateConfig<CatEntity> = {
+  // ...
+  filterableColumns: {
+    // Enable individual operators on a column
+    id: [FilterOperator.EQ, FilterSuffix.NOT],
+
+    // Enable all operators on a column
+    age: true,
+  },
+}
+```
 
 `?filter.name=$eq:Milo` is equivalent with `?filter.name=Milo`
 
@@ -365,15 +444,21 @@ Filter operators must be whitelisted per column in `PaginateConfig`.
 
 `?filter.createdAt=$btw:2022-02-02,2022-02-10` where column `createdAt` is between the dates `2022-02-02` and `2022-02-10`
 
+`?filter.createdAt=$lt:2022-12-20T10:00:00.000Z` where column `createdAt` is before iso date `2022-12-20T10:00:00.000Z`
+
+`?filter.roles=$contains:moderator` where column `roles` is an array and contains the value `moderator`
+
+`?filter.roles=$contains:moderator,admin` where column `roles` is an array and contains the values `moderator` and `admin`
+
 ## Multi Filters
 
-Multi filters are filters that can be applied to a single column with a comparator. As for single filters, multi filters must be whitelisted per column in `PaginateConfig`.
+Multi filters are filters that can be applied to a single column with a comparator.
 
 ### Examples
 
-`?filter.id=$gt:3&filter.id=$lt:5` where column `id` is greater than `3` **and** less than `5`
+`?filter.createdAt=$gt:2022-02-02&filter.createdAt=$lt:2022-02-10` where column `createdAt` is after `2022-02-02` **and** before `2022-02-10`
 
-`?filter.id=$gt:3&filter.id=$or:$lt:5` where column `id` is greater than `3` **or** less than `5`
+`?filter.id=$contains:moderator&filter.id=$or:$contains:admin` where column `roles` is an array and contains `moderator` **or** `admin`
 
 `?filter.id=$gt:3&filter.id=$and:$lt:5&filter.id=$or:$eq:7` where column `id` is greater than `3` **and** less than `5` **or** equal to `7`
 
@@ -388,6 +473,42 @@ Multi filters are filters that can be applied to a single column with a comparat
 is resolved to:
 
 `WHERE ... AND (id = 5 OR id = 7) AND name = 'Milo' AND ...`
+
+## Swagger
+
+You can use two default decorators @ApiOkResponsePaginated and @ApiPagination to generate swagger documentation for your endpoints
+
+`@ApiOkPaginatedResponse` is for response body, return http[](https://) status is 200
+
+`@ApiPaginationQuery` is for query params
+
+```typescript
+  @Get()
+  @ApiOkPaginatedResponse(
+    UserDto,
+    USER_PAGINATION_CONFIG,
+  )
+  @ApiPaginationQuery(USER_PAGINATION_CONFIG)
+  async findAll(
+    @Paginate()
+    query: PaginateQuery,
+  ): Promise<Paginated<UserEntity>> {
+
+  }
+```
+
+There is also some syntax sugar for this, and you can use only one decorator `@PaginatedSwaggerDocs` for both response body and query params
+
+```typescript
+  @Get()
+  @PaginatedSwaggerDocs(UserDto, USER_PAGINATION_CONFIG)
+  async findAll(
+    @Paginate()
+    query: PaginateQuery,
+  ): Promise<Paginated<UserEntity>> {
+
+  }
+```
 
 ## Troubleshooting
 

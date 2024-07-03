@@ -8,7 +8,7 @@
   "files": [
     "lib/**/*"
   ],
-  "description": "Pagination and filtering helper method for TypeORM repostiories or query builders using Nest.js framework.",
+  "description": "Pagination and filtering helper method for TypeORM repositories or query builders using Nest.js framework.",
   "keywords": [
     "nestjs",
     "typeorm",
@@ -21,6 +21,7 @@
   "scripts": {
     "prebuild": "rimraf lib",
     "build": "tsc",
+    "prepare": "tsc",
     "dev:yalc": "nodemon --watch src --ext ts --exec 'npm run build && yalc push'",
     "format": "prettier --write \"src/**/*.ts\"",
     "format:ci": "prettier --list-different \"src/**/*.ts\"",
@@ -31,35 +32,40 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand"
   },
   "devDependencies": {
-    "@nestjs/common": "^9.3.9",
-    "@types/express": "^4.17.17",
-    "@types/jest": "^29.4.0",
-    "@types/lodash": "^4.14.191",
-    "@types/node": "^18.14.2",
-    "@typescript-eslint/eslint-plugin": "^5.54.0",
-    "@typescript-eslint/parser": "^5.54.0",
-    "eslint": "^8.35.0",
-    "eslint-config-prettier": "^8.6.0",
-    "eslint-plugin-prettier": "^4.2.1",
-    "fastify": "^4.13.0",
-    "jest": "^29.4.3",
-    "prettier": "^2.8.4",
-    "reflect-metadata": "^0.1.13",
-    "rxjs": "^7.8.0",
-    "sqlite3": "^5.1.4",
-    "ts-jest": "^29.0.5",
-    "ts-node": "^10.9.1",
-    "typeorm": "^0.3.12",
-    "typescript": "^4.9.5"
+    "@nestjs/common": "^10.3.8",
+    "@nestjs/platform-express": "^10.3.8",
+    "@nestjs/testing": "^10.3.8",
+    "@types/express": "^4.17.21",
+    "@types/jest": "^29.5.12",
+    "@types/lodash": "^4.17.5",
+    "@types/node": "^20.14.7",
+    "@typescript-eslint/eslint-plugin": "^7.14.1",
+    "@typescript-eslint/parser": "^7.14.1",
+    "dotenv": "^16.4.5",
+    "eslint": "^8.57.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-prettier": "^5.1.3",
+    "fastify": "^4.26.2",
+    "jest": "^29.7.0",
+    "pg": "^8.12.0",
+    "prettier": "^3.0.3",
+    "reflect-metadata": "^0.1.14",
+    "rxjs": "^7.8.1",
+    "sqlite3": "^5.1.7",
+    "ts-jest": "^29.1.5",
+    "ts-node": "^10.9.2",
+    "typeorm": "^0.3.17",
+    "typescript": "^5.4.5"
   },
   "dependencies": {
     "lodash": "^4.17.21"
   },
   "peerDependencies": {
-    "@nestjs/common": "^9.3.9",
-    "express": "^4.18.2",
-    "fastify": "^4.13.0",
-    "typeorm": "^0.3.12"
+    "@nestjs/common": "^10.0.0",
+    "@nestjs/swagger": "^7.0.0",
+    "express": "^4.0.0",
+    "fastify": "^4.0.0",
+    "typeorm": "^0.3.17"
   },
   "jest": {
     "moduleFileExtensions": [
@@ -73,7 +79,10 @@
       "^.+\\.(t|j)s$": "ts-jest"
     },
     "coverageDirectory": "../coverage",
-    "testEnvironment": "node"
+    "testEnvironment": "node",
+    "setupFiles": [
+      "<rootDir>/../jest.setup.ts"
+    ]
   },
   "repository": {
     "type": "git",

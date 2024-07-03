@@ -1,23 +1,84 @@
-import { Brackets, FindOperator, SelectQueryBuilder } from 'typeorm'
+import { values } from 'lodash'
+import {
+    ArrayContains,
+    Between,
+    Brackets,
+    Equal,
+    FindOperator,
+    ILike,
+    In,
+    IsNull,
+    LessThan,
+    LessThanOrEqual,
+    MoreThan,
+    MoreThanOrEqual,
+    Not,
+    SelectQueryBuilder,
+} from 'typeorm'
 import { WherePredicateOperator } from 'typeorm/query-builder/WhereClause'
 import { PaginateQuery } from './decorator'
 import {
+    checkIsArray,
     checkIsEmbedded,
     checkIsRelation,
     extractVirtualProperty,
     fixColumnAlias,
     getPropertiesByColumnName,
+    isISODate,
 } from './helper'
-import {
-    FilterComparator,
-    FilterOperator,
-    FilterSuffix,
-    isComparator,
-    isOperator,
-    isSuffix,
-    OperatorSymbolToFunction,
-} from './operator'
-import { PaginateConfig } from './paginate'
+
+export enum FilterOperator {
+    EQ = '$eq',
+    GT = '$gt',
+    GTE = '$gte',
+    IN = '$in',
+    NULL = '$null',
+    LT = '$lt',
+    LTE = '$lte',
+    BTW = '$btw',
+    ILIKE = '$ilike',
+    SW = '$sw',
+    CONTAINS = '$contains',
+}
+
+export function isOperator(value: unknown): value is FilterOperator {
+    return values(FilterOperator).includes(value as any)
+}
+
+export enum FilterSuffix {
+    NOT = '$not',
+}
+
+export function isSuffix(value: unknown): value is FilterSuffix {
+    return values(FilterSuffix).includes(value as any)
+}
+
+export enum FilterComparator {
+    AND = '$and',
+    OR = '$or',
+}
+
+export function isComparator(value: unknown): value is FilterComparator {
+    return values(FilterComparator).includes(value as any)
+}
+
+export const OperatorSymbolToFunction = new Map<
+    FilterOperator | FilterSuffix,
+    (...args: any[]) => FindOperator<string>
+>([
+    [FilterOperator.EQ, Equal],
+    [FilterOperator.GT, MoreThan],
+    [FilterOperator.GTE, MoreThanOrEqual],
+    [FilterOperator.IN, In],
+    [FilterOperator.NULL, IsNull],
+    [FilterOperator.LT, LessThan],
+    [FilterOperator.LTE, LessThanOrEqual],
+    [FilterOperator.BTW, Between],
+    [FilterOperator.ILIKE, ILike],
+    [FilterSuffix.NOT, Not],
+    [FilterOperator.SW, ILike],
+    [FilterOperator.CONTAINS, ArrayContains],
+])
 
 type Filter = { comparator: FilterComparator; findOperator: FindOperator<string> }
 type ColumnsFilters = { [columnName: string]: Filter[] }
@@ -102,13 +163,24 @@ export function addWhereCondition<T>(qb: SelectQueryBuilder<T>, column: string, 
     const { isVirtualProperty, query: virtualQuery } = extractVirtualProperty(qb, columnProperties)
     const isRelation = checkIsRelation(qb, columnProperties.propertyPath)
     const isEmbedded = checkIsEmbedded(qb, columnProperties.propertyPath)
+    const isArray = checkIsArray(qb, columnProperties.propertyName)
+
     const alias = fixColumnAlias(columnProperties, qb.alias, isRelation, isVirtualProperty, isEmbedded, virtualQuery)
     filter[column].forEach((columnFilter: Filter, index: number) => {
-        const columnNamePerIteration = `${column}${index}`
-        const condition = generatePredicateCondition(qb, column, columnFilter, alias, isVirtualProperty)
+        const columnNamePerIteration = `${columnProperties.column}${index}`
+        const condition = generatePredicateCondition(
+            qb,
+            columnProperties.column,
+            columnFilter,
+            alias,
+            isVirtualProperty
+        )
         const parameters = fixQueryParam(alias, columnNamePerIteration, columnFilter, condition, {
             [columnNamePerIteration]: columnFilter.findOperator.value,
         })
+        if (isArray && condition.parameters?.length && !['not', 'isNull'].includes(condition.operator)) {
+            condition.parameters[0] = `cardinality(${condition.parameters[0]})`
+        }
         if (columnFilter.comparator === FilterComparator.OR) {
             qb.orWhere(qb['createWhereConditionExpression'](condition), parameters)
         } else {
@@ -117,7 +189,7 @@ export function addWhereCondition<T>(qb: SelectQueryBuilder<T>, column: string, 
     })
 }
 
-export function getFilterTokens(raw?: string): FilterToken | null {
+export function parseFilterToken(raw?: string): FilterToken | null {
     if (raw === undefined || raw === null) {
         return null
     }
@@ -160,9 +232,9 @@ export function getFilterTokens(raw?: string): FilterToken | null {
     return token
 }
 
-export function parseFilter<T>(
+export function parseFilter(
     query: PaginateQuery,
-    filterableColumns?: PaginateConfig<T>['filterableColumns']
+    filterableColumns?: { [column: string]: (FilterOperator | FilterSuffix)[] | true }
 ): ColumnsFilters {
     const filter: ColumnsFilters = {}
     if (!filterableColumns || !query.filter) {
@@ -176,20 +248,28 @@ export function parseFilter<T>(
         const input = query.filter[column]
         const statements = !Array.isArray(input) ? [input] : input
         for (const raw of statements) {
-            const token = getFilterTokens(raw)
-            if (
-                !token ||
-                !(
-                    allowedOperators.includes(token.operator) ||
-                    (token.suffix === FilterSuffix.NOT &&
-                        allowedOperators.includes(token.suffix) &&
-                        token.operator === FilterOperator.EQ) ||
-                    (token.suffix &&
-                        allowedOperators.includes(token.suffix) &&
-                        allowedOperators.includes(token.operator))
-                )
-            ) {
+            const token = parseFilterToken(raw)
+            if (!token) {
                 continue
+            }
+            if (allowedOperators === true) {
+                if (token.operator && !isOperator(token.operator)) {
+                    continue
+                }
+                if (token.suffix && !isSuffix(token.suffix)) {
+                    continue
+                }
+            } else {
+                if (
+                    token.operator &&
+                    token.operator !== FilterOperator.EQ &&
+                    !allowedOperators.includes(token.operator)
+                ) {
+                    continue
+                }
+                if (token.suffix && !allowedOperators.includes(token.suffix)) {
+                    continue
+                }
             }
 
             const params: (typeof filter)[0][0] = {
@@ -197,11 +277,16 @@ export function parseFilter<T>(
                 findOperator: undefined,
             }
 
+            const fixValue = (value: string) => (isISODate(value) ? new Date(value) : value)
+
             switch (token.operator) {
                 case FilterOperator.BTW:
-                    params.findOperator = OperatorSymbolToFunction.get(token.operator)(...token.value.split(','))
+                    params.findOperator = OperatorSymbolToFunction.get(token.operator)(
+                        ...token.value.split(',').map(fixValue)
+                    )
                     break
                 case FilterOperator.IN:
+                case FilterOperator.CONTAINS:
                     params.findOperator = OperatorSymbolToFunction.get(token.operator)(token.value.split(','))
                     break
                 case FilterOperator.ILIKE:
@@ -211,7 +296,7 @@ export function parseFilter<T>(
                     params.findOperator = OperatorSymbolToFunction.get(token.operator)(`${token.value}%`)
                     break
                 default:
-                    params.findOperator = OperatorSymbolToFunction.get(token.operator)(token.value)
+                    params.findOperator = OperatorSymbolToFunction.get(token.operator)(fixValue(token.value))
             }
 
             filter[column] = [...(filter[column] || []), params]
@@ -231,14 +316,29 @@ export function parseFilter<T>(
 export function addFilter<T>(
     qb: SelectQueryBuilder<T>,
     query: PaginateQuery,
-    filterableColumns?: PaginateConfig<T>['filterableColumns']
+    filterableColumns?: { [column: string]: (FilterOperator | FilterSuffix)[] | true }
 ): SelectQueryBuilder<T> {
     const filter = parseFilter(query, filterableColumns)
-    return qb.andWhere(
+
+    const filterEntries = Object.entries(filter)
+    const orFilters = filterEntries.filter(([_, value]) => value.some((v) => v.comparator === '$or'))
+    const andFilters = filterEntries.filter(([_, value]) => value.some((v) => v.comparator !== '$or'))
+
+    qb.andWhere(
         new Brackets((qb: SelectQueryBuilder<T>) => {
-            for (const column in filter) {
+            for (const [column] of orFilters) {
                 addWhereCondition(qb, column, filter)
             }
         })
     )
+
+    qb.andWhere(
+        new Brackets((qb: SelectQueryBuilder<T>) => {
+            for (const [column] of andFilters) {
+                addWhereCondition(qb, column, filter)
+            }
+        })
+    )
+
+    return qb
 }

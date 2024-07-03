@@ -1,6 +1,15 @@
 import { createParamDecorator, ExecutionContext } from '@nestjs/common'
-import { Request } from 'express'
+import type { Request as ExpressRequest } from 'express'
+import type { FastifyRequest } from 'fastify'
 import { pickBy, Dictionary, isString, mapKeys } from 'lodash'
+
+function isRecord(data: unknown): data is Record<string, unknown> {
+    return data !== null && typeof data === 'object' && !Array.isArray(data)
+}
+
+function isExpressRequest(request: unknown): request is ExpressRequest {
+    return isRecord(request) && typeof request.get === 'function'
+}
 
 export interface PaginateQuery {
     page?: number
@@ -41,12 +50,12 @@ function parseParam<T>(queryParam: unknown, parserLogic: (param: string, res: an
 }
 
 export const Paginate = createParamDecorator((_data: unknown, ctx: ExecutionContext): PaginateQuery => {
-    const request: Request = ctx.switchToHttp().getRequest()
-    const { query } = request
+    const request: ExpressRequest | FastifyRequest = ctx.switchToHttp().getRequest()
+    const query = request.query as Record<string, unknown>
 
     // Determine if Express or Fastify to rebuild the original url and reduce down to protocol, host and base url
-    let originalUrl: any
-    if (request.originalUrl) {
+    let originalUrl: string
+    if (isExpressRequest(request)) {
         originalUrl = request.protocol + '://' + request.get('host') + request.originalUrl
     } else {
         originalUrl = request.protocol + '://' + request.hostname + request.url

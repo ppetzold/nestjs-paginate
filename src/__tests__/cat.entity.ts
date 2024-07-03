@@ -15,6 +15,12 @@ import { CatToyEntity } from './cat-toy.entity'
 import { CatHomeEntity } from './cat-home.entity'
 import { SizeEmbed } from './size.embed'
 
+export enum CutenessLevel {
+    LOW = 'low',
+    MEDIUM = 'medium',
+    HIGH = 'high',
+}
+
 @Entity({ name: 'cat' })
 export class CatEntity {
     @PrimaryGeneratedColumn()
@@ -28,6 +34,12 @@ export class CatEntity {
 
     @Column({ nullable: true })
     age: number | null
+
+    @Column({ type: 'text' }) // We don't use enum type as it makes it easier when testing across different db drivers.
+    cutenessLevel: CutenessLevel
+
+    @Column({ nullable: true })
+    lastVetVisit: Date | null
 
     @Column(() => SizeEmbed)
     size: SizeEmbed
