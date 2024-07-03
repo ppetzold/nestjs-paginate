@@ -16,4 +16,4 @@ services:
       MYSQL_ROOT_PASSWORD: pass
       MYSQL_DATABASE: test
     ports:
-      - "${DB_PORT:-3306}:3306"
+      - "${MARIA_DB_PORT:-3306}:3306"
