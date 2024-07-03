@@ -1,5 +1,3 @@
-version: '3.5'
-
 services:
   postgres:
     container_name: postgres_nestjs_paginate
@@ -9,4 +7,13 @@ services:
       POSTGRES_PASSWORD: pass
       POSTGRES_DB: test
     ports:
-      - "5432:5432"
+      - "${DB_PORT:-5432}:5432"
+
+  mariadb:
+    container_name: mariadb_nestjs_paginate
+    image: mariadb:latest
+    environment:
+      MYSQL_ROOT_PASSWORD: pass
+      MYSQL_DATABASE: test
+    ports:
+      - "${DB_PORT:-3306}:3306"

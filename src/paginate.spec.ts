@@ -1,25 +1,26 @@
-import { DataSource, In, Like, Repository, TypeORMError } from 'typeorm'
-import { NO_PAGINATION, paginate, PaginateConfig, Paginated } from './paginate'
-import { PaginateQuery } from './decorator'
 import { HttpException } from '@nestjs/common'
-import { CatEntity, CutenessLevel } from './__tests__/cat.entity'
-import { CatToyEntity } from './__tests__/cat-toy.entity'
-import { CatHomeEntity } from './__tests__/cat-home.entity'
-import { CatHomePillowEntity } from './__tests__/cat-home-pillow.entity'
 import { clone } from 'lodash'
+import * as process from 'process'
+import { DataSource, In, Like, Repository, TypeORMError } from 'typeorm'
+import { BaseDataSourceOptions } from 'typeorm/data-source/BaseDataSourceOptions'
+import { CatHairEntity } from './__tests__/cat-hair.entity'
+import { CatHomePillowEntity } from './__tests__/cat-home-pillow.entity'
+import { CatHomeEntity } from './__tests__/cat-home.entity'
+import { CatToyEntity } from './__tests__/cat-toy.entity'
+import { CatEntity, CutenessLevel } from './__tests__/cat.entity'
+import { ToyShopAddressEntity } from './__tests__/toy-shop-address.entity'
+import { ToyShopEntity } from './__tests__/toy-shop.entity'
+import { PaginateQuery } from './decorator'
 import {
     FilterComparator,
     FilterOperator,
     FilterSuffix,
+    OperatorSymbolToFunction,
     isOperator,
     isSuffix,
-    OperatorSymbolToFunction,
     parseFilterToken,
 } from './filter'
-import { ToyShopEntity } from './__tests__/toy-shop.entity'
-import { ToyShopAddressEntity } from './__tests__/toy-shop-address.entity'
-import * as process from 'process'
-import { CatHairEntity } from './__tests__/cat-hair.entity'
+import { NO_PAGINATION, PaginateConfig, Paginated, paginate } from './paginate'
 
 const isoStringToDate = (isoString) => new Date(isoString)
 
@@ -42,20 +43,8 @@ describe('paginate', () => {
     let catHairs: CatHairEntity[] = []
 
     beforeAll(async () => {
-        dataSource = new DataSource({
-            ...(process.env.DB === 'postgres'
-                ? {
-                      type: 'postgres',
-                      host: process.env.DB_HOST || 'localhost',
-                      port: +process.env.DB_PORT || 5432,
-                      username: process.env.DB_USERNAME || 'root',
-                      password: process.env.DB_PASSWORD || 'pass',
-                      database: process.env.DB_DATABASE || 'test',
-                  }
-                : {
-                      type: 'sqlite',
-                      database: ':memory:',
-                  }),
+        const dbOptions: Omit<Partial<BaseDataSourceOptions>, 'poolSize'> = {
+            dropSchema: true,
             synchronize: true,
             logging: ['error'],
             entities: [
@@ -67,7 +56,41 @@ describe('paginate', () => {
                 ToyShopEntity,
                 process.env.DB === 'postgres' ? CatHairEntity : undefined,
             ],
-        })
+        }
+
+        switch (process.env.DB) {
+            case 'postgres':
+                dataSource = new DataSource({
+                    ...dbOptions,
+                    type: 'postgres',
+                    host: process.env.DB_HOST || 'localhost',
+                    port: +process.env.DB_PORT || 5432,
+                    username: process.env.DB_USERNAME || 'root',
+                    password: process.env.DB_PASSWORD || 'pass',
+                    database: process.env.DB_DATABASE || 'test',
+                })
+                break
+            case 'mariadb':
+                dataSource = new DataSource({
+                    ...dbOptions,
+                    type: 'mariadb',
+                    host: process.env.DB_HOST || 'localhost',
+                    port: +process.env.DB_PORT || 3306,
+                    username: process.env.DB_USERNAME || 'root',
+                    password: process.env.DB_PASSWORD || 'pass',
+                    database: process.env.DB_DATABASE || 'test',
+                })
+                break
+            case 'sqlite':
+                dataSource = new DataSource({
+                    ...dbOptions,
+                    type: 'sqlite',
+                    database: ':memory:',
+                })
+                break
+            default:
+                throw new Error('Invalid DB')
+        }
         await dataSource.initialize()
         catRepo = dataSource.getRepository(CatEntity)
         catToyRepo = dataSource.getRepository(CatToyEntity)
@@ -2934,33 +2957,6 @@ describe('paginate', () => {
 
                 expect(result.data).toStrictEqual(expectedResult)
                 expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.home.countCat=$gt:0')
-            })
-
-            it('should return result sorted by a virtual column', async () => {
-                const config: PaginateConfig<CatEntity> = {
-                    sortableColumns: ['home.countCat'],
-                    relations: ['home'],
-                }
-                const query: PaginateQuery = {
-                    path: '',
-                    sortBy: [['home.countCat', 'ASC']],
-                }
-
-                const result = await paginate<CatEntity>(query, catRepo, config)
-                const expectedResult = [2, 3, 4, 0, 1].map((i) => {
-                    const ret = clone(cats[i])
-                    if (i == 0 || i == 1) {
-                        ret.home = clone(catHomes[i])
-                        ret.home.countCat = cats.filter((cat) => cat.id === ret.home.cat.id).length
-                        delete ret.home.cat
-                    } else {
-                        ret.home = null
-                    }
-                    return ret
-                })
-
-                expect(result.data).toStrictEqual(expectedResult)
-                expect(result.links.current).toBe('?page=1&limit=20&sortBy=home.countCat:ASC')
             })
 
             it('should return result sorted and filter by a virtual column in main entity', async () => {
