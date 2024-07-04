@@ -7,7 +7,7 @@ services:
       POSTGRES_PASSWORD: pass
       POSTGRES_DB: test
     ports:
-      - "${DB_PORT:-5432}:5432"
+      - "${POSTGRESS_DB_PORT:-5432}:5432"
 
   mariadb:
     container_name: mariadb_nestjs_paginate
