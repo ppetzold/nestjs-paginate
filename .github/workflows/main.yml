@@ -52,11 +52,11 @@ jobs:
             - run: npm run build
 
             # TODO: run postgres and sqlite in parallel
-            - run: DB=postgres npm run test
-            - run: DB=mariadb npm run test
-            - run: npm run test:cov
-              if: github.event_name == 'push' && matrix.node-version == '20.x'
+            - run: DB=postgres npm run test:cov
+            - run: DB=mariadb npm run test:cov
+            - run: DB=sqlite npm run test:cov
             - run: 'bash <(curl -s https://codecov.io/bash)'
+              if: github.event_name == 'push' && matrix.node-version == '20.x'
             - name: Semantic Release
               if: github.event_name == 'push' && matrix.node-version == '20.x'
               uses: cycjimmy/semantic-release-action@v3
