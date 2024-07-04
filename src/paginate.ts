@@ -1,3 +1,6 @@
+import { Logger, ServiceUnavailableException } from '@nestjs/common'
+import { mapKeys } from 'lodash'
+import { stringify } from 'querystring'
 import {
     Brackets,
     FindOperator,
@@ -9,28 +12,25 @@ import {
     Repository,
     SelectQueryBuilder,
 } from 'typeorm'
-import { PaginateQuery } from './decorator'
-import { Logger, ServiceUnavailableException } from '@nestjs/common'
-import { mapKeys } from 'lodash'
-import { stringify } from 'querystring'
 import { WherePredicateOperator } from 'typeorm/query-builder/WhereClause'
+import { OrmUtils } from 'typeorm/util/OrmUtils'
+import { PaginateQuery } from './decorator'
+import { FilterOperator, FilterSuffix, addFilter } from './filter'
 import {
+    Column,
+    Order,
+    RelationColumn,
+    SortBy,
     checkIsEmbedded,
     checkIsRelation,
-    Column,
     extractVirtualProperty,
     fixColumnAlias,
     getPropertiesByColumnName,
     getQueryUrlComponents,
     includesAllPrimaryKeyColumns,
     isEntityKey,
-    Order,
     positiveNumberOrDefault,
-    RelationColumn,
-    SortBy,
 } from './helper'
-import { addFilter, FilterOperator, FilterSuffix } from './filter'
-import { OrmUtils } from 'typeorm/util/OrmUtils'
 
 const logger: Logger = new Logger('nestjs-paginate')
 
@@ -240,9 +240,17 @@ export async function paginate<T extends ObjectLiteral>(
         createQueryBuilderRelations(queryBuilder.alias, relations)
     }
 
-    let nullSort: 'NULLS LAST' | 'NULLS FIRST' | undefined = undefined
+    const dbType = (repo instanceof Repository ? repo.manager : repo).connection.options.type
+    const isMariaDbOrMySql = (dbType: string) => dbType === 'mariadb' || dbType === 'mysql'
+    const isMMDb = isMariaDbOrMySql(dbType)
+
+    let nullSort: string | undefined
     if (config.nullSort) {
-        nullSort = config.nullSort === 'last' ? 'NULLS LAST' : 'NULLS FIRST'
+        if (isMMDb) {
+            nullSort = config.nullSort === 'last' ? 'IS NULL' : 'IS NOT NULL'
+        } else {
+            nullSort = config.nullSort === 'last' ? 'NULLS LAST' : 'NULLS FIRST'
+        }
     }
 
     if (config.sortableColumns.length < 1) {
@@ -269,10 +277,21 @@ export async function paginate<T extends ObjectLiteral>(
         const isRelation = checkIsRelation(queryBuilder, columnProperties.propertyPath)
         const isEmbeded = checkIsEmbedded(queryBuilder, columnProperties.propertyPath)
         let alias = fixColumnAlias(columnProperties, queryBuilder.alias, isRelation, isVirtualProperty, isEmbeded)
-        if (isVirtualProperty) {
-            alias = `"${alias}"`
+
+        if (isMMDb) {
+            if (isVirtualProperty) {
+                alias = `\`${alias}\``
+            }
+            if (nullSort) {
+                queryBuilder.addOrderBy(`${alias} ${nullSort}`)
+            }
+            queryBuilder.addOrderBy(alias, order[1])
+        } else {
+            if (isVirtualProperty) {
+                alias = `"${alias}"`
+            }
+            queryBuilder.addOrderBy(alias, order[1], nullSort as 'NULLS FIRST' | 'NULLS LAST' | undefined)
         }
-        queryBuilder.addOrderBy(alias, order[1], nullSort)
     }
 
     // When we partial select the columns (main or relation) we must add the primary key column otherwise
