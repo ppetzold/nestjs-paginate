@@ -27,7 +27,7 @@
     "format:ci": "prettier --list-different \"src/**/*.ts\"",
     "lint": "eslint -c .eslintrc.json --ext .ts --max-warnings 0 src",
     "test": "jest",
-    "test:watch": "jest --watch",
+    "test:watch": "jest --watch ",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand"
   },

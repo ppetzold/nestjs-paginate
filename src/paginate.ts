@@ -91,9 +91,12 @@ export interface PaginateConfig<T> {
     ignoreSelectInQueryParam?: boolean
 }
 
-export const DEFAULT_MAX_LIMIT = 100
-export const DEFAULT_LIMIT = 20
-export const NO_PAGINATION = 0
+export enum PaginationLimit {
+    NO_PAGINATION = -1,
+    COUNTER_ONLY = 0,
+    DEFAULT_LIMIT = 20,
+    DEFAULT_MAX_LIMIT = 100,
+}
 
 function generateWhereStatement<T>(
     queryBuilder: SelectQueryBuilder<T>,
@@ -183,13 +186,22 @@ export async function paginate<T extends ObjectLiteral>(
 ): Promise<Paginated<T>> {
     const page = positiveNumberOrDefault(query.page, 1, 1)
 
-    const defaultLimit = config.defaultLimit || DEFAULT_LIMIT
-    const maxLimit = positiveNumberOrDefault(config.maxLimit, DEFAULT_MAX_LIMIT)
-    const queryLimit = positiveNumberOrDefault(query.limit, defaultLimit)
+    const defaultLimit = config.defaultLimit || PaginationLimit.DEFAULT_LIMIT
+    const maxLimit = config.maxLimit || PaginationLimit.DEFAULT_MAX_LIMIT
 
-    const isPaginated = !(queryLimit === NO_PAGINATION && maxLimit === NO_PAGINATION)
+    const isPaginated = !(
+        query.limit === PaginationLimit.COUNTER_ONLY ||
+        (query.limit === PaginationLimit.NO_PAGINATION && maxLimit === PaginationLimit.NO_PAGINATION)
+    )
 
-    const limit = isPaginated ? Math.min(queryLimit || defaultLimit, maxLimit || DEFAULT_MAX_LIMIT) : NO_PAGINATION
+    const limit =
+        query.limit === PaginationLimit.COUNTER_ONLY
+            ? PaginationLimit.COUNTER_ONLY
+            : isPaginated
+            ? query.limit === PaginationLimit.NO_PAGINATION || maxLimit === PaginationLimit.NO_PAGINATION
+                ? defaultLimit
+                : Math.min(query.limit ?? defaultLimit, maxLimit)
+            : defaultLimit
 
     const sortBy = [] as SortBy<T>
     const searchBy: Column<T>[] = []
@@ -372,7 +384,9 @@ export async function paginate<T extends ObjectLiteral>(
         addFilter(queryBuilder, query, config.filterableColumns)
     }
 
-    if (isPaginated) {
+    if (query.limit === PaginationLimit.COUNTER_ONLY) {
+        totalItems = await queryBuilder.getCount()
+    } else if (isPaginated) {
         ;[items, totalItems] = await queryBuilder.getManyAndCount()
     } else {
         items = await queryBuilder.getMany()
@@ -419,8 +433,8 @@ export async function paginate<T extends ObjectLiteral>(
     const results: Paginated<T> = {
         data: items,
         meta: {
-            itemsPerPage: isPaginated ? limit : items.length,
-            totalItems: isPaginated ? totalItems : items.length,
+            itemsPerPage: limit === PaginationLimit.COUNTER_ONLY ? totalItems : isPaginated ? limit : items.length,
+            totalItems: limit === PaginationLimit.COUNTER_ONLY || isPaginated ? totalItems : items.length,
             currentPage: page,
             totalPages,
             sortBy,
