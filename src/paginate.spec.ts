@@ -404,6 +404,50 @@ describe('paginate', () => {
         expect(result.data).toStrictEqual(cats.slice(0, 2))
     })
 
+    it('maxLimit should limit defaultLimit', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            maxLimit: 1,
+            defaultLimit: 2,
+        }
+        const query: PaginateQuery = {
+            path: '',
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        expect(result.data).toStrictEqual(cats.slice(0, 1))
+    })
+
+    it('limit should bypass defaultLimit', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            defaultLimit: 1,
+        }
+        const query: PaginateQuery = {
+            path: '',
+            limit: 2,
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        expect(result.data).toStrictEqual(cats.slice(0, 2))
+    })
+
+    it('DEFAULT_LIMIT should be used as the limit if limit is set to NO_PAGINATION and maxLimit is not specified.', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+        }
+        const query: PaginateQuery = {
+            path: '',
+            limit: PaginationLimit.NO_PAGINATION,
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        expect(result.data).toStrictEqual(cats.slice(0, PaginationLimit.DEFAULT_LIMIT))
+    })
+
     it('should return the count without data ignoring maxLimit if limit is COUNTER_ONLY', async () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id'],
