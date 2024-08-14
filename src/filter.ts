@@ -277,7 +277,8 @@ export function parseFilter(
                 findOperator: undefined,
             }
 
-            const fixValue = (value: string) => (isISODate(value) ? new Date(value) : value)
+            const fixValue = (value: string) =>
+                isISODate(value) ? new Date(value) : Number.isNaN(Number(value)) ? value : Number(value)
 
             switch (token.operator) {
                 case FilterOperator.BTW:
