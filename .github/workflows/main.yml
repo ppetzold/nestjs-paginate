@@ -1,52 +1,65 @@
 name: Main CI
 
 on:
-  push:
-    branches: [master]
-  pull_request:
-    branches: [master]
+    push:
+        branches: [master]
+    pull_request:
+        branches: [master]
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+    build:
+        runs-on: ubuntu-latest
 
-    strategy:
-      matrix:
-        node-version: [16.x, 18.x, 20.x]
+        strategy:
+            matrix:
+                node-version: [16.x, 18.x, 20.x]
 
-    services:
-      postgres:
-        image: postgres:latest
-        env:
-          POSTGRES_USER: root
-          POSTGRES_PASSWORD: pass
-          POSTGRES_DB: test
-        ports:
-          - 5432:5432
-        options: --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+        services:
+            postgres:
+                image: postgres:latest
+                env:
+                    POSTGRES_USER: root
+                    POSTGRES_PASSWORD: pass
+                    POSTGRES_DB: test
+                ports:
+                    - 5432:5432
+                options: --health-cmd pg_isready
+                    --health-interval 10s
+                    --health-timeout 5s
+                    --health-retries 5
 
-    steps:
-      - uses: actions/checkout@v4
-      - name: Use Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ matrix.node-version }}
-      - run: npm ci
-      - run: npm run format:ci
-      - run: npm run lint
-      - run: npm run build
+            mariadb:
+                image: mariadb:latest
+                env:
+                    MYSQL_ROOT_PASSWORD: pass
+                    MYSQL_DATABASE: test
+                ports:
+                    - 3306:3306
+                options: --health-cmd "mariadb-admin ping"
+                    --health-interval 10s
+                    --health-timeout 5s
+                    --health-retries 5
 
-      # TODO: run postgres and sqlite in parallel
-      - run: DB=postgres npm run test
+        steps:
+            - uses: actions/checkout@v4
+            - name: Use Node.js ${{ matrix.node-version }}
+              uses: actions/setup-node@v4
+              with:
+                  node-version: ${{ matrix.node-version }}
+            - run: npm ci
+            - run: npm run format:ci
+            - run: npm run lint
+            - run: npm run build
 
-      - run: npm run test:cov
-      - run: bash <(curl -s https://codecov.io/bash)
-      - name: Semantic Release
-        if: github.event_name == 'push' && matrix.node-version == '18.x'
-        uses: cycjimmy/semantic-release-action@v3
-        env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+            # TODO: run postgres and sqlite in parallel
+            - run: DB=postgres npm run test:cov
+            - run: DB=mariadb npm run test:cov
+            - run: DB=sqlite npm run test:cov
+            - run: 'bash <(curl -s https://codecov.io/bash)'
+              if: github.event_name == 'push' && matrix.node-version == '20.x'
+            - name: Semantic Release
+              if: github.event_name == 'push' && matrix.node-version == '20.x'
+              uses: cycjimmy/semantic-release-action@v3
+              env:
+                  GH_TOKEN: ${{ secrets.GH_TOKEN }}
+                  NPM_TOKEN: ${{ secrets.NPM_TOKEN }}

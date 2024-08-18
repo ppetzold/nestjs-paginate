@@ -1,3 +1,6 @@
+import { Logger, ServiceUnavailableException } from '@nestjs/common'
+import { mapKeys } from 'lodash'
+import { stringify } from 'querystring'
 import {
     Brackets,
     FindOperator,
@@ -9,28 +12,25 @@ import {
     Repository,
     SelectQueryBuilder,
 } from 'typeorm'
-import { PaginateQuery } from './decorator'
-import { Logger, ServiceUnavailableException } from '@nestjs/common'
-import { mapKeys } from 'lodash'
-import { stringify } from 'querystring'
 import { WherePredicateOperator } from 'typeorm/query-builder/WhereClause'
+import { OrmUtils } from 'typeorm/util/OrmUtils'
+import { PaginateQuery } from './decorator'
+import { FilterOperator, FilterSuffix, addFilter } from './filter'
 import {
+    Column,
+    Order,
+    RelationColumn,
+    SortBy,
     checkIsEmbedded,
     checkIsRelation,
-    Column,
     extractVirtualProperty,
     fixColumnAlias,
     getPropertiesByColumnName,
     getQueryUrlComponents,
     includesAllPrimaryKeyColumns,
     isEntityKey,
-    Order,
     positiveNumberOrDefault,
-    RelationColumn,
-    SortBy,
 } from './helper'
-import { addFilter, FilterOperator, FilterSuffix } from './filter'
-import { OrmUtils } from 'typeorm/util/OrmUtils'
 
 const logger: Logger = new Logger('nestjs-paginate')
 
@@ -71,13 +71,17 @@ export interface PaginateConfig<T> {
     sortableColumns: Column<T>[]
     nullSort?: 'first' | 'last'
     searchableColumns?: Column<T>[]
-    select?: Column<T>[] | string[]
+    // see https://github.com/microsoft/TypeScript/issues/29729 for (string & {})
+    // eslint-disable-next-line @typescript-eslint/ban-types
+    select?: (Column<T> | (string & {}))[]
     maxLimit?: number
     defaultSortBy?: SortBy<T>
     defaultLimit?: number
     where?: FindOptionsWhere<T> | FindOptionsWhere<T>[]
     filterableColumns?: {
-        [key in Column<T> | string]?: (FilterOperator | FilterSuffix)[] | true
+        // see https://github.com/microsoft/TypeScript/issues/29729 for (string & {})
+        // eslint-disable-next-line @typescript-eslint/ban-types
+        [key in Column<T> | (string & {})]?: (FilterOperator | FilterSuffix)[] | true
     }
     loadEagerRelations?: boolean
     withDeleted?: boolean
@@ -88,9 +92,12 @@ export interface PaginateConfig<T> {
     ignoreSelectInQueryParam?: boolean
 }
 
-export const DEFAULT_MAX_LIMIT = 100
-export const DEFAULT_LIMIT = 20
-export const NO_PAGINATION = 0
+export enum PaginationLimit {
+    NO_PAGINATION = -1,
+    COUNTER_ONLY = 0,
+    DEFAULT_LIMIT = 20,
+    DEFAULT_MAX_LIMIT = 100,
+}
 
 function generateWhereStatement<T>(
     queryBuilder: SelectQueryBuilder<T>,
@@ -184,13 +191,22 @@ export async function paginate<T extends ObjectLiteral>(
 ): Promise<Paginated<T>> {
     const page = positiveNumberOrDefault(query.page, 1, 1)
 
-    const defaultLimit = config.defaultLimit || DEFAULT_LIMIT
-    const maxLimit = positiveNumberOrDefault(config.maxLimit, DEFAULT_MAX_LIMIT)
-    const queryLimit = positiveNumberOrDefault(query.limit, defaultLimit)
+    const defaultLimit = config.defaultLimit || PaginationLimit.DEFAULT_LIMIT
+    const maxLimit = config.maxLimit || PaginationLimit.DEFAULT_MAX_LIMIT
 
-    const isPaginated = !(queryLimit === NO_PAGINATION && maxLimit === NO_PAGINATION)
+    const isPaginated = !(
+        query.limit === PaginationLimit.COUNTER_ONLY ||
+        (query.limit === PaginationLimit.NO_PAGINATION && maxLimit === PaginationLimit.NO_PAGINATION)
+    )
 
-    const limit = isPaginated ? Math.min(queryLimit || defaultLimit, maxLimit || DEFAULT_MAX_LIMIT) : NO_PAGINATION
+    const limit =
+        query.limit === PaginationLimit.COUNTER_ONLY
+            ? PaginationLimit.COUNTER_ONLY
+            : isPaginated
+            ? query.limit === PaginationLimit.NO_PAGINATION || maxLimit === PaginationLimit.NO_PAGINATION
+                ? defaultLimit
+                : Math.min(query.limit ?? defaultLimit, maxLimit)
+            : defaultLimit
 
     const sortBy = [] as SortBy<T>
     const searchBy: Column<T>[] = []
@@ -241,9 +257,17 @@ export async function paginate<T extends ObjectLiteral>(
         createQueryBuilderRelations(queryBuilder.alias, relations)
     }
 
-    let nullSort: 'NULLS LAST' | 'NULLS FIRST' | undefined = undefined
+    const dbType = (repo instanceof Repository ? repo.manager : repo).connection.options.type
+    const isMariaDbOrMySql = (dbType: string) => dbType === 'mariadb' || dbType === 'mysql'
+    const isMMDb = isMariaDbOrMySql(dbType)
+
+    let nullSort: string | undefined
     if (config.nullSort) {
-        nullSort = config.nullSort === 'last' ? 'NULLS LAST' : 'NULLS FIRST'
+        if (isMMDb) {
+            nullSort = config.nullSort === 'last' ? 'IS NULL' : 'IS NOT NULL'
+        } else {
+            nullSort = config.nullSort === 'last' ? 'NULLS LAST' : 'NULLS FIRST'
+        }
     }
 
     if (config.sortableColumns.length < 1) {
@@ -270,10 +294,21 @@ export async function paginate<T extends ObjectLiteral>(
         const isRelation = checkIsRelation(queryBuilder, columnProperties.propertyPath)
         const isEmbeded = checkIsEmbedded(queryBuilder, columnProperties.propertyPath)
         let alias = fixColumnAlias(columnProperties, queryBuilder.alias, isRelation, isVirtualProperty, isEmbeded)
-        if (isVirtualProperty) {
-            alias = `"${alias}"`
+
+        if (isMMDb) {
+            if (isVirtualProperty) {
+                alias = `\`${alias}\``
+            }
+            if (nullSort) {
+                queryBuilder.addOrderBy(`${alias} ${nullSort}`)
+            }
+            queryBuilder.addOrderBy(alias, order[1])
+        } else {
+            if (isVirtualProperty) {
+                alias = `"${alias}"`
+            }
+            queryBuilder.addOrderBy(alias, order[1], nullSort as 'NULLS FIRST' | 'NULLS LAST' | undefined)
         }
-        queryBuilder.addOrderBy(alias, order[1], nullSort)
     }
 
     // When we partial select the columns (main or relation) we must add the primary key column otherwise
@@ -354,7 +389,9 @@ export async function paginate<T extends ObjectLiteral>(
         addFilter(queryBuilder, query, config.filterableColumns)
     }
 
-    if (isPaginated) {
+    if (query.limit === PaginationLimit.COUNTER_ONLY) {
+        totalItems = await queryBuilder.getCount()
+    } else if (isPaginated) {
         ;[items, totalItems] = await queryBuilder.getManyAndCount()
     } else {
         items = await queryBuilder.getMany()
@@ -403,8 +440,8 @@ export async function paginate<T extends ObjectLiteral>(
         meta: {
             page: {
                 number: page,
-                size: isPaginated ? limit : items.length,
-                totalItems: isPaginated ? totalItems : items.length,
+                size: limit === PaginationLimit.COUNTER_ONLY ? totalItems : isPaginated ? limit : items.length,
+                totalItems: totalItems: limit === PaginationLimit.COUNTER_ONLY || isPaginated ? totalItems : items.length,
                 totalPages,
             },
             sort: sortBy.map((order) => (order[1] == 'DESC' ? '-' : '') + order[0]).join(','),
