@@ -197,8 +197,10 @@ export async function paginate<T extends ObjectLiteral>(
     const limit =
         query.limit === PaginationLimit.COUNTER_ONLY
             ? PaginationLimit.COUNTER_ONLY
-            : isPaginated
-            ? query.limit === PaginationLimit.NO_PAGINATION || maxLimit === PaginationLimit.NO_PAGINATION
+            : isPaginated === true
+            ? maxLimit === PaginationLimit.NO_PAGINATION
+                ? query.limit ?? defaultLimit
+                : query.limit === PaginationLimit.NO_PAGINATION
                 ? defaultLimit
                 : Math.min(query.limit ?? defaultLimit, maxLimit)
             : defaultLimit
