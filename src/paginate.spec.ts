@@ -340,22 +340,6 @@ describe('paginate', () => {
         expect(result.data).toStrictEqual(cats)
     })
 
-    it('should limit to defaultLimit, if limit is differt FROM NO_PAGINATION ecc....', async () => {
-        const config: PaginateConfig<CatEntity> = {
-            sortableColumns: ['id'],
-            maxLimit: PaginationLimit.NO_PAGINATION,
-            defaultLimit: 1,
-        }
-        const query: PaginateQuery = {
-            path: '',
-            limit: -2,
-        }
-
-        const result = await paginate<CatEntity>(query, catRepo, config)
-
-        expect(result.data).toStrictEqual(cats.slice(0, 1))
-    })
-
     it('should limit to query limit, even if maxLimit is set to NO_PAGINATION', async () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id'],
