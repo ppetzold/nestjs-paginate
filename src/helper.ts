@@ -1,4 +1,4 @@
-import { SelectQueryBuilder } from 'typeorm'
+import { FindOperator, Repository, SelectQueryBuilder } from 'typeorm'
 import { ColumnMetadata } from 'typeorm/metadata/ColumnMetadata'
 
 /**
@@ -226,4 +226,24 @@ const isoDateRegExp = new RegExp(
 
 export function isISODate(str: string): boolean {
     return isoDateRegExp.test(str)
+}
+
+export function isRepository<T>(repo: unknown | Repository<T>): repo is Repository<T> {
+    if (repo instanceof Repository) return true
+    try {
+        if (Object.getPrototypeOf(repo).constructor.name === 'Repository') return true
+        return typeof repo === 'object' && !('connection' in repo) && 'manager' in repo
+    } catch {
+        return false
+    }
+}
+
+export function isFindOperator<T>(value: unknown | FindOperator<T>): value is FindOperator<T> {
+    if (value instanceof FindOperator) return true
+    try {
+        if (Object.getPrototypeOf(value).constructor.name === 'FindOperator') return true
+        return typeof value === 'object' && '_type' in value && '_value' in value
+    } catch {
+        return false
+    }
 }

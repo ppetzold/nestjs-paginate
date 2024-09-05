@@ -3,7 +3,6 @@ import { mapKeys } from 'lodash'
 import { stringify } from 'querystring'
 import {
     Brackets,
-    FindOperator,
     FindOptionsRelationByString,
     FindOptionsRelations,
     FindOptionsUtils,
@@ -15,21 +14,23 @@ import {
 import { WherePredicateOperator } from 'typeorm/query-builder/WhereClause'
 import { OrmUtils } from 'typeorm/util/OrmUtils'
 import { PaginateQuery } from './decorator'
-import { FilterOperator, FilterSuffix, addFilter } from './filter'
+import { addFilter, FilterOperator, FilterSuffix } from './filter'
 import {
-    Column,
-    Order,
-    RelationColumn,
-    SortBy,
     checkIsEmbedded,
     checkIsRelation,
+    Column,
     extractVirtualProperty,
     fixColumnAlias,
     getPropertiesByColumnName,
     getQueryUrlComponents,
     includesAllPrimaryKeyColumns,
     isEntityKey,
+    isFindOperator,
+    isRepository,
+    Order,
     positiveNumberOrDefault,
+    RelationColumn,
+    SortBy,
 } from './helper'
 
 const logger: Logger = new Logger('nestjs-paginate')
@@ -116,7 +117,7 @@ function flattenWhereAndTransform<T>(
         if (obj.hasOwnProperty(key)) {
             const joinedKey = parentKey ? `${parentKey}${separator}${key}` : key
 
-            if (typeof value === 'object' && value !== null && !(value instanceof FindOperator)) {
+            if (typeof value === 'object' && value !== null && !isFindOperator(value)) {
                 return flattenWhereAndTransform(queryBuilder, value as FindOptionsWhere<T>, separator, joinedKey)
             } else {
                 const property = getPropertiesByColumnName(joinedKey)
@@ -210,9 +211,9 @@ export async function paginate<T extends ObjectLiteral>(
 
     let [items, totalItems]: [T[], number] = [[], 0]
 
-    const queryBuilder = repo instanceof Repository ? repo.createQueryBuilder('__root') : repo
+    const queryBuilder = isRepository(repo) ? repo.createQueryBuilder('__root') : repo
 
-    if (repo instanceof Repository && !config.relations && config.loadEagerRelations === true) {
+    if (isRepository(repo) && !config.relations && config.loadEagerRelations === true) {
         if (!config.relations) {
             FindOptionsUtils.joinEagerRelations(queryBuilder, queryBuilder.alias, repo.metadata)
         }
@@ -254,7 +255,7 @@ export async function paginate<T extends ObjectLiteral>(
         createQueryBuilderRelations(queryBuilder.alias, relations)
     }
 
-    const dbType = (repo instanceof Repository ? repo.manager : repo).connection.options.type
+    const dbType = (isRepository(repo) ? repo.manager : repo).connection.options.type
     const isMariaDbOrMySql = (dbType: string) => dbType === 'mariadb' || dbType === 'mysql'
     const isMMDb = isMariaDbOrMySql(dbType)
 
@@ -327,7 +328,7 @@ export async function paginate<T extends ObjectLiteral>(
         queryBuilder.select(cols)
     }
 
-    if (config.where && repo instanceof Repository) {
+    if (config.where && isRepository(repo)) {
         const baseWhereStr = generateWhereStatement(queryBuilder, config.where)
         queryBuilder.andWhere(`(${baseWhereStr})`)
     }
