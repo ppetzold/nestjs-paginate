@@ -395,16 +395,6 @@ export async function paginate<T extends ObjectLiteral>(
         items = await queryBuilder.getMany()
     }
 
-    let path: string
-    const { queryOrigin, queryPath } = getQueryUrlComponents(query.path)
-    if (config.relativePath) {
-        path = queryPath
-    } else if (config.origin) {
-        path = config.origin + queryPath
-    } else {
-        path = queryOrigin + queryPath
-    }
-
     const sortByQuery = sortBy.map((order) => `&sortBy=${order.join(':')}`).join('')
     const searchQuery = query.search ? `&search=${query.search}` : ''
 
@@ -429,6 +419,18 @@ export async function paginate<T extends ObjectLiteral>(
 
     const options = `&limit=${limit}${sortByQuery}${searchQuery}${searchByQuery}${selectQuery}${filterQuery}`
 
+    let path: string = null
+    if (query.path !== null) {
+        // `query.path` does not exist in RPC/WS requests and is set to null then.
+        const { queryOrigin, queryPath } = getQueryUrlComponents(query.path)
+        if (config.relativePath) {
+            path = queryPath
+        } else if (config.origin) {
+            path = config.origin + queryPath
+        } else {
+            path = queryOrigin + queryPath
+        }
+    }
     const buildLink = (p: number): string => path + '?page=' + p + options
 
     const totalPages = isPaginated ? Math.ceil(totalItems / limit) : 1
@@ -446,13 +448,17 @@ export async function paginate<T extends ObjectLiteral>(
             select: isQuerySelected ? selectParams : undefined,
             filter: query.filter,
         },
-        links: {
-            first: page == 1 ? undefined : buildLink(1),
-            previous: page - 1 < 1 ? undefined : buildLink(page - 1),
-            current: buildLink(page),
-            next: page + 1 > totalPages ? undefined : buildLink(page + 1),
-            last: page == totalPages || !totalItems ? undefined : buildLink(totalPages),
-        },
+        // If there is no `path`, don't build links.
+        links:
+            path !== null
+                ? {
+                      first: page == 1 ? undefined : buildLink(1),
+                      previous: page - 1 < 1 ? undefined : buildLink(page - 1),
+                      current: buildLink(page),
+                      next: page + 1 > totalPages ? undefined : buildLink(page + 1),
+                      last: page == totalPages || !totalItems ? undefined : buildLink(totalPages),
+                  }
+                : ({} as Paginated<T>['links']),
     }
 
     return Object.assign(new Paginated<T>(), results)
