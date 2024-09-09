@@ -322,8 +322,8 @@ export function addFilter<T>(
     const filter = parseFilter(query, filterableColumns)
 
     const filterEntries = Object.entries(filter)
-    const orFilters = filterEntries.filter(([_, value]) => value.some((v) => v.comparator === '$or'))
-    const andFilters = filterEntries.filter(([_, value]) => value.some((v) => v.comparator !== '$or'))
+    const orFilters = filterEntries.filter(([_, value]) => value[0].comparator === '$or')
+    const andFilters = filterEntries.filter(([_, value]) => value[0].comparator === '$and')
 
     qb.andWhere(
         new Brackets((qb: SelectQueryBuilder<T>) => {
@@ -333,13 +333,13 @@ export function addFilter<T>(
         })
     )
 
-    qb.andWhere(
-        new Brackets((qb: SelectQueryBuilder<T>) => {
-            for (const [column] of andFilters) {
+    for (const [column] of andFilters) {
+        qb.andWhere(
+            new Brackets((qb: SelectQueryBuilder<T>) => {
                 addWhereCondition(qb, column, filter)
-            }
-        })
-    )
+            })
+        )
+    }
 
     return qb
 }
