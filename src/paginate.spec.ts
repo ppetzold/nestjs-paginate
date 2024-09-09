@@ -2328,7 +2328,8 @@ describe('paginate', () => {
         const result = await paginate<CatEntity>(query, catRepo, config)
         const expected = cats.filter(
             (cat) =>
-                (cat.name === 'Milo' || cat.name === 'Garfield' || !cat.age) && (cat.color === 'brown' || cat.color === 'white') &&
+                (cat.name === 'Milo' || cat.name === 'Garfield' || !cat.age) &&
+                (cat.color === 'brown' || cat.color === 'white') &&
                 (cat.cutenessLevel === CutenessLevel.HIGH || cat.cutenessLevel === CutenessLevel.LOW)
         )
         expect(result.data).toStrictEqual(expected)
