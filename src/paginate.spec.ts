@@ -2255,6 +2255,88 @@ describe('paginate', () => {
         )
     })
 
+    it('should return result based on two multifilters chained together with and operator', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            filterableColumns: {
+                name: true,
+                color: true,
+            },
+        }
+        const query: PaginateQuery = {
+            path: '',
+            filter: {
+                name: ['Milo', '$or:Garfield'],
+                color: ['brown', '$or:white'],
+            },
+        }
+        const result = await paginate<CatEntity>(query, catRepo, config)
+        const expected = cats.filter(
+            (cat) =>
+                (cat.name === 'Milo' || cat.name === 'Garfield') && (cat.color === 'brown' || cat.color === 'white')
+        )
+        expect(result.data).toStrictEqual(expected)
+        expect(result.links.current).toBe(
+            '?page=1&limit=20&sortBy=id:ASC&filter.name=Milo&filter.name=$or:Garfield&filter.color=brown&filter.color=$or:white'
+        )
+    })
+
+    it('should return result based on two multifilters chained together with or operator', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            filterableColumns: {
+                name: true,
+                color: true,
+            },
+        }
+        const query: PaginateQuery = {
+            path: '',
+            filter: {
+                name: ['$or:Milo', '$or:Garfield'],
+                color: ['$or:brown', '$or:white'],
+            },
+        }
+        const result = await paginate<CatEntity>(query, catRepo, config)
+        const expected = cats.filter(
+            (cat) => cat.name === 'Milo' || cat.name === 'Garfield' || cat.color === 'brown' || cat.color === 'white'
+        )
+        expect(result.data).toStrictEqual(expected)
+        expect(result.links.current).toBe(
+            '?page=1&limit=20&sortBy=id:ASC&filter.name=$or:Milo&filter.name=$or:Garfield&filter.color=$or:brown&filter.color=$or:white'
+        )
+    })
+
+    it('should return result based on filters chained together with and operators and or operators', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            filterableColumns: {
+                name: true,
+                color: true,
+                age: true,
+                cutenessLevel: true,
+            },
+        }
+        const query: PaginateQuery = {
+            path: '',
+            filter: {
+                name: ['$or:Milo', '$or:Garfield'],
+                age: '$or:$null',
+                color: ['brown', '$or:white'],
+                cutenessLevel: [CutenessLevel.HIGH, `$or:${CutenessLevel.LOW}`],
+            },
+        }
+        const result = await paginate<CatEntity>(query, catRepo, config)
+        const expected = cats.filter(
+            (cat) =>
+                (cat.name === 'Milo' || cat.name === 'Garfield' || !cat.age) && (cat.color === 'brown' || cat.color === 'white') &&
+                (cat.cutenessLevel === CutenessLevel.HIGH || cat.cutenessLevel === CutenessLevel.LOW)
+        )
+        expect(result.data).toStrictEqual(expected)
+        expect(result.links.current).toBe(
+            '?page=1&limit=20&sortBy=id:ASC&filter.name=$or:Milo&filter.name=$or:Garfield&filter.age=$or:$null&filter.color=brown&filter.color=$or:white&filter.cutenessLevel=high&filter.cutenessLevel=$or:low'
+        )
+    })
+
     it("should return all columns if select doesn't contain all primary columns", async () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id', 'name'],
