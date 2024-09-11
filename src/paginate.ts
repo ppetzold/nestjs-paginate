@@ -214,6 +214,7 @@ export async function paginate<T extends ObjectLiteral>(
     let [items, totalItems]: [T[], number] = [[], 0]
 
     const queryBuilder = isRepository(repo) ? repo.createQueryBuilder('__root') : repo
+    const queryBuilderCloned = new SelectQueryBuilder(queryBuilder)
 
     if (isRepository(repo) && !config.relations && config.loadEagerRelations === true) {
         if (!config.relations) {
@@ -390,7 +391,7 @@ export async function paginate<T extends ObjectLiteral>(
     }
 
     if (query.limit === PaginationLimit.COUNTER_ONLY) {
-        totalItems = await getCount(queryBuilder, config)
+        totalItems = await getCount(queryBuilderCloned, config)
     } else {
         if (!isPaginated && !config.getDataAsRaw) {
             items = await queryBuilder.getMany()
@@ -403,7 +404,7 @@ export async function paginate<T extends ObjectLiteral>(
         }
         if (isPaginated && config.getDataAsRaw) {
             items = await queryBuilder.getRawMany()
-            totalItems = await getCount(queryBuilder, config)
+            totalItems = await getCount(queryBuilderCloned, config)
         }
     }
 
@@ -476,15 +477,19 @@ export async function paginate<T extends ObjectLiteral>(
     return Object.assign(new Paginated<T>(), results)
 }
 
-export async function getCount<T extends ObjectLiteral>(qb: SelectQueryBuilder<T>, config: PaginateConfig<T>): Promise<number> {
+export async function getCount<T extends ObjectLiteral>(
+    qb: SelectQueryBuilder<T>,
+    config: PaginateConfig<T>
+): Promise<number> {
     if (!config.rowCountAsItIs) {
-        return qb.getCount();
+        return qb.getCount()
     }
 
-    const result = await qb.createQueryBuilder()
+    const result = await qb
+        .createQueryBuilder()
         .select('COUNT(*)', 'total_rows')
         .from(`(${qb.getSql()})`, 'query_count')
         .getRawOne()
 
-    return result.total_rows;
+    return Number(result.total_rows)
 }

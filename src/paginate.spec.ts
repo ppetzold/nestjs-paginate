@@ -212,93 +212,93 @@ describe('paginate', () => {
             saleRepo.create({
                 itemName: 'Laptop',
                 quantity: 1,
-                unitPrice: 1200.00,
-                totalPrice: 1200.00
+                unitPrice: 1200.0,
+                totalPrice: 1200.0,
             }),
             saleRepo.create({
                 itemName: 'Smartphone',
                 quantity: 2,
-                unitPrice: 600.00,
-                totalPrice: 1200.00
+                unitPrice: 600.0,
+                totalPrice: 1200.0,
             }),
             saleRepo.create({
                 itemName: 'Headphones',
                 quantity: 1,
-                unitPrice: 150.00,
-                totalPrice: 150.00
+                unitPrice: 150.0,
+                totalPrice: 150.0,
             }),
             saleRepo.create({
                 itemName: 'Laptop',
                 quantity: 1,
-                unitPrice: 1200.00,
-                totalPrice: 1200.00
+                unitPrice: 1200.0,
+                totalPrice: 1200.0,
             }),
             saleRepo.create({
                 itemName: 'Mouse',
                 quantity: 3,
-                unitPrice: 20.00,
-                totalPrice: 60.00
+                unitPrice: 20.0,
+                totalPrice: 60.0,
             }),
             saleRepo.create({
                 itemName: 'Keyboard',
                 quantity: 2,
-                unitPrice: 80.00,
-                totalPrice: 160.00
+                unitPrice: 80.0,
+                totalPrice: 160.0,
             }),
             saleRepo.create({
                 itemName: 'Monitor',
                 quantity: 1,
-                unitPrice: 300.00,
-                totalPrice: 300.00
+                unitPrice: 300.0,
+                totalPrice: 300.0,
             }),
             saleRepo.create({
                 itemName: 'Laptop',
                 quantity: 1,
-                unitPrice: 1200.00,
-                totalPrice: 1200.00
+                unitPrice: 1200.0,
+                totalPrice: 1200.0,
             }),
             saleRepo.create({
                 itemName: 'Printer',
                 quantity: 1,
-                unitPrice: 250.00,
-                totalPrice: 250.00
+                unitPrice: 250.0,
+                totalPrice: 250.0,
             }),
             saleRepo.create({
                 itemName: 'Smartphone',
                 quantity: 1,
-                unitPrice: 600.00,
-                totalPrice: 600.00
+                unitPrice: 600.0,
+                totalPrice: 600.0,
             }),
             saleRepo.create({
                 itemName: 'Monitor',
                 quantity: 2,
-                unitPrice: 300.00,
-                totalPrice: 600.00
+                unitPrice: 300.0,
+                totalPrice: 600.0,
             }),
             saleRepo.create({
                 itemName: 'Headphones',
                 quantity: 1,
-                unitPrice: 150.00,
-                totalPrice: 150.00
+                unitPrice: 150.0,
+                totalPrice: 150.0,
             }),
             saleRepo.create({
                 itemName: 'Keyboard',
                 quantity: 1,
-                unitPrice: 80.00,
-                totalPrice: 80.00
+                unitPrice: 80.0,
+                totalPrice: 80.0,
             }),
             saleRepo.create({
                 itemName: 'Laptop Stand',
                 quantity: 2,
-                unitPrice: 50.00,
-                totalPrice: 100.00
+                unitPrice: 50.0,
+                totalPrice: 100.0,
             }),
             saleRepo.create({
                 itemName: 'Smartphone',
                 quantity: 1,
-                unitPrice: 600.00,
-                totalPrice: 600.00
-            })
+                unitPrice: 600.0,
+                totalPrice: 600.0,
+            }),
         ])
     })
 
@@ -2897,24 +2897,20 @@ describe('paginate', () => {
 
     it('should return correct amount of data with complete correct columns in each data item when data queried using manual sql aggregates functions', async () => {
         const salesQuery = saleRepo
-        .createQueryBuilder('sale')
-        .select([
-            'sale.itemName as itemName',
-            'SUM(sale.totalPrice) as totalSales',
-            'COUNT(*) as numberOfSales'
-        ])
-        .groupBy('sale.itemName')
+            .createQueryBuilder('sale')
+            .select(['sale.itemName as itemName', 'SUM(sale.totalPrice) as totalSales', 'COUNT(*) as numberOfSales'])
+            .groupBy('sale.itemName')
 
         const config: PaginateConfig<SaleEntity> = {
             sortableColumns: ['itemName'],
             getDataAsRaw: true,
-            rowCountAsItIs: true
+            rowCountAsItIs: true,
         }
 
         const query: PaginateQuery = {
             path: '',
             limit: 3,
-            page: 1
+            page: 1,
         }
 
         const result = await paginate<SaleEntity>(query, salesQuery, config)
@@ -2925,18 +2921,19 @@ describe('paginate', () => {
             numberOfSales: number
         }
 
-        result.data.forEach(data => {
-            const sale = data as unknown as MyRow;
+        result.data.forEach((data) => {
+            const sale = data as unknown as MyRow
             expect(sale.itemName).toBeDefined()
             expect(sale.totalSales).toBeDefined()
             expect(sale.numberOfSales).toBeDefined()
         })
 
-        // expect(countAsItIs).toEqual(8)
+        expect(result.meta.totalItems).toEqual(8)
+        expect(result.meta.totalPages).toEqual(3)
         expect(result.data.length).toEqual(3)
         expect(result.meta.currentPage).toEqual(1)
         expect(result.meta.itemsPerPage).toEqual(3)
-    });
+    })
 
     describe('should return result based on date column filter', () => {
         it('with $not and $null operators', async () => {
