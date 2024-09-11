@@ -2895,46 +2895,6 @@ describe('paginate', () => {
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC')
     })
 
-    it('should return correct amount of data with complete correct columns in each data item when data queried using manual sql aggregates functions', async () => {
-        const salesQuery = saleRepo
-            .createQueryBuilder('sale')
-            .select(['sale.itemName as itemName', 'SUM(sale.totalPrice) as totalSales', 'COUNT(*) as numberOfSales'])
-            .groupBy('sale.itemName')
-
-        const config: PaginateConfig<SaleEntity> = {
-            sortableColumns: ['itemName'],
-            getDataAsRaw: true,
-            rowCountAsItIs: true,
-        }
-
-        const query: PaginateQuery = {
-            path: '',
-            limit: 3,
-            page: 1,
-        }
-
-        const result = await paginate<SaleEntity>(query, salesQuery, config)
-
-        type MyRow = {
-            itemName: string
-            totalSales: number
-            numberOfSales: number
-        }
-
-        result.data.forEach((data) => {
-            const sale = data as unknown as MyRow
-            expect(sale.itemName).toBeDefined()
-            expect(sale.totalSales).toBeDefined()
-            expect(sale.numberOfSales).toBeDefined()
-        })
-
-        expect(result.meta.totalItems).toEqual(8)
-        expect(result.meta.totalPages).toEqual(3)
-        expect(result.data.length).toEqual(3)
-        expect(result.meta.currentPage).toEqual(1)
-        expect(result.meta.itemsPerPage).toEqual(3)
-    })
-
     describe('should return result based on date column filter', () => {
         it('with $not and $null operators', async () => {
             const config: PaginateConfig<CatEntity> = {
@@ -3185,6 +3145,50 @@ describe('paginate', () => {
                 expect(result.links.current).toBe(`?page=1&limit=20&sortBy=id:ASC&search=brown`)
             })
         })
+
+        it('should return correct amount of data with complete correct columns in each data item when data queried using manual sql aggregates functions', async () => {
+            const salesQuery = saleRepo
+                .createQueryBuilder('sale')
+                .select([
+                    'sale.itemName as itemName',
+                    'SUM(sale.totalPrice) as totalSales',
+                    'COUNT(*) as numberOfSales',
+                ])
+                .groupBy('sale.itemName')
+
+            const config: PaginateConfig<SaleEntity> = {
+                sortableColumns: ['itemName'],
+                getDataAsRaw: true,
+                rowCountAsItIs: true,
+            }
+
+            const query: PaginateQuery = {
+                path: '',
+                limit: 3,
+                page: 1,
+            }
+
+            const result = await paginate<SaleEntity>(query, salesQuery, config)
+
+            type MyRow = {
+                itemname: string
+                totalsales: number
+                numberofsales: number
+            }
+
+            result.data.forEach((data) => {
+                const sale = data as unknown as MyRow
+                expect(sale.itemname).toBeDefined()
+                expect(sale.totalsales).toBeDefined()
+                expect(sale.numberofsales).toBeDefined()
+            })
+
+            expect(result.meta.totalItems).toEqual(8)
+            expect(result.meta.totalPages).toEqual(3)
+            expect(result.data.length).toEqual(3)
+            expect(result.meta.currentPage).toEqual(1)
+            expect(result.meta.itemsPerPage).toEqual(3)
+        })
     }
 
     if (process.env.DB !== 'postgres') {
@@ -3313,6 +3317,50 @@ describe('paginate', () => {
                 expect(result.data).toStrictEqual(expectedResult)
                 expect(result.links.current).toBe('?page=1&limit=20&sortBy=home.countCat:ASC')
             })
+        })
+
+        it('should return correct amount of data with complete correct columns in each data item when data queried using manual sql aggregates functions', async () => {
+            const salesQuery = saleRepo
+                .createQueryBuilder('sale')
+                .select([
+                    'sale.itemName as itemName',
+                    'SUM(sale.totalPrice) as totalSales',
+                    'COUNT(*) as numberOfSales',
+                ])
+                .groupBy('sale.itemName')
+
+            const config: PaginateConfig<SaleEntity> = {
+                sortableColumns: ['itemName'],
+                getDataAsRaw: true,
+                rowCountAsItIs: true,
+            }
+
+            const query: PaginateQuery = {
+                path: '',
+                limit: 3,
+                page: 1,
+            }
+
+            const result = await paginate<SaleEntity>(query, salesQuery, config)
+
+            type MyRow = {
+                itemName: string
+                totalSales: number
+                numberOfSales: number
+            }
+
+            result.data.forEach((data) => {
+                const sale = data as unknown as MyRow
+                expect(sale.itemName).toBeDefined()
+                expect(sale.totalSales).toBeDefined()
+                expect(sale.numberOfSales).toBeDefined()
+            })
+
+            expect(result.meta.totalItems).toEqual(8)
+            expect(result.meta.totalPages).toEqual(3)
+            expect(result.data.length).toEqual(3)
+            expect(result.meta.currentPage).toEqual(1)
+            expect(result.meta.itemsPerPage).toEqual(3)
         })
     }
 })
