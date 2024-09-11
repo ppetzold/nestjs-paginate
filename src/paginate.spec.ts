@@ -21,6 +21,7 @@ import {
     parseFilterToken,
 } from './filter'
 import { PaginateConfig, Paginated, PaginationLimit, paginate } from './paginate'
+import { SaleEntity } from './__tests__/sale.entity'
 
 const isoStringToDate = (isoString) => new Date(isoString)
 
@@ -33,6 +34,7 @@ describe('paginate', () => {
     let toyShopAddressRepository: Repository<ToyShopAddressEntity>
     let catHomeRepo: Repository<CatHomeEntity>
     let catHomePillowRepo: Repository<CatHomePillowEntity>
+    let saleRepo: Repository<SaleEntity>
     let cats: CatEntity[]
     let catToys: CatToyEntity[]
     let catToysWithoutShop: CatToyEntity[]
@@ -54,6 +56,7 @@ describe('paginate', () => {
                 CatHomeEntity,
                 CatHomePillowEntity,
                 ToyShopEntity,
+                SaleEntity,
                 process.env.DB === 'postgres' ? CatHairEntity : undefined,
             ],
         }
@@ -98,6 +101,7 @@ describe('paginate', () => {
         catHomePillowRepo = dataSource.getRepository(CatHomePillowEntity)
         toyShopRepo = dataSource.getRepository(ToyShopEntity)
         toyShopAddressRepository = dataSource.getRepository(ToyShopAddressEntity)
+        saleRepo = dataSource.getRepository(SaleEntity)
 
         cats = await catRepo.save([
             catRepo.create({
@@ -203,6 +207,99 @@ describe('paginate', () => {
                 catHairRepo.create({ name: 'none' }),
             ])
         }
+
+        await saleRepo.save([
+            saleRepo.create({
+                itemName: 'Laptop',
+                quantity: 1,
+                unitPrice: 1200.00,
+                totalPrice: 1200.00
+            }),
+            saleRepo.create({
+                itemName: 'Smartphone',
+                quantity: 2,
+                unitPrice: 600.00,
+                totalPrice: 1200.00
+            }),
+            saleRepo.create({
+                itemName: 'Headphones',
+                quantity: 1,
+                unitPrice: 150.00,
+                totalPrice: 150.00
+            }),
+            saleRepo.create({
+                itemName: 'Laptop',
+                quantity: 1,
+                unitPrice: 1200.00,
+                totalPrice: 1200.00
+            }),
+            saleRepo.create({
+                itemName: 'Mouse',
+                quantity: 3,
+                unitPrice: 20.00,
+                totalPrice: 60.00
+            }),
+            saleRepo.create({
+                itemName: 'Keyboard',
+                quantity: 2,
+                unitPrice: 80.00,
+                totalPrice: 160.00
+            }),
+            saleRepo.create({
+                itemName: 'Monitor',
+                quantity: 1,
+                unitPrice: 300.00,
+                totalPrice: 300.00
+            }),
+            saleRepo.create({
+                itemName: 'Laptop',
+                quantity: 1,
+                unitPrice: 1200.00,
+                totalPrice: 1200.00
+            }),
+            saleRepo.create({
+                itemName: 'Printer',
+                quantity: 1,
+                unitPrice: 250.00,
+                totalPrice: 250.00
+            }),
+            saleRepo.create({
+                itemName: 'Smartphone',
+                quantity: 1,
+                unitPrice: 600.00,
+                totalPrice: 600.00
+            }),
+            saleRepo.create({
+                itemName: 'Monitor',
+                quantity: 2,
+                unitPrice: 300.00,
+                totalPrice: 600.00
+            }),
+            saleRepo.create({
+                itemName: 'Headphones',
+                quantity: 1,
+                unitPrice: 150.00,
+                totalPrice: 150.00
+            }),
+            saleRepo.create({
+                itemName: 'Keyboard',
+                quantity: 1,
+                unitPrice: 80.00,
+                totalPrice: 80.00
+            }),
+            saleRepo.create({
+                itemName: 'Laptop Stand',
+                quantity: 2,
+                unitPrice: 50.00,
+                totalPrice: 100.00
+            }),
+            saleRepo.create({
+                itemName: 'Smartphone',
+                quantity: 1,
+                unitPrice: 600.00,
+                totalPrice: 600.00
+            })
+        ])
     })
 
     if (process.env.DB === 'postgres') {
@@ -2797,6 +2894,49 @@ describe('paginate', () => {
         expect(result.meta.select).toEqual(undefined)
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC')
     })
+
+    it('should return correct amount of data with complete correct columns in each data item when data queried using manual sql aggregates functions', async () => {
+        const salesQuery = saleRepo
+        .createQueryBuilder('sale')
+        .select([
+            'sale.itemName as itemName',
+            'SUM(sale.totalPrice) as totalSales',
+            'COUNT(*) as numberOfSales'
+        ])
+        .groupBy('sale.itemName')
+
+        const config: PaginateConfig<SaleEntity> = {
+            sortableColumns: ['itemName'],
+            getDataAsRaw: true,
+            rowCountAsItIs: true
+        }
+
+        const query: PaginateQuery = {
+            path: '',
+            limit: 3,
+            page: 1
+        }
+
+        const result = await paginate<SaleEntity>(query, salesQuery, config)
+
+        type MyRow = {
+            itemName: string
+            totalSales: number
+            numberOfSales: number
+        }
+
+        result.data.forEach(data => {
+            const sale = data as unknown as MyRow;
+            expect(sale.itemName).toBeDefined()
+            expect(sale.totalSales).toBeDefined()
+            expect(sale.numberOfSales).toBeDefined()
+        })
+
+        // expect(countAsItIs).toEqual(8)
+        expect(result.data.length).toEqual(3)
+        expect(result.meta.currentPage).toEqual(1)
+        expect(result.meta.itemsPerPage).toEqual(3)
+    });
 
     describe('should return result based on date column filter', () => {
         it('with $not and $null operators', async () => {
