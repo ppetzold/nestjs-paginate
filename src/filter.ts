@@ -178,7 +178,7 @@ export function addWhereCondition<T>(qb: SelectQueryBuilder<T>, column: string, 
         const parameters = fixQueryParam(alias, columnNamePerIteration, columnFilter, condition, {
             [columnNamePerIteration]: columnFilter.findOperator.value,
         })
-        if (isArray && condition.parameters?.length && !['not', 'isNull'].includes(condition.operator)) {
+        if (isArray && condition.parameters?.length && !['not', 'isNull', 'arrayContains'].includes(condition.operator)) {
             condition.parameters[0] = `cardinality(${condition.parameters[0]})`
         }
         if (columnFilter.comparator === FilterComparator.OR) {
