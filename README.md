@@ -458,7 +458,7 @@ Multi filters are filters that can be applied to a single column with a comparat
 
 `?filter.createdAt=$gt:2022-02-02&filter.createdAt=$lt:2022-02-10` where column `createdAt` is after `2022-02-02` **and** before `2022-02-10`
 
-`?filter.id=$contains:moderator&filter.id=$or:$contains:admin` where column `roles` is an array and contains `moderator` **or** `admin`
+`?filter.roles=$contains:moderator&filter.roles=$or:$contains:admin` where column `roles` is an array and contains `moderator` **or** `admin`
 
 `?filter.id=$gt:3&filter.id=$and:$lt:5&filter.id=$or:$eq:7` where column `id` is greater than `3` **and** less than `5` **or** equal to `7`
 
