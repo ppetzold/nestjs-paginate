@@ -3102,6 +3102,7 @@ describe('paginate', () => {
                 ${'$btw'}       | ${'1,2'}     | ${[1, 2]}
                 ${'$gte'}       | ${2}         | ${[0, 1]}
                 ${'$gt'}        | ${2}         | ${[0]}
+                ${'$contains'}  | ${'brown'}   | ${[0, 1]}
             `('with $operator operator', async ({ operator, data, expectedIndexes }) => {
                 const config: PaginateConfig<CatHairEntity> = {
                     sortableColumns: ['id'],
