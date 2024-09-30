@@ -159,6 +159,18 @@ export function checkIsRelation(qb: SelectQueryBuilder<unknown>, propertyPath: s
     return !!qb?.expressionMap?.mainAlias?.metadata?.hasRelationWithPropertyPath(propertyPath)
 }
 
+export function checkIsNestedRelation(qb: SelectQueryBuilder<unknown>, propertyPath: string): boolean {
+    let metadata = qb?.expressionMap?.mainAlias?.metadata
+    for (const relationName of propertyPath.split('.')) {
+        const relation = metadata?.relations.find((relation) => relation.propertyPath === relationName)
+        if (!relation) {
+            return false
+        }
+        metadata = relation.inverseEntityMetadata
+    }
+    return true
+}
+
 export function checkIsEmbedded(qb: SelectQueryBuilder<unknown>, propertyPath: string): boolean {
     if (!qb || !propertyPath) {
         return false
