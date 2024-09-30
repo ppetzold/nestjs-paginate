@@ -296,6 +296,14 @@ const paginateConfig: PaginateConfig<CatEntity> {
    * Description: Prevent `select` query param from limiting selection further. Partial selection will depend upon `select` config option only
    */
   ignoreSelectInQueryParam: true,
+
+  /**
+   * Required: false
+   * Type: MappedColumns<T, JoinMethod>
+   * Default: false
+   * Description: Prevent `select` query param from limiting selection further. Partial selection will depend upon `select` config option only
+   */
+  joinMethods: {age: 'innerJoinAndSelect', size: 'leftJoinAndSelect'}
 }
 ```
 
