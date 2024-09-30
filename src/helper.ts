@@ -80,6 +80,10 @@ export type RelationColumn<T> = Extract<
 export type Order<T> = [Column<T>, 'ASC' | 'DESC']
 export type SortBy<T> = Order<T>[]
 
+// eslint-disable-next-line @typescript-eslint/ban-types
+export type MappedColumns<T, S> = { [key in Column<T> | (string & {})]: S }
+export type JoinMethod = 'leftJoinAndSelect' | 'innerJoinAndSelect'
+
 export function isEntityKey<T>(entityColumns: Column<T>[], column: string): column is Column<T> {
     return !!entityColumns.find((c) => c === column)
 }

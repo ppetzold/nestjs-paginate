@@ -27,6 +27,8 @@ import {
     isEntityKey,
     isFindOperator,
     isRepository,
+    JoinMethod,
+    MappedColumns,
     Order,
     positiveNumberOrDefault,
     RelationColumn,
@@ -66,23 +68,20 @@ export enum PaginationType {
     TAKE_AND_SKIP = 'take',
 }
 
+// We use (string & {}) to maintain autocomplete while allowing any string
+// see https://github.com/microsoft/TypeScript/issues/29729
 export interface PaginateConfig<T> {
     relations?: FindOptionsRelations<T> | RelationColumn<T>[] | FindOptionsRelationByString
     sortableColumns: Column<T>[]
     nullSort?: 'first' | 'last'
     searchableColumns?: Column<T>[]
-    // see https://github.com/microsoft/TypeScript/issues/29729 for (string & {})
     // eslint-disable-next-line @typescript-eslint/ban-types
     select?: (Column<T> | (string & {}))[]
     maxLimit?: number
     defaultSortBy?: SortBy<T>
     defaultLimit?: number
     where?: FindOptionsWhere<T> | FindOptionsWhere<T>[]
-    filterableColumns?: {
-        // see https://github.com/microsoft/TypeScript/issues/29729 for (string & {})
-        // eslint-disable-next-line @typescript-eslint/ban-types
-        [key in Column<T> | (string & {})]?: (FilterOperator | FilterSuffix)[] | true
-    }
+    filterableColumns?: Partial<MappedColumns<T, (FilterOperator | FilterSuffix)[] | true>>
     loadEagerRelations?: boolean
     withDeleted?: boolean
     paginationType?: PaginationType
@@ -90,6 +89,8 @@ export interface PaginateConfig<T> {
     origin?: string
     ignoreSearchByInQueryParam?: boolean
     ignoreSelectInQueryParam?: boolean
+    defaultJoinMethod?: JoinMethod
+    joinMethods?: Partial<MappedColumns<T, JoinMethod>>
 }
 
 export enum PaginationLimit {
