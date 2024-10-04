@@ -25,6 +25,10 @@ Pagination and filtering helper method for TypeORM repositories or query builder
 npm install nestjs-paginate
 ```
 
+| ⚠️ **TypeORM appears unmaintained.**                        |
+|-------------------------------------------------------------|
+| Please `npm i typeorm@npm:@helveg/typeorm@^0.3.21` instead. |
+
 ## Usage
 
 ### Example
