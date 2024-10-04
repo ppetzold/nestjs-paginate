@@ -2052,13 +2052,12 @@ describe('paginate', () => {
 
         const result = await paginate<CatEntity>(query, catRepo, config)
         const expectedResult = [1, 2].map((i) => {
-            console.log(catHomes[i])
             const ret = Object.assign(clone(cats[i]), { home: clone(catHomes[i]) })
             ret.home.countCat = 1
             delete ret.home.cat
             return ret
         })
-        console.log(result.data)
+
         expect(result.data).toStrictEqual(expectedResult)
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.home.street=$not:$null')
     })
@@ -2069,7 +2068,7 @@ describe('paginate', () => {
             filterableColumns: {
                 'home.street': [FilterOperator.NULL],
             },
-            relations: ['home'],
+            relations: ['home', 'home.naptimePillow.brand'],
         }
         const query: PaginateQuery = {
             path: '',
@@ -2094,13 +2093,13 @@ describe('paginate', () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id'],
             filterableColumns: {
-                'home.naptimePillow.brand.name': [FilterOperator.NULL],
+                'home.naptimePillow.brand.quality': [FilterOperator.NULL],
             },
         }
         const query: PaginateQuery = {
             path: '',
             filter: {
-                'home.naptimePillow.brand.name': '$null',
+                'home.naptimePillow.brand.quality': '$null',
             },
         }
 
@@ -2113,7 +2112,9 @@ describe('paginate', () => {
         })
 
         expect(result.data).toStrictEqual(expectedResult)
-        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.home.naptimePillow.brand.name=$null')
+        expect(result.links.current).toBe(
+            '?page=1&limit=20&sortBy=id:ASC&filter.home.naptimePillow.brand.quality=$null'
+        )
     })
 
     it('should ignore filterable column which is not configured', async () => {
