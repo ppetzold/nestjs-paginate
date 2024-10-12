@@ -90,6 +90,7 @@ export interface PaginateConfig<T> {
     origin?: string
     ignoreSearchByInQueryParam?: boolean
     ignoreSelectInQueryParam?: boolean
+    strictSearch?: boolean // New property to control search mode
 }
 
 export enum PaginationLimit {
@@ -352,41 +353,76 @@ export async function paginate<T extends ObjectLiteral>(
     if (query.search && searchBy.length) {
         queryBuilder.andWhere(
             new Brackets((qb: SelectQueryBuilder<T>) => {
-                const searchWords = query.search.split(' ').filter(word => word.length > 0);
-                
-                searchWords.forEach((searchWord, index) => {
-                    qb.andWhere(
-                        new Brackets((subQb: SelectQueryBuilder<T>) => {
-                            for (const column of searchBy) {
-                                const property = getPropertiesByColumnName(column)
-                                const { isVirtualProperty, query: virtualQuery } = extractVirtualProperty(subQb, property)
-                                const isRelation = checkIsRelation(subQb, property.propertyPath)
-                                const isEmbedded = checkIsEmbedded(subQb, property.propertyPath)
-                                const alias = fixColumnAlias(
-                                    property,
-                                    subQb.alias,
-                                    isRelation,
-                                    isVirtualProperty,
-                                    isEmbedded,
-                                    virtualQuery
-                                )
+                if (config.strictSearch) {
+                    // Strict search mode (original behavior)
+                    for (const column of searchBy) {
+                        const property = getPropertiesByColumnName(column)
+                        const { isVirtualProperty, query: virtualQuery } = extractVirtualProperty(qb, property)
+                        const isRelation = checkIsRelation(qb, property.propertyPath)
+                        const isEmbedded = checkIsEmbedded(qb, property.propertyPath)
+                        const alias = fixColumnAlias(
+                            property,
+                            qb.alias,
+                            isRelation,
+                            isVirtualProperty,
+                            isEmbedded,
+                            virtualQuery
+                        )
 
-                                const condition: WherePredicateOperator = {
-                                    operator: 'ilike',
-                                    parameters: [alias, `:${property.column}_${index}`],
-                                }
+                        const condition: WherePredicateOperator = {
+                            operator: 'ilike',
+                            parameters: [alias, `:${property.column}`],
+                        }
 
-                                if (['postgres', 'cockroachdb'].includes(queryBuilder.connection.options.type)) {
-                                    condition.parameters[0] = `CAST(${condition.parameters[0]} AS text)`
-                                }
+                        if (['postgres', 'cockroachdb'].includes(queryBuilder.connection.options.type)) {
+                            condition.parameters[0] = `CAST(${condition.parameters[0]} AS text)`
+                        }
 
-                                subQb.orWhere(subQb['createWhereConditionExpression'](condition), {
-                                    [`${property.column}_${index}`]: `%${searchWord}%`,
-                                })
-                            }
+                        qb.orWhere(qb['createWhereConditionExpression'](condition), {
+                            [property.column]: `%${query.search}%`,
                         })
-                    )
-                });
+                    }
+                } else {
+                    // Multi-word search mode (new behavior)
+                    const searchWords = query.search.split(' ').filter((word) => word.length > 0)
+
+                    searchWords.forEach((searchWord, index) => {
+                        qb.andWhere(
+                            new Brackets((subQb: SelectQueryBuilder<T>) => {
+                                for (const column of searchBy) {
+                                    const property = getPropertiesByColumnName(column)
+                                    const { isVirtualProperty, query: virtualQuery } = extractVirtualProperty(
+                                        subQb,
+                                        property
+                                    )
+                                    const isRelation = checkIsRelation(subQb, property.propertyPath)
+                                    const isEmbedded = checkIsEmbedded(subQb, property.propertyPath)
+                                    const alias = fixColumnAlias(
+                                        property,
+                                        subQb.alias,
+                                        isRelation,
+                                        isVirtualProperty,
+                                        isEmbedded,
+                                        virtualQuery
+                                    )
+
+                                    const condition: WherePredicateOperator = {
+                                        operator: 'ilike',
+                                        parameters: [alias, `:${property.column}_${index}`],
+                                    }
+
+                                    if (['postgres', 'cockroachdb'].includes(queryBuilder.connection.options.type)) {
+                                        condition.parameters[0] = `CAST(${condition.parameters[0]} AS text)`
+                                    }
+
+                                    subQb.orWhere(subQb['createWhereConditionExpression'](condition), {
+                                        [`${property.column}_${index}`]: `%${searchWord}%`,
+                                    })
+                                }
+                            })
+                        )
+                    })
+                }
             })
         )
     }
