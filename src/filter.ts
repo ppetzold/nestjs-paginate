@@ -8,6 +8,7 @@ import {
     ILike,
     In,
     IsNull,
+    JsonContains,
     LessThan,
     LessThanOrEqual,
     MoreThan,
@@ -20,6 +21,7 @@ import { PaginateQuery } from './decorator'
 import {
     checkIsArray,
     checkIsEmbedded,
+    checkIsJsonb,
     checkIsRelation,
     extractVirtualProperty,
     fixColumnAlias,
@@ -238,7 +240,8 @@ export function parseFilterToken(raw?: string): FilterToken | null {
 
 export function parseFilter(
     query: PaginateQuery,
-    filterableColumns?: { [column: string]: (FilterOperator | FilterSuffix)[] | true }
+    filterableColumns?: { [column: string]: (FilterOperator | FilterSuffix)[] | true },
+    qb?: SelectQueryBuilder<unknown>
 ): ColumnsFilters {
     const filter: ColumnsFilters = {}
     if (!filterableColumns || !query.filter) {
@@ -284,6 +287,9 @@ export function parseFilter(
             const fixValue = (value: string) =>
                 isISODate(value) ? new Date(value) : Number.isNaN(Number(value)) ? value : Number(value)
 
+            const columnProperties = getPropertiesByColumnName(column)
+            const isJsonb = checkIsJsonb(qb, columnProperties.propertyPath)
+
             switch (token.operator) {
                 case FilterOperator.BTW:
                     params.findOperator = OperatorSymbolToFunction.get(token.operator)(
@@ -301,10 +307,26 @@ export function parseFilter(
                     params.findOperator = OperatorSymbolToFunction.get(token.operator)(`${token.value}%`)
                     break
                 default:
-                    params.findOperator = OperatorSymbolToFunction.get(token.operator)(fixValue(token.value))
+                    if (isJsonb) {
+                        const parts = column.split('.')
+                        const jsonKey = parts.pop()
+                        params.findOperator = JsonContains({
+                            //[jsonKey]: OperatorSymbolToFunction.get(token.operator)(fixValue(token.value)),
+                            [jsonKey]: fixValue(token.value),
+                        })
+                    } else {
+                        params.findOperator = OperatorSymbolToFunction.get(token.operator)(fixValue(token.value))
+                    }
             }
 
-            filter[column] = [...(filter[column] || []), params]
+            if (isJsonb) {
+                const parts = column.split('.')
+                const columnName = parts[parts.length - 2]
+
+                filter[columnName] = [...(filter[column] || []), params]
+            } else {
+                filter[column] = [...(filter[column] || []), params]
+            }
 
             if (token.suffix) {
                 const lastFilterElement = filter[column].length - 1
@@ -314,7 +336,6 @@ export function parseFilter(
             }
         }
     }
-
     return filter
 }
 
@@ -323,7 +344,7 @@ export function addFilter<T>(
     query: PaginateQuery,
     filterableColumns?: { [column: string]: (FilterOperator | FilterSuffix)[] | true }
 ): SelectQueryBuilder<T> {
-    const filter = parseFilter(query, filterableColumns)
+    const filter = parseFilter(query, filterableColumns, qb)
 
     const filterEntries = Object.entries(filter)
     const orFilters = filterEntries.filter(([_, value]) => value[0].comparator === '$or')

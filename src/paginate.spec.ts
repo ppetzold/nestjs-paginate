@@ -197,9 +197,21 @@ describe('paginate', () => {
         if (process.env.DB === 'postgres') {
             catHairRepo = dataSource.getRepository(CatHairEntity)
             catHairs = await catHairRepo.save([
-                catHairRepo.create({ name: 'short', colors: ['white', 'brown', 'black'] }),
-                catHairRepo.create({ name: 'long', colors: ['white', 'brown'] }),
-                catHairRepo.create({ name: 'buzzed', colors: ['white'] }),
+                catHairRepo.create({
+                    name: 'short',
+                    colors: ['white', 'brown', 'black'],
+                    metadata: { length: 5, thickness: 1 },
+                }),
+                catHairRepo.create({
+                    name: 'long',
+                    colors: ['white', 'brown'],
+                    metadata: { length: 20, thickness: 5 },
+                }),
+                catHairRepo.create({
+                    name: 'buzzed',
+                    colors: ['white'],
+                    metadata: { length: 0.5, thickness: 10 },
+                }),
                 catHairRepo.create({ name: 'none' }),
             ])
         }
@@ -3047,6 +3059,61 @@ describe('paginate', () => {
                 expect(result.meta.search).toStrictEqual('brown')
                 expect(result.data).toStrictEqual([catHairs[0], catHairs[1]])
                 expect(result.links.current).toBe(`?page=1&limit=20&sortBy=id:ASC&search=brown`)
+            })
+        })
+    }
+
+    if (process.env.DB === 'postgres') {
+        describe('should be able to filter on jsonb columns', () => {
+            it('should filter with single value', async () => {
+                const config: PaginateConfig<CatHairEntity> = {
+                    sortableColumns: ['id'],
+                    filterableColumns: {
+                        'metadata.length': true,
+                    },
+                }
+                const query: PaginateQuery = {
+                    path: '',
+                    filter: {
+                        'metadata.length': '$eq:5',
+                    },
+                }
+
+                const result = await paginate<CatHairEntity>(query, catHairRepo, config)
+
+                expect(result.meta.filter).toStrictEqual({
+                    'metadata.length': '$eq:5',
+                })
+                expect(result.data).toStrictEqual([catHairs[0]])
+                expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.metadata.length=$eq:5')
+            })
+
+            it('should filter with multiple values', async () => {
+                const config: PaginateConfig<CatHairEntity> = {
+                    sortableColumns: ['id'],
+                    filterableColumns: {
+                        'metadata.length': true,
+                        'metadata.thickness': true,
+                    },
+                }
+                const query: PaginateQuery = {
+                    path: '',
+                    filter: {
+                        'metadata.length': '$eq:20',
+                        'metadata.thickness': '$eq:5',
+                    },
+                }
+
+                const result = await paginate<CatHairEntity>(query, catHairRepo, config)
+
+                expect(result.meta.filter).toStrictEqual({
+                    'metadata.length': '$eq:20',
+                    'metadata.thickness': '$eq:5',
+                })
+                expect(result.data).toStrictEqual([catHairs[1]])
+                expect(result.links.current).toBe(
+                    '?page=1&limit=20&sortBy=id:ASC&filter.metadata.length=$eq:20&filter.metadata.thickness=$eq:5'
+                )
             })
         })
     }

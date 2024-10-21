@@ -169,6 +169,13 @@ export function checkIsArray(qb: SelectQueryBuilder<unknown>, propertyName: stri
     return !!qb?.expressionMap?.mainAlias?.metadata.findColumnWithPropertyName(propertyName)?.isArray
 }
 
+export function checkIsJsonb(qb: SelectQueryBuilder<unknown>, propertyName: string): boolean {
+    if (!qb || !propertyName) {
+        return false
+    }
+    return qb?.expressionMap?.mainAlias?.metadata.findColumnWithPropertyName(propertyName)?.type === 'json'
+}
+
 // This function is used to fix the column alias when using relation, embedded or virtual properties
 export function fixColumnAlias(
     properties: ColumnProperties,

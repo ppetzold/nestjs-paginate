@@ -13,4 +13,7 @@ export class CatHairEntity {
 
     @CreateDateColumn()
     createdAt: string
+
+    @Column({ type: 'json', nullable: true })
+    metadata: Record<string, any>
 }
