@@ -166,6 +166,11 @@ export function addWhereCondition<T>(qb: SelectQueryBuilder<T>, column: string, 
     const isRelation = checkIsRelation(qb, columnProperties.propertyPath)
     const isEmbedded = checkIsEmbedded(qb, columnProperties.propertyPath)
     const isArray = checkIsArray(qb, columnProperties.propertyName)
+    const isJsonb = checkIsJsonb(qb, columnProperties.propertyPath)
+
+    /*
+      We might need to add a check with isJsonb here and handle it differently, to solve the missing FROM-clause error. Not sure.
+    */
 
     const alias = fixColumnAlias(columnProperties, qb.alias, isRelation, isVirtualProperty, isEmbedded, virtualQuery)
     filter[column].forEach((columnFilter: Filter, index: number) => {
@@ -307,23 +312,25 @@ export function parseFilter(
                     params.findOperator = OperatorSymbolToFunction.get(token.operator)(`${token.value}%`)
                     break
                 default:
-                    if (isJsonb) {
-                        const parts = column.split('.')
-                        const jsonKey = parts.pop()
-                        params.findOperator = JsonContains({
-                            //[jsonKey]: OperatorSymbolToFunction.get(token.operator)(fixValue(token.value)),
-                            [jsonKey]: fixValue(token.value),
-                        })
-                    } else {
-                        params.findOperator = OperatorSymbolToFunction.get(token.operator)(fixValue(token.value))
-                    }
+                    params.findOperator = OperatorSymbolToFunction.get(token.operator)(fixValue(token.value))
             }
 
             if (isJsonb) {
                 const parts = column.split('.')
-                const columnName = parts[parts.length - 2]
+                const dbColumnName = parts[parts.length - 2]
+                const jsonColumnName = parts[parts.length - 1]
 
-                filter[columnName] = [...(filter[column] || []), params]
+                const jsonParams = {
+                    comparator: params.comparator,
+                    findOperator: JsonContains({
+                        [jsonColumnName]: fixValue(token.value),
+                        //! Below seems to not be possible from my understanding, https://github.com/typeorm/typeorm/pull/9665
+                        //! This limits the functionaltiy to $eq only for json columns, which is a bit of a shame.
+                        //[jsonColumnName]: params.findOperator,
+                    }),
+                }
+
+                filter[dbColumnName] = [...(filter[column] || []), jsonParams]
             } else {
                 filter[column] = [...(filter[column] || []), params]
             }
