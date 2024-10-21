@@ -166,9 +166,9 @@ export function addWhereCondition<T>(qb: SelectQueryBuilder<T>, column: string, 
     const isRelation = checkIsRelation(qb, columnProperties.propertyPath)
     const isEmbedded = checkIsEmbedded(qb, columnProperties.propertyPath)
     const isArray = checkIsArray(qb, columnProperties.propertyName)
-    const isJsonb = checkIsJsonb(qb, columnProperties.propertyPath)
 
     /*
+      const isJsonb = checkIsJsonb(qb, columnProperties.propertyPath)
       We might need to add a check with isJsonb here and handle it differently, to solve the missing FROM-clause error. Not sure.
     */
 
