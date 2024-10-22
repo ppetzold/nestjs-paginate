@@ -450,7 +450,11 @@ const config: PaginateConfig<CatEntity> = {
 
 `?filter.roles=$contains:moderator,admin` where column `roles` is an array and contains the values `moderator` and `admin`
 
-`?filter.metadata.enabled=$eq:true` where column `metadata` is jsonb and contains an object with the key `enabled`. Json columns is limited to `$eq` operators only.
+## Jsonb Filters
+
+You can filter on jsonb columns by using the dot notation. Json columns is limited to `$eq` operators only.
+
+`?filter.metadata.enabled=$eq:true` where column `metadata` is jsonb and contains an object with the key `enabled`.
 
 ## Multi Filters
 
