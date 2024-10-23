@@ -90,7 +90,7 @@ export interface PaginateConfig<T> {
     origin?: string
     ignoreSearchByInQueryParam?: boolean
     ignoreSelectInQueryParam?: boolean
-    multiWordSearch?: boolean 
+    multiWordSearch?: boolean
 }
 
 export enum PaginationLimit {
@@ -354,7 +354,7 @@ export async function paginate<T extends ObjectLiteral>(
         queryBuilder.andWhere(
             new Brackets((qb: SelectQueryBuilder<T>) => {
                 // Explicitly handle the default case - multiWordSearch defaults to false
-                const useMultiWordSearch = config.multiWordSearch ?? false;
+                const useMultiWordSearch = config.multiWordSearch ?? false
                 if (!useMultiWordSearch) {
                     // Strict search mode (default behavior)
                     for (const column of searchBy) {
@@ -370,29 +370,32 @@ export async function paginate<T extends ObjectLiteral>(
                             isEmbedded,
                             virtualQuery
                         )
-    
+
                         const condition: WherePredicateOperator = {
                             operator: 'ilike',
                             parameters: [alias, `:${property.column}`],
                         }
-    
+
                         if (['postgres', 'cockroachdb'].includes(queryBuilder.connection.options.type)) {
                             condition.parameters[0] = `CAST(${condition.parameters[0]} AS text)`
                         }
-    
+
                         qb.orWhere(qb['createWhereConditionExpression'](condition), {
                             [property.column]: `%${query.search}%`,
                         })
                     }
                 } else {
                     // Multi-word search mode
-                    const searchWords = query.search.split(' ').filter(word => word.length > 0)
+                    const searchWords = query.search.split(' ').filter((word) => word.length > 0)
                     searchWords.forEach((searchWord, index) => {
                         qb.andWhere(
                             new Brackets((subQb: SelectQueryBuilder<T>) => {
                                 for (const column of searchBy) {
                                     const property = getPropertiesByColumnName(column)
-                                    const { isVirtualProperty, query: virtualQuery } = extractVirtualProperty(subQb, property)
+                                    const { isVirtualProperty, query: virtualQuery } = extractVirtualProperty(
+                                        subQb,
+                                        property
+                                    )
                                     const isRelation = checkIsRelation(subQb, property.propertyPath)
                                     const isEmbedded = checkIsEmbedded(subQb, property.propertyPath)
                                     const alias = fixColumnAlias(
@@ -403,16 +406,16 @@ export async function paginate<T extends ObjectLiteral>(
                                         isEmbedded,
                                         virtualQuery
                                     )
-    
+
                                     const condition: WherePredicateOperator = {
                                         operator: 'ilike',
                                         parameters: [alias, `:${property.column}_${index}`],
                                     }
-    
+
                                     if (['postgres', 'cockroachdb'].includes(queryBuilder.connection.options.type)) {
                                         condition.parameters[0] = `CAST(${condition.parameters[0]} AS text)`
                                     }
-    
+
                                     subQb.orWhere(subQb['createWhereConditionExpression'](condition), {
                                         [`${property.column}_${index}`]: `%${searchWord}%`,
                                     })
