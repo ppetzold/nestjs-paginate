@@ -167,11 +167,6 @@ export function addWhereCondition<T>(qb: SelectQueryBuilder<T>, column: string, 
     const isEmbedded = checkIsEmbedded(qb, columnProperties.propertyPath)
     const isArray = checkIsArray(qb, columnProperties.propertyName)
 
-    /*
-      const isJsonb = checkIsJsonb(qb, columnProperties.propertyPath)
-      We might need to add a check with isJsonb here and handle it differently, to solve the missing FROM-clause error. Not sure.
-    */
-
     const alias = fixColumnAlias(columnProperties, qb.alias, isRelation, isVirtualProperty, isEmbedded, virtualQuery)
     filter[column].forEach((columnFilter: Filter, index: number) => {
         const columnNamePerIteration = `${columnProperties.column}${index}`
@@ -293,7 +288,7 @@ export function parseFilter(
                 isISODate(value) ? new Date(value) : Number.isNaN(Number(value)) ? value : Number(value)
 
             const columnProperties = getPropertiesByColumnName(column)
-            const isJsonb = checkIsJsonb(qb, columnProperties.propertyPath)
+            const isJsonb = checkIsJsonb(qb, columnProperties.column)
 
             switch (token.operator) {
                 case FilterOperator.BTW:
@@ -326,6 +321,7 @@ export function parseFilter(
                         [jsonColumnName]: fixValue(token.value),
                         //! Below seems to not be possible from my understanding, https://github.com/typeorm/typeorm/pull/9665
                         //! This limits the functionaltiy to $eq only for json columns, which is a bit of a shame.
+                        //! If this is fixed or changed, we can use the commented line below instead.
                         //[jsonColumnName]: params.findOperator,
                     }),
                 }
