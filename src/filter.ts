@@ -236,6 +236,18 @@ export function parseFilterToken(raw?: string): FilterToken | null {
     return token
 }
 
+function fixFilterValue(value: string) {
+    if (isISODate(value)) {
+        return new Date(value)
+    }
+
+    if (!Number.isNaN(value) && /^\d+$/.test(value)) {
+        return Number(value)
+    }
+
+    return value
+}
+
 export function parseFilter(
     query: PaginateQuery,
     filterableColumns?: { [column: string]: (FilterOperator | FilterSuffix)[] | true }
@@ -281,13 +293,10 @@ export function parseFilter(
                 findOperator: undefined,
             }
 
-            const fixValue = (value: string) =>
-                isISODate(value) ? new Date(value) : Number.isNaN(Number(value)) ? value : Number(value)
-
             switch (token.operator) {
                 case FilterOperator.BTW:
                     params.findOperator = OperatorSymbolToFunction.get(token.operator)(
-                        ...token.value.split(',').map(fixValue)
+                        ...token.value.split(',').map(fixFilterValue)
                     )
                     break
                 case FilterOperator.IN:
@@ -301,7 +310,7 @@ export function parseFilter(
                     params.findOperator = OperatorSymbolToFunction.get(token.operator)(`${token.value}%`)
                     break
                 default:
-                    params.findOperator = OperatorSymbolToFunction.get(token.operator)(fixValue(token.value))
+                    params.findOperator = OperatorSymbolToFunction.get(token.operator)(fixFilterValue(token.value))
             }
 
             filter[column] = [...(filter[column] || []), params]
