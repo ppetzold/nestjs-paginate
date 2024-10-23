@@ -90,7 +90,7 @@ export interface PaginateConfig<T> {
     origin?: string
     ignoreSearchByInQueryParam?: boolean
     ignoreSelectInQueryParam?: boolean
-    multiWordSearch?: boolean // New property to control multi-word search behavior
+    multiWordSearch?: boolean 
 }
 
 export enum PaginationLimit {
