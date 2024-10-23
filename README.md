@@ -296,6 +296,15 @@ const paginateConfig: PaginateConfig<CatEntity> {
    * Description: Prevent `select` query param from limiting selection further. Partial selection will depend upon `select` config option only
    */
   ignoreSelectInQueryParam: true,
+
+  /**
+   * Required: false
+   * Type: boolean
+   * Default: false
+   * Description: Enable multi-word search behavior. When true, each word in the search query
+   * will be treated as a separate search term, allowing for more flexible matching.
+   */
+  multiWordSearch: false,
 }
 ```
 
