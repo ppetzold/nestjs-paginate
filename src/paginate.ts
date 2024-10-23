@@ -90,7 +90,7 @@ export interface PaginateConfig<T> {
     origin?: string
     ignoreSearchByInQueryParam?: boolean
     ignoreSelectInQueryParam?: boolean
-    strictSearch?: boolean // New property to control search mode
+    multiWordSearch?: boolean // New property to control multi-word search behavior
 }
 
 export enum PaginationLimit {
@@ -353,7 +353,9 @@ export async function paginate<T extends ObjectLiteral>(
     if (query.search && searchBy.length) {
         queryBuilder.andWhere(
             new Brackets((qb: SelectQueryBuilder<T>) => {
-                if (!config.multiWordSearch) {
+                // Explicitly handle the default case - multiWordSearch defaults to false
+                const useMultiWordSearch = config.multiWordSearch ?? false;
+                if (!useMultiWordSearch) {
                     // Strict search mode (default behavior)
                     for (const column of searchBy) {
                         const property = getPropertiesByColumnName(column)
