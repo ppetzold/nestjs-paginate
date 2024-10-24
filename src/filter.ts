@@ -8,6 +8,7 @@ import {
     ILike,
     In,
     IsNull,
+    JsonContains,
     LessThan,
     LessThanOrEqual,
     MoreThan,
@@ -20,6 +21,7 @@ import { PaginateQuery } from './decorator'
 import {
     checkIsArray,
     checkIsEmbedded,
+    checkIsJsonb,
     checkIsRelation,
     extractVirtualProperty,
     fixColumnAlias,
@@ -238,7 +240,8 @@ export function parseFilterToken(raw?: string): FilterToken | null {
 
 export function parseFilter(
     query: PaginateQuery,
-    filterableColumns?: { [column: string]: (FilterOperator | FilterSuffix)[] | true }
+    filterableColumns?: { [column: string]: (FilterOperator | FilterSuffix)[] | true },
+    qb?: SelectQueryBuilder<unknown>
 ): ColumnsFilters {
     const filter: ColumnsFilters = {}
     if (!filterableColumns || !query.filter) {
@@ -284,6 +287,9 @@ export function parseFilter(
             const fixValue = (value: string) =>
                 isISODate(value) ? new Date(value) : Number.isNaN(Number(value)) ? value : Number(value)
 
+            const columnProperties = getPropertiesByColumnName(column)
+            const isJsonb = checkIsJsonb(qb, columnProperties.column)
+
             switch (token.operator) {
                 case FilterOperator.BTW:
                     params.findOperator = OperatorSymbolToFunction.get(token.operator)(
@@ -304,7 +310,26 @@ export function parseFilter(
                     params.findOperator = OperatorSymbolToFunction.get(token.operator)(fixValue(token.value))
             }
 
-            filter[column] = [...(filter[column] || []), params]
+            if (isJsonb) {
+                const parts = column.split('.')
+                const dbColumnName = parts[parts.length - 2]
+                const jsonColumnName = parts[parts.length - 1]
+
+                const jsonParams = {
+                    comparator: params.comparator,
+                    findOperator: JsonContains({
+                        [jsonColumnName]: fixValue(token.value),
+                        //! Below seems to not be possible from my understanding, https://github.com/typeorm/typeorm/pull/9665
+                        //! This limits the functionaltiy to $eq only for json columns, which is a bit of a shame.
+                        //! If this is fixed or changed, we can use the commented line below instead.
+                        //[jsonColumnName]: params.findOperator,
+                    }),
+                }
+
+                filter[dbColumnName] = [...(filter[column] || []), jsonParams]
+            } else {
+                filter[column] = [...(filter[column] || []), params]
+            }
 
             if (token.suffix) {
                 const lastFilterElement = filter[column].length - 1
@@ -314,7 +339,6 @@ export function parseFilter(
             }
         }
     }
-
     return filter
 }
 
@@ -323,7 +347,7 @@ export function addFilter<T>(
     query: PaginateQuery,
     filterableColumns?: { [column: string]: (FilterOperator | FilterSuffix)[] | true }
 ): SelectQueryBuilder<T> {
-    const filter = parseFilter(query, filterableColumns)
+    const filter = parseFilter(query, filterableColumns, qb)
 
     const filterEntries = Object.entries(filter)
     const orFilters = filterEntries.filter(([_, value]) => value[0].comparator === '$or')
