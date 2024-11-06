@@ -236,7 +236,26 @@ export function parseFilterToken(raw?: string): FilterToken | null {
     return token
 }
 
-export function parseFilter(
+function fixFilterValue<T>(column: string, qb: SelectQueryBuilder<T>) {
+    const columnProperties = getPropertiesByColumnName(column)
+    const virtualProperty = extractVirtualProperty(qb, columnProperties);
+    const columnType = virtualProperty.type;
+
+    return (value: string) => {
+        if (columnType === Date && isISODate(value)) {
+            return new Date(value)
+        }
+
+        if (columnType === Number && !Number.isNaN(value)) {
+            return Number(value)
+        }
+
+        return value
+    }
+}
+
+export function parseFilter<T>(
+    qb: SelectQueryBuilder<T>,
     query: PaginateQuery,
     filterableColumns?: { [column: string]: (FilterOperator | FilterSuffix)[] | true }
 ): ColumnsFilters {
@@ -281,13 +300,12 @@ export function parseFilter(
                 findOperator: undefined,
             }
 
-            const fixValue = (value: string) =>
-                isISODate(value) ? new Date(value) : Number.isNaN(Number(value)) ? value : Number(value)
+            const fixFilterValueForColumn = fixFilterValue(column, qb);
 
             switch (token.operator) {
                 case FilterOperator.BTW:
                     params.findOperator = OperatorSymbolToFunction.get(token.operator)(
-                        ...token.value.split(',').map(fixValue)
+                        ...token.value.split(',').map(fixFilterValueForColumn)
                     )
                     break
                 case FilterOperator.IN:
@@ -301,7 +319,7 @@ export function parseFilter(
                     params.findOperator = OperatorSymbolToFunction.get(token.operator)(`${token.value}%`)
                     break
                 default:
-                    params.findOperator = OperatorSymbolToFunction.get(token.operator)(fixValue(token.value))
+                    params.findOperator = OperatorSymbolToFunction.get(token.operator)(fixFilterValueForColumn(token.value))
             }
 
             filter[column] = [...(filter[column] || []), params]
@@ -323,7 +341,7 @@ export function addFilter<T>(
     query: PaginateQuery,
     filterableColumns?: { [column: string]: (FilterOperator | FilterSuffix)[] | true }
 ): SelectQueryBuilder<T> {
-    const filter = parseFilter(query, filterableColumns)
+    const filter = parseFilter(qb, query, filterableColumns)
 
     const filterEntries = Object.entries(filter)
     const orFilters = filterEntries.filter(([_, value]) => value[0].comparator === '$or')

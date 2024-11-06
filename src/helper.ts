@@ -116,7 +116,7 @@ export function getPropertiesByColumnName(column: string): ColumnProperties {
 export function extractVirtualProperty(
     qb: SelectQueryBuilder<unknown>,
     columnProperties: ColumnProperties
-): { isVirtualProperty: boolean; query?: ColumnMetadata['query'] } {
+): Partial<Omit<ColumnMetadata, 'isVirtualProperty'>> & { isVirtualProperty: ColumnMetadata['isVirtualProperty'] } {
     const metadata = columnProperties.propertyPath
         ? qb?.expressionMap?.mainAlias?.metadata?.findColumnWithPropertyPath(columnProperties.propertyPath)
               ?.referencedColumn?.entityMetadata // on relation
