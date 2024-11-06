@@ -238,10 +238,28 @@ export function parseFilterToken(raw?: string): FilterToken | null {
     return token
 }
 
-export function parseFilter(
+function fixColumnFilterValue<T>(column: string, qb: SelectQueryBuilder<T>, isJsonb = false) {
+    const columnProperties = getPropertiesByColumnName(column)
+    const virtualProperty = extractVirtualProperty(qb, columnProperties)
+    const columnType = virtualProperty.type
+
+    return (value: string) => {
+        if ((columnType === Date || isJsonb) && isISODate(value)) {
+            return new Date(value)
+        }
+
+        if ((columnType === Number || isJsonb) && !Number.isNaN(value)) {
+            return Number(value)
+        }
+
+        return value
+    }
+}
+
+export function parseFilter<T>(
     query: PaginateQuery,
     filterableColumns?: { [column: string]: (FilterOperator | FilterSuffix)[] | true },
-    qb?: SelectQueryBuilder<unknown>
+    qb?: SelectQueryBuilder<T>
 ): ColumnsFilters {
     const filter: ColumnsFilters = {}
     if (!filterableColumns || !query.filter) {
@@ -284,8 +302,7 @@ export function parseFilter(
                 findOperator: undefined,
             }
 
-            const fixValue = (value: string) =>
-                isISODate(value) ? new Date(value) : Number.isNaN(Number(value)) ? value : Number(value)
+            const fixValue = fixColumnFilterValue(column, qb)
 
             const columnProperties = getPropertiesByColumnName(column)
             const isJsonb = checkIsJsonb(qb, columnProperties.column)
@@ -315,10 +332,12 @@ export function parseFilter(
                 const dbColumnName = parts[parts.length - 2]
                 const jsonColumnName = parts[parts.length - 1]
 
+                const jsonFixValue = fixColumnFilterValue(column, qb, true)
+
                 const jsonParams = {
                     comparator: params.comparator,
                     findOperator: JsonContains({
-                        [jsonColumnName]: fixValue(token.value),
+                        [jsonColumnName]: jsonFixValue(token.value),
                         //! Below seems to not be possible from my understanding, https://github.com/typeorm/typeorm/pull/9665
                         //! This limits the functionaltiy to $eq only for json columns, which is a bit of a shame.
                         //! If this is fixed or changed, we can use the commented line below instead.
