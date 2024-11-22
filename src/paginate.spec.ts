@@ -15,12 +15,13 @@ import {
     FilterComparator,
     FilterOperator,
     FilterSuffix,
-    OperatorSymbolToFunction,
     isOperator,
     isSuffix,
+    OperatorSymbolToFunction,
     parseFilterToken,
 } from './filter'
-import { PaginateConfig, Paginated, PaginationLimit, paginate } from './paginate'
+import { paginate, PaginateConfig, Paginated, PaginationLimit } from './paginate'
+import 'dotenv/config'
 
 const isoStringToDate = (isoString) => new Date(isoString)
 
@@ -666,6 +667,29 @@ describe('paginate', () => {
             ['name', 'ASC'],
         ])
         expect(result.data).toStrictEqual([cats[3], cats[4], cats[1], cats[0], cats[2]])
+    })
+
+    it('should sort result by virtual columns', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['home.countCat'],
+            relations: ['home'],
+        }
+        const query: PaginateQuery = {
+            path: '',
+            sortBy: [['home.countCat', 'DESC']],
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        expect(result.meta.sortBy).toStrictEqual([['home.countCat', 'DESC']])
+        const expected = [cats[0], cats[1], cats[2], cats[3], cats[4]].map(clone)
+        expected.forEach((cat) => (cat.home = null))
+        catHomes.forEach((home, i) => {
+            expected[i].home = clone(home)
+            expected[i].home.countCat = 1
+            delete expected[i].home.cat
+        })
+        expect(result.data).toStrictEqual(expected)
     })
 
     it('should sort result by camelcase columns', async () => {
