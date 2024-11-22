@@ -112,8 +112,6 @@ export class PaginatedMetaDocumented<T> {
     })
     select!: string[]
 
-    // Rerun check
-
     @ApiProperty({
         title: 'Filters that applied to the query',
         selfRequired: true,
