@@ -114,9 +114,9 @@ export class PaginatedMetaDocumented<T> {
 
     @ApiProperty({
         title: 'Filters that applied to the query',
-        required: false,
-        isArray: false,
+        selfRequired: true,
         type: 'object',
+        additionalProperties: false,
     })
     filter?: {
         [p: string]: string | string[]
@@ -126,9 +126,10 @@ export class PaginatedMetaDocumented<T> {
 export class PaginatedDocumented<T> extends Paginated<T> {
     @ApiProperty({
         isArray: true,
-        required: true,
+        selfRequired: true,
         title: 'Array of entities',
         type: 'object',
+        additionalProperties: false
     })
     override data!: T[]
 
