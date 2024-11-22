@@ -115,6 +115,7 @@ export class PaginatedMetaDocumented<T> {
     @ApiProperty({
         title: 'Filters that applied to the query',
         selfRequired: true,
+        isArray: false,
         type: 'object',
         additionalProperties: false,
     })
