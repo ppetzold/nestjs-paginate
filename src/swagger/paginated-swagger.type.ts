@@ -130,7 +130,7 @@ export class PaginatedDocumented<T> extends Paginated<T> {
         selfRequired: true,
         title: 'Array of entities',
         type: 'object',
-        additionalProperties: false
+        additionalProperties: false,
     })
     override data!: T[]
 
