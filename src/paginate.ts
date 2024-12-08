@@ -230,6 +230,10 @@ export async function paginate<T extends ObjectLiteral>(
         }
     }
 
+    if (config.withDeleted) {
+        queryBuilder.withDeleted()
+    }
+
     if (config.relations) {
         const relations = Array.isArray(config.relations)
             ? OrmUtils.propertyPathsToTruthyObject(config.relations)
@@ -332,10 +336,6 @@ export async function paginate<T extends ObjectLiteral>(
     if (config.where && isRepository(repo)) {
         const baseWhereStr = generateWhereStatement(queryBuilder, config.where)
         queryBuilder.andWhere(`(${baseWhereStr})`)
-    }
-
-    if (config.withDeleted) {
-        queryBuilder.withDeleted()
     }
 
     if (config.searchableColumns) {
