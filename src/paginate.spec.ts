@@ -42,6 +42,7 @@ describe('paginate', () => {
     let catHomes: CatHomeEntity[]
     let catHomePillows: CatHomePillowEntity[]
     let catHairs: CatHairEntity[] = []
+    let underCoats: CatHairEntity[] = []
 
     beforeAll(async () => {
         const dbOptions: Omit<Partial<BaseDataSourceOptions>, 'poolSize'> = {
@@ -194,13 +195,26 @@ describe('paginate', () => {
         await catRepo.save({ ...cats[0], friends: cats.slice(1) })
 
         catHairs = []
+        underCoats = []
 
         if (process.env.DB === 'postgres') {
             catHairRepo = dataSource.getRepository(CatHairEntity)
             catHairs = await catHairRepo.save([
-                catHairRepo.create({ name: 'short', colors: ['white', 'brown', 'black'] }),
-                catHairRepo.create({ name: 'long', colors: ['white', 'brown'] }),
-                catHairRepo.create({ name: 'buzzed', colors: ['white'] }),
+                catHairRepo.create({
+                    name: 'short',
+                    colors: ['white', 'brown', 'black'],
+                    metadata: { length: 5, thickness: 1 },
+                }),
+                catHairRepo.create({
+                    name: 'long',
+                    colors: ['white', 'brown'],
+                    metadata: { length: 20, thickness: 5 },
+                }),
+                catHairRepo.create({
+                    name: 'buzzed',
+                    colors: ['white'],
+                    metadata: { length: 0.5, thickness: 10 },
+                }),
                 catHairRepo.create({ name: 'none' }),
             ])
         }
@@ -2921,6 +2935,31 @@ describe('paginate', () => {
             )
         })
 
+        it('with $eq operator', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id'],
+                filterableColumns: {
+                    lastVetVisit: [FilterOperator.EQ],
+                },
+            }
+            const query: PaginateQuery = {
+                path: '',
+                filter: {
+                    lastVetVisit: '$eq:2022-12-21T10:00:00.000Z',
+                },
+            }
+
+            const result = await paginate<CatEntity>(query, catRepo, config)
+
+            expect(result.meta.filter).toStrictEqual({
+                lastVetVisit: '$eq:2022-12-21T10:00:00.000Z',
+            })
+            expect(result.data).toStrictEqual([cats[2]])
+            expect(result.links.current).toBe(
+                '?page=1&limit=20&sortBy=id:ASC&filter.lastVetVisit=$eq:2022-12-21T10:00:00.000Z'
+            )
+        })
+
         it('with $gte operator', async () => {
             const config: PaginateConfig<CatEntity> = {
                 sortableColumns: ['id'],
@@ -3019,6 +3058,33 @@ describe('paginate', () => {
         })
     })
 
+    describe('should correctly handle number column filter', () => {
+        it('with $eq operator and valid number', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id'],
+                filterableColumns: {
+                    lastVetVisit: [FilterOperator.LT],
+                },
+            }
+            const query: PaginateQuery = {
+                path: '',
+                filter: {
+                    lastVetVisit: '$lt:2022-12-20T10:00:00.000Z',
+                },
+            }
+
+            const result = await paginate<CatEntity>(query, catRepo, config)
+
+            expect(result.meta.filter).toStrictEqual({
+                lastVetVisit: '$lt:2022-12-20T10:00:00.000Z',
+            })
+            expect(result.data).toStrictEqual([cats[0]])
+            expect(result.links.current).toBe(
+                '?page=1&limit=20&sortBy=id:ASC&filter.lastVetVisit=$lt:2022-12-20T10:00:00.000Z'
+            )
+        })
+    })
+
     if (process.env.DB === 'postgres') {
         describe('should return results for an array column', () => {
             it.each`
@@ -3047,7 +3113,6 @@ describe('paginate', () => {
                 }
 
                 const result = await paginate<CatHairEntity>(query, catHairRepo, config)
-
                 expect(result.meta.filter).toStrictEqual({
                     colors: queryFilter,
                 })
@@ -3071,6 +3136,98 @@ describe('paginate', () => {
                 expect(result.meta.search).toStrictEqual('brown')
                 expect(result.data).toStrictEqual([catHairs[0], catHairs[1]])
                 expect(result.links.current).toBe(`?page=1&limit=20&sortBy=id:ASC&search=brown`)
+            })
+        })
+    }
+
+    if (process.env.DB === 'postgres') {
+        describe('should be able to filter on jsonb columns', () => {
+            beforeAll(async () => {
+                underCoats = await catHairRepo.save([
+                    catHairRepo.create({
+                        name: 'full',
+                        colors: ['orange'],
+                        metadata: { length: 50, thickness: 2 },
+                        underCoat: catHairs[0],
+                    }),
+                ])
+            })
+
+            it('should filter with single value', async () => {
+                const config: PaginateConfig<CatHairEntity> = {
+                    sortableColumns: ['id'],
+                    filterableColumns: {
+                        'metadata.length': true,
+                    },
+                }
+                const query: PaginateQuery = {
+                    path: '',
+                    filter: {
+                        'metadata.length': '$eq:5',
+                    },
+                }
+
+                const result = await paginate<CatHairEntity>(query, catHairRepo, config)
+
+                expect(result.meta.filter).toStrictEqual({
+                    'metadata.length': '$eq:5',
+                })
+                expect(result.data).toStrictEqual([catHairs[0]])
+                expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.metadata.length=$eq:5')
+            })
+
+            it('should filter with multiple values', async () => {
+                const config: PaginateConfig<CatHairEntity> = {
+                    sortableColumns: ['id'],
+                    filterableColumns: {
+                        'metadata.length': true,
+                        'metadata.thickness': true,
+                    },
+                }
+                const query: PaginateQuery = {
+                    path: '',
+                    filter: {
+                        'metadata.length': '$eq:0.5',
+                        'metadata.thickness': '$eq:10',
+                    },
+                }
+
+                const result = await paginate<CatHairEntity>(query, catHairRepo, config)
+
+                expect(result.meta.filter).toStrictEqual({
+                    'metadata.length': '$eq:0.5',
+                    'metadata.thickness': '$eq:10',
+                })
+                expect(result.data).toStrictEqual([catHairs[2]])
+                expect(result.links.current).toBe(
+                    '?page=1&limit=20&sortBy=id:ASC&filter.metadata.length=$eq:0.5&filter.metadata.thickness=$eq:10'
+                )
+            })
+
+            it('should filter on a nested property through a relation', async () => {
+                const config: PaginateConfig<CatHairEntity> = {
+                    sortableColumns: ['id'],
+                    filterableColumns: {
+                        'underCoat.metadata.length': true,
+                    },
+                    relations: ['underCoat'],
+                }
+                const query: PaginateQuery = {
+                    path: '',
+                    filter: {
+                        'underCoat.metadata.length': '$eq:50',
+                    },
+                }
+
+                const result = await paginate<CatHairEntity>(query, catHairRepo, config)
+
+                expect(result.meta.filter).toStrictEqual({
+                    'underCoat.metadata.length': '$eq:50',
+                })
+                expect(result.data).toStrictEqual([underCoats[0]])
+                expect(result.links.current).toBe(
+                    '?page=1&limit=20&sortBy=id:ASC&filter.underCoat.metadata.length=$eq:50'
+                )
             })
         })
     }
