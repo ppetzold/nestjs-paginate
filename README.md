@@ -312,6 +312,15 @@ const paginateConfig: PaginateConfig<CatEntity> {
    * Description: Overrides the join method per relationship.
    */
   joinMethods: {age: 'innerJoinAndSelect', size: 'leftJoinAndSelect'}
+
+  /**
+   * Required: false
+   * Type: boolean
+   * Default: false
+   * Description: Enable multi-word search behavior. When true, each word in the search query
+   * will be treated as a separate search term, allowing for more flexible matching.
+   */
+  multiWordSearch: false,
 }
 ```
 
@@ -465,6 +474,12 @@ const config: PaginateConfig<CatEntity> = {
 `?filter.roles=$contains:moderator` where column `roles` is an array and contains the value `moderator`
 
 `?filter.roles=$contains:moderator,admin` where column `roles` is an array and contains the values `moderator` and `admin`
+
+## Jsonb Filters
+
+You can filter on jsonb columns by using the dot notation. Json columns is limited to `$eq` operators only.
+
+`?filter.metadata.enabled=$eq:true` where column `metadata` is jsonb and contains an object with the key `enabled`.
 
 ## Multi Filters
 

@@ -131,7 +131,7 @@ export function getPropertiesByColumnName(column: string): ColumnProperties {
 export function extractVirtualProperty(
     qb: SelectQueryBuilder<unknown>,
     columnProperties: ColumnProperties
-): { isVirtualProperty: boolean; query?: ColumnMetadata['query'] } {
+): Partial<ColumnMetadata> {
     const metadata = columnProperties.propertyPath
         ? qb?.expressionMap?.mainAlias?.metadata?.findColumnWithPropertyPath(columnProperties.propertyPath)
               ?.referencedColumn?.entityMetadata // on relation
@@ -194,6 +194,21 @@ export function checkIsArray(qb: SelectQueryBuilder<unknown>, propertyName: stri
         return false
     }
     return !!qb?.expressionMap?.mainAlias?.metadata.findColumnWithPropertyName(propertyName)?.isArray
+}
+
+export function checkIsJsonb(qb: SelectQueryBuilder<unknown>, propertyName: string): boolean {
+    if (!qb || !propertyName) {
+        return false
+    }
+
+    if (propertyName.includes('.')) {
+        const parts = propertyName.split('.')
+        const dbColumnName = parts[parts.length - 2]
+
+        return qb?.expressionMap?.mainAlias?.metadata.findColumnWithPropertyName(dbColumnName)?.type === 'json'
+    }
+
+    return qb?.expressionMap?.mainAlias?.metadata.findColumnWithPropertyName(propertyName)?.type === 'json'
 }
 
 // This function is used to fix the column alias when using relation, embedded or virtual properties
