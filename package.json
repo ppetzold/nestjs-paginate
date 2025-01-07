@@ -55,7 +55,7 @@
     "sqlite3": "^5.1.7",
     "ts-jest": "^29.2.5",
     "ts-node": "^10.9.2",
-    "typeorm": "^0.3.17",
+    "typeorm": "npm:@helveg/typeorm@^0.3.21",
     "typescript": "^5.5.4"
   },
   "dependencies": {
