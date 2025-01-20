@@ -47,7 +47,7 @@ function expressContextFactory(query: ExpressRequest['query']): ExecutionContext
         getArgs: <T extends Array<any> = any[]>(): T => {
             throw new Error('Function not implemented.')
         },
-        getArgByIndex: <T = any>(index: number): T => {
+        getArgByIndex: <T = any>(): T => {
             throw new Error('Function not implemented.')
         },
         switchToRpc: (): RpcArgumentsHost => {
@@ -83,7 +83,7 @@ function fastifyContextFactory(query: FastifyRequest['query']): ExecutionContext
         getArgs: <T extends Array<any> = any[]>(): T => {
             throw new Error('Function not implemented.')
         },
-        getArgByIndex: <T = any>(index: number): T => {
+        getArgByIndex: <T = any>(): T => {
             throw new Error('Function not implemented.')
         },
         switchToRpc: (): RpcArgumentsHost => {
