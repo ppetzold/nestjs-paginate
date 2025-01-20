@@ -18,11 +18,9 @@ function getParamDecoratorFactory<T>(decorator: Function): CustomParamFactory {
             //
         }
     }
-
     const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, Test, 'test')
     return args[Object.keys(args)[0]].factory
 }
-
 const decoratorfactory = getParamDecoratorFactory<PaginateQuery>(Paginate)
 
 function expressContextFactory(query: ExpressRequest['query']): ExecutionContext {
