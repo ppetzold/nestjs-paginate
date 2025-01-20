@@ -1,5 +1,12 @@
 import { ROUTE_ARGS_METADATA } from '@nestjs/common/constants'
-import { CustomParamFactory, ExecutionContext, HttpArgumentsHost, RpcArgumentsHost, Type, WsArgumentsHost } from '@nestjs/common/interfaces'
+import {
+    CustomParamFactory,
+    ExecutionContext,
+    HttpArgumentsHost,
+    RpcArgumentsHost,
+    Type,
+    WsArgumentsHost,
+} from '@nestjs/common/interfaces'
 import { Request as ExpressRequest } from 'express'
 import { FastifyRequest } from 'fastify'
 import { Paginate, PaginateQuery } from './decorator'
@@ -21,18 +28,20 @@ const decoratorfactory = getParamDecoratorFactory<PaginateQuery>(Paginate)
 function expressContextFactory(query: ExpressRequest['query']): ExecutionContext {
     const mockContext: ExecutionContext = {
         getType: <ContextType>() => 'http' as ContextType,
-        switchToHttp: (): HttpArgumentsHost => Object({
-            getRequest: (): Partial<ExpressRequest> => Object({
-                protocol: 'http',
-                get: () => 'localhost',
-                originalUrl: '/items?search=2423',
-                query: query,
+        switchToHttp: (): HttpArgumentsHost =>
+            Object({
+                getRequest: (): Partial<ExpressRequest> =>
+                    Object({
+                        protocol: 'http',
+                        get: () => 'localhost',
+                        originalUrl: '/items?search=2423',
+                        query: query,
+                    }),
             }),
-        }),
         getClass: <T = any>(): Type<T> => {
             throw new Error('Function not implemented.')
         },
-        getHandler: (): () => void => {
+        getHandler: (): (() => void) => {
             throw new Error('Function not implemented.')
         },
         getArgs: <T extends Array<any> = any[]>(): T => {
@@ -68,7 +77,7 @@ function fastifyContextFactory(query: FastifyRequest['query']): ExecutionContext
         getClass: <T = any>(): Type<T> => {
             throw new Error('Function not implemented.')
         },
-        getHandler: (): () => void => {
+        getHandler: (): (() => void) => {
             throw new Error('Function not implemented.')
         },
         getArgs: <T extends Array<any> = any[]>(): T => {
