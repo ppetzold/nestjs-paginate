@@ -1,5 +1,5 @@
 import { ROUTE_ARGS_METADATA } from '@nestjs/common/constants'
-import { CustomParamFactory, ExecutionContext, HttpArgumentsHost } from '@nestjs/common/interfaces'
+import { CustomParamFactory, ExecutionContext, HttpArgumentsHost, RpcArgumentsHost, Type, WsArgumentsHost } from '@nestjs/common/interfaces'
 import { Request as ExpressRequest } from 'express'
 import { FastifyRequest } from 'fastify'
 import { Paginate, PaginateQuery } from './decorator'
@@ -11,26 +11,44 @@ function getParamDecoratorFactory<T>(decorator: Function): CustomParamFactory {
             //
         }
     }
+
     const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, Test, 'test')
     return args[Object.keys(args)[0]].factory
 }
+
 const decoratorfactory = getParamDecoratorFactory<PaginateQuery>(Paginate)
 
 function expressContextFactory(query: ExpressRequest['query']): ExecutionContext {
-    const mockContext: Partial<ExecutionContext> = {
+    const mockContext: ExecutionContext = {
         getType: <ContextType>() => 'http' as ContextType,
-        switchToHttp: (): HttpArgumentsHost =>
-            Object({
-                getRequest: (): Partial<ExpressRequest> =>
-                    Object({
-                        protocol: 'http',
-                        get: () => 'localhost',
-                        originalUrl: '/items?search=2423',
-                        query: query,
-                    }),
+        switchToHttp: (): HttpArgumentsHost => Object({
+            getRequest: (): Partial<ExpressRequest> => Object({
+                protocol: 'http',
+                get: () => 'localhost',
+                originalUrl: '/items?search=2423',
+                query: query,
             }),
+        }),
+        getClass: <T = any>(): Type<T> => {
+            throw new Error('Function not implemented.')
+        },
+        getHandler: (): () => void => {
+            throw new Error('Function not implemented.')
+        },
+        getArgs: <T extends Array<any> = any[]>(): T => {
+            throw new Error('Function not implemented.')
+        },
+        getArgByIndex: <T = any>(index: number): T => {
+            throw new Error('Function not implemented.')
+        },
+        switchToRpc: (): RpcArgumentsHost => {
+            throw new Error('Function not implemented.')
+        },
+        switchToWs: (): WsArgumentsHost => {
+            throw new Error('Function not implemented.')
+        },
     }
-    return mockContext as ExecutionContext
+    return mockContext
 }
 
 function fastifyContextFactory(query: FastifyRequest['query']): ExecutionContext {

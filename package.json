@@ -32,9 +32,9 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand"
   },
   "devDependencies": {
-    "@nestjs/common": "^11.0.2",
-    "@nestjs/platform-express": "^11.0.2",
-    "@nestjs/testing": "^11.0.2",
+    "@nestjs/common": "^11.0.3",
+    "@nestjs/platform-express": "^11.0.3",
+    "@nestjs/testing": "^11.0.3",
     "@types/express": "^5.0.0",
     "@types/jest": "^29.5.14",
     "@types/lodash": "^4.17.14",
