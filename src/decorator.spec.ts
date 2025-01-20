@@ -16,7 +16,7 @@ function getParamDecoratorFactory<T>(decorator: Function): CustomParamFactory {
 }
 const decoratorfactory = getParamDecoratorFactory<PaginateQuery>(Paginate)
 
-function expressContextFactory(query: ExpressRequest['query']): Partial<ExecutionContext> {
+function expressContextFactory(query: ExpressRequest['query']): ExecutionContext {
     const mockContext: Partial<ExecutionContext> = {
         getType: <ContextType>() => 'http' as ContextType,
         switchToHttp: (): HttpArgumentsHost =>
@@ -30,10 +30,10 @@ function expressContextFactory(query: ExpressRequest['query']): Partial<Executio
                     }),
             }),
     }
-    return mockContext
+    return mockContext as ExecutionContext
 }
 
-function fastifyContextFactory(query: FastifyRequest['query']): Partial<ExecutionContext> {
+function fastifyContextFactory(query: FastifyRequest['query']): ExecutionContext {
     const mockContext: Partial<ExecutionContext> = {
         getType: <ContextType>() => 'http' as ContextType,
         switchToHttp: (): HttpArgumentsHost =>
@@ -48,7 +48,7 @@ function fastifyContextFactory(query: FastifyRequest['query']): Partial<Executio
                     }),
             }),
     }
-    return mockContext
+    return mockContext as ExecutionContext
 }
 
 describe('Decorator', () => {

@@ -5,6 +5,7 @@ import { Test } from '@nestjs/testing'
 import { PaginatedSwaggerDocs } from './api-paginated-swagger-docs.decorator'
 import { ApiPaginationQuery } from './api-paginated-query.decorator'
 import { ApiOkPaginatedResponse } from './api-ok-paginated-response.decorator'
+import { ExpressAdapter } from '@nestjs/platform-express'
 
 const BASE_PAGINATION_CONFIG = {
     sortableColumns: ['id'],
@@ -48,7 +49,7 @@ async function getSwaggerDefinitionForEndpoint<T>(entityType: Type<T>, config: P
     const fakeAppModule = await Test.createTestingModule({
         controllers: [TestController],
     }).compile()
-    const fakeApp = fakeAppModule.createNestApplication()
+    const fakeApp = fakeAppModule.createNestApplication(new ExpressAdapter())
 
     return SwaggerModule.createDocument(fakeApp, new DocumentBuilder().build())
 }
