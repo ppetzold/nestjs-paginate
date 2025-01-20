@@ -52,7 +52,7 @@ function expressContextFactory(query: ExpressRequest['query']): ExecutionContext
 }
 
 function fastifyContextFactory(query: FastifyRequest['query']): ExecutionContext {
-    const mockContext: Partial<ExecutionContext> = {
+    const mockContext: ExecutionContext = {
         getType: <ContextType>() => 'http' as ContextType,
         switchToHttp: (): HttpArgumentsHost =>
             Object({
@@ -65,8 +65,26 @@ function fastifyContextFactory(query: FastifyRequest['query']): ExecutionContext
                         query: query,
                     }),
             }),
+        getClass: <T = any>(): Type<T> => {
+            throw new Error('Function not implemented.')
+        },
+        getHandler: (): () => void => {
+            throw new Error('Function not implemented.')
+        },
+        getArgs: <T extends Array<any> = any[]>(): T => {
+            throw new Error('Function not implemented.')
+        },
+        getArgByIndex: <T = any>(index: number): T => {
+            throw new Error('Function not implemented.')
+        },
+        switchToRpc: (): RpcArgumentsHost => {
+            throw new Error('Function not implemented.')
+        },
+        switchToWs: (): WsArgumentsHost => {
+            throw new Error('Function not implemented.')
+        },
     }
-    return mockContext as ExecutionContext
+    return mockContext
 }
 
 describe('Decorator', () => {
