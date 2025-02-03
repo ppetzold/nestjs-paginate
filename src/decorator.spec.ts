@@ -1,5 +1,12 @@
 import { ROUTE_ARGS_METADATA } from '@nestjs/common/constants'
-import { CustomParamFactory, ExecutionContext, HttpArgumentsHost } from '@nestjs/common/interfaces'
+import {
+    CustomParamFactory,
+    ExecutionContext,
+    HttpArgumentsHost,
+    RpcArgumentsHost,
+    Type,
+    WsArgumentsHost,
+} from '@nestjs/common/interfaces'
 import { Request as ExpressRequest } from 'express'
 import { FastifyRequest } from 'fastify'
 import { Paginate, PaginateQuery } from './decorator'
@@ -16,8 +23,8 @@ function getParamDecoratorFactory<T>(decorator: Function): CustomParamFactory {
 }
 const decoratorfactory = getParamDecoratorFactory<PaginateQuery>(Paginate)
 
-function expressContextFactory(query: ExpressRequest['query']): Partial<ExecutionContext> {
-    const mockContext: Partial<ExecutionContext> = {
+function expressContextFactory(query: ExpressRequest['query']): ExecutionContext {
+    const mockContext: ExecutionContext = {
         getType: <ContextType>() => 'http' as ContextType,
         switchToHttp: (): HttpArgumentsHost =>
             Object({
@@ -29,12 +36,30 @@ function expressContextFactory(query: ExpressRequest['query']): Partial<Executio
                         query: query,
                     }),
             }),
+        getClass: <T = any>(): Type<T> => {
+            throw new Error('Function not implemented.')
+        },
+        getHandler: (): (() => void) => {
+            throw new Error('Function not implemented.')
+        },
+        getArgs: <T extends Array<any> = any[]>(): T => {
+            throw new Error('Function not implemented.')
+        },
+        getArgByIndex: <T = any>(): T => {
+            throw new Error('Function not implemented.')
+        },
+        switchToRpc: (): RpcArgumentsHost => {
+            throw new Error('Function not implemented.')
+        },
+        switchToWs: (): WsArgumentsHost => {
+            throw new Error('Function not implemented.')
+        },
     }
     return mockContext
 }
 
-function fastifyContextFactory(query: FastifyRequest['query']): Partial<ExecutionContext> {
-    const mockContext: Partial<ExecutionContext> = {
+function fastifyContextFactory(query: FastifyRequest['query']): ExecutionContext {
+    const mockContext: ExecutionContext = {
         getType: <ContextType>() => 'http' as ContextType,
         switchToHttp: (): HttpArgumentsHost =>
             Object({
@@ -47,6 +72,24 @@ function fastifyContextFactory(query: FastifyRequest['query']): Partial<Executio
                         query: query,
                     }),
             }),
+        getClass: <T = any>(): Type<T> => {
+            throw new Error('Function not implemented.')
+        },
+        getHandler: (): (() => void) => {
+            throw new Error('Function not implemented.')
+        },
+        getArgs: <T extends Array<any> = any[]>(): T => {
+            throw new Error('Function not implemented.')
+        },
+        getArgByIndex: <T = any>(): T => {
+            throw new Error('Function not implemented.')
+        },
+        switchToRpc: (): RpcArgumentsHost => {
+            throw new Error('Function not implemented.')
+        },
+        switchToWs: (): WsArgumentsHost => {
+            throw new Error('Function not implemented.')
+        },
     }
     return mockContext
 }
