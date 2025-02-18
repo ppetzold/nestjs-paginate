@@ -2368,6 +2368,21 @@ describe('paginate', () => {
         await catRepo.restore({ id: cats[0].id })
     })
 
+    it('should return all relation items even if deleted', async () => {
+        const config: PaginateConfig<CatHomeEntity> = {
+            sortableColumns: ['id'],
+            withDeleted: true,
+            relations: ['cat'],
+        }
+        const query: PaginateQuery = {
+            path: '',
+        }
+        await catRepo.softDelete({ id: cats[0].id })
+        const result = await paginate<CatHomeEntity>(query, catHomeRepo, config)
+        expect(result.data[0].cat).not.toBeNull()
+        await catRepo.restore({ id: cats[0].id })
+    })
+
     it('should return only undeleted items', async () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id'],
