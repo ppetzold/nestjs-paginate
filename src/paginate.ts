@@ -224,6 +224,10 @@ export async function paginate<T extends ObjectLiteral>(
         }
     }
 
+    if (config.withDeleted) {
+        queryBuilder.withDeleted()
+    }
+
     let filterJoinMethods = {}
     if (query.filter) {
         filterJoinMethods = addFilter(queryBuilder, query, config.filterableColumns)
@@ -316,10 +320,6 @@ export async function paginate<T extends ObjectLiteral>(
     if (config.where && isRepository(repo)) {
         const baseWhereStr = generateWhereStatement(queryBuilder, config.where)
         queryBuilder.andWhere(`(${baseWhereStr})`)
-    }
-
-    if (config.withDeleted) {
-        queryBuilder.withDeleted()
     }
 
     if (config.searchableColumns) {
