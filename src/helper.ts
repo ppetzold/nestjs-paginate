@@ -1,5 +1,13 @@
-import { FindOperator, Repository, SelectQueryBuilder } from 'typeorm'
+import {
+    FindOperator,
+    FindOptionsRelationByString,
+    FindOptionsRelations,
+    Repository,
+    SelectQueryBuilder,
+} from 'typeorm'
 import { ColumnMetadata } from 'typeorm/metadata/ColumnMetadata'
+import { OrmUtils } from 'typeorm/util/OrmUtils'
+import { mergeWith } from 'lodash'
 
 /**
  * Joins 2 keys as `K`, `K.P`, `K.(P` or `K.P)`
@@ -80,6 +88,13 @@ export type RelationColumn<T> = Extract<
 export type Order<T> = [Column<T>, 'ASC' | 'DESC']
 export type SortBy<T> = Order<T>[]
 
+// eslint-disable-next-line @typescript-eslint/ban-types
+export type MappedColumns<T, S> = { [key in Column<T> | (string & {})]: S }
+export type JoinMethod = 'leftJoinAndSelect' | 'innerJoinAndSelect'
+export type RelationSchemaInput<T = any> = FindOptionsRelations<T> | RelationColumn<T>[] | FindOptionsRelationByString
+// eslint-disable-next-line @typescript-eslint/ban-types
+export type RelationSchema<T = any> = { [relation in Column<T> | (string & {})]: true }
+
 export function isEntityKey<T>(entityColumns: Column<T>[], column: string): column is Column<T> {
     return !!entityColumns.find((c) => c === column)
 }
@@ -153,6 +168,18 @@ export function checkIsRelation(qb: SelectQueryBuilder<unknown>, propertyPath: s
         return false
     }
     return !!qb?.expressionMap?.mainAlias?.metadata?.hasRelationWithPropertyPath(propertyPath)
+}
+
+export function checkIsNestedRelation(qb: SelectQueryBuilder<unknown>, propertyPath: string): boolean {
+    let metadata = qb?.expressionMap?.mainAlias?.metadata
+    for (const relationName of propertyPath.split('.')) {
+        const relation = metadata?.relations.find((relation) => relation.propertyPath === relationName)
+        if (!relation) {
+            return false
+        }
+        metadata = relation.inverseEntityMetadata
+    }
+    return true
 }
 
 export function checkIsEmbedded(qb: SelectQueryBuilder<unknown>, propertyPath: string): boolean {
@@ -261,4 +288,15 @@ export function isFindOperator<T>(value: unknown | FindOperator<T>): value is Fi
     } catch {
         return false
     }
+}
+
+export function createRelationSchema<T>(configurationRelations: RelationSchemaInput<T>): RelationSchema<T> {
+    return Array.isArray(configurationRelations)
+        ? OrmUtils.propertyPathsToTruthyObject(configurationRelations)
+        : configurationRelations
+}
+
+export function mergeRelationSchema(...schemas: RelationSchema[]) {
+    const noTrueOverride = (obj, source) => (source === true && obj !== undefined ? obj : undefined)
+    return mergeWith({}, ...schemas, noTrueOverride)
 }

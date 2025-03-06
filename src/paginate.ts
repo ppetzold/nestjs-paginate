@@ -1,24 +1,15 @@
 import { Logger, ServiceUnavailableException } from '@nestjs/common'
 import { mapKeys } from 'lodash'
 import { stringify } from 'querystring'
-import {
-    Brackets,
-    FindOptionsRelationByString,
-    FindOptionsRelations,
-    FindOptionsUtils,
-    FindOptionsWhere,
-    ObjectLiteral,
-    Repository,
-    SelectQueryBuilder,
-} from 'typeorm'
+import { Brackets, FindOptionsUtils, FindOptionsWhere, ObjectLiteral, Repository, SelectQueryBuilder } from 'typeorm'
 import { WherePredicateOperator } from 'typeorm/query-builder/WhereClause'
-import { OrmUtils } from 'typeorm/util/OrmUtils'
 import { PaginateQuery } from './decorator'
 import { addFilter, FilterOperator, FilterSuffix } from './filter'
 import {
     checkIsEmbedded,
     checkIsRelation,
     Column,
+    createRelationSchema,
     extractVirtualProperty,
     fixColumnAlias,
     getPropertiesByColumnName,
@@ -27,9 +18,13 @@ import {
     isEntityKey,
     isFindOperator,
     isRepository,
+    JoinMethod,
+    MappedColumns,
+    mergeRelationSchema,
     Order,
     positiveNumberOrDefault,
-    RelationColumn,
+    RelationSchema,
+    RelationSchemaInput,
     SortBy,
 } from './helper'
 
@@ -71,23 +66,20 @@ export enum PaginationType {
     CURSOR = 'cursor',
 }
 
+// We use (string & {}) to maintain autocomplete while allowing any string
+// see https://github.com/microsoft/TypeScript/issues/29729
 export interface PaginateConfig<T> {
-    relations?: FindOptionsRelations<T> | RelationColumn<T>[] | FindOptionsRelationByString
+    relations?: RelationSchemaInput<T>
     sortableColumns: Column<T>[]
     nullSort?: 'first' | 'last'
     searchableColumns?: Column<T>[]
-    // see https://github.com/microsoft/TypeScript/issues/29729 for (string & {})
     // eslint-disable-next-line @typescript-eslint/ban-types
     select?: (Column<T> | (string & {}))[]
     maxLimit?: number
     defaultSortBy?: SortBy<T>
     defaultLimit?: number
     where?: FindOptionsWhere<T> | FindOptionsWhere<T>[]
-    filterableColumns?: {
-        // see https://github.com/microsoft/TypeScript/issues/29729 for (string & {})
-        // eslint-disable-next-line @typescript-eslint/ban-types
-        [key in Column<T> | (string & {})]?: (FilterOperator | FilterSuffix)[] | true
-    }
+    filterableColumns?: Partial<MappedColumns<T, (FilterOperator | FilterSuffix)[] | true>>
     loadEagerRelations?: boolean
     withDeleted?: boolean
     paginationType?: PaginationType
@@ -96,6 +88,8 @@ export interface PaginateConfig<T> {
     ignoreSearchByInQueryParam?: boolean
     ignoreSelectInQueryParam?: boolean
     multiWordSearch?: boolean
+    defaultJoinMethod?: JoinMethod
+    joinMethods?: Partial<MappedColumns<T, JoinMethod>>
     cursorableColumns?: Column<T>[]
 }
 
@@ -276,30 +270,20 @@ export async function paginate<T extends ObjectLiteral>(
         queryBuilder.withDeleted()
     }
 
-    if (config.relations) {
-        const relations = Array.isArray(config.relations)
-            ? OrmUtils.propertyPathsToTruthyObject(config.relations)
-            : config.relations
-        const createQueryBuilderRelations = (
-            prefix: string,
-            relations: FindOptionsRelations<T> | RelationColumn<T>[],
-            alias?: string
-        ) => {
-            Object.keys(relations).forEach((relationName) => {
-                // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-                const relationSchema = relations![relationName]!
+    let filterJoinMethods = {}
+    if (query.filter) {
+        filterJoinMethods = addFilter(queryBuilder, query, config.filterableColumns)
+    }
+    const joinMethods = { ...filterJoinMethods, ...config.joinMethods }
 
-                queryBuilder.leftJoinAndSelect(
-                    `${alias ?? prefix}.${relationName}`,
-                    `${alias ?? prefix}_${relationName}_rel`
-                )
-
-                if (typeof relationSchema === 'object') {
-                    createQueryBuilderRelations(relationName, relationSchema, `${alias ?? prefix}_${relationName}_rel`)
-                }
-            })
-        }
-        createQueryBuilderRelations(queryBuilder.alias, relations)
+    // Add the relations specified by the config, or used in the currently
+    // filtered filterable columns.
+    if (config.relations || Object.keys(filterJoinMethods).length) {
+        const relationsSchema = mergeRelationSchema(
+            createRelationSchema(config.relations),
+            createRelationSchema(Object.keys(joinMethods))
+        )
+        addRelationsFromSchema(queryBuilder, relationsSchema, config, joinMethods)
     }
 
     const dbType = (isRepository(repo) ? repo.manager : repo).connection.options.type
@@ -475,10 +459,6 @@ export async function paginate<T extends ObjectLiteral>(
         )
     }
 
-    if (query.filter) {
-        addFilter(queryBuilder, query, config.filterableColumns)
-    }
-
     if (query.limit === PaginationLimit.COUNTER_ONLY) {
         totalItems = await queryBuilder.getCount()
     } else if (isPaginated && config.paginationType !== PaginationType.CURSOR) {
@@ -594,4 +574,42 @@ export async function paginate<T extends ObjectLiteral>(
     }
 
     return Object.assign(new Paginated<T>(), results)
+}
+
+export function addRelationsFromSchema<T>(
+    queryBuilder: SelectQueryBuilder<T>,
+    schema: RelationSchema<T>,
+    config: PaginateConfig<T>,
+    joinMethods: Partial<MappedColumns<T, JoinMethod>>
+): void {
+    const defaultJoinMethod = config.defaultJoinMethod ?? 'leftJoinAndSelect'
+
+    const createQueryBuilderRelations = (
+        prefix: string,
+        relations: RelationSchema,
+        alias?: string,
+        parentRelation?: string
+    ) => {
+        Object.keys(relations).forEach((relationName) => {
+            const joinMethod =
+                joinMethods[parentRelation ? `${parentRelation}.${relationName}` : relationName] ?? defaultJoinMethod
+            queryBuilder[joinMethod](`${alias ?? prefix}.${relationName}`, `${alias ?? prefix}_${relationName}_rel`)
+
+            // Check whether this is a non-terminal node with a relation schema to load
+            const relationSchema = relations[relationName]
+            if (
+                typeof relationSchema === 'object' &&
+                relationSchema !== null &&
+                Object.keys(relationSchema).length > 0
+            ) {
+                createQueryBuilderRelations(
+                    relationName,
+                    relationSchema,
+                    `${alias ?? prefix}_${relationName}_rel`,
+                    parentRelation ? `${parentRelation}.${relationName}` : relationName
+                )
+            }
+        })
+    }
+    createQueryBuilderRelations(queryBuilder.alias, schema)
 }

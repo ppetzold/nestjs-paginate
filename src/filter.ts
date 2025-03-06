@@ -22,11 +22,13 @@ import {
     checkIsArray,
     checkIsEmbedded,
     checkIsJsonb,
+    checkIsNestedRelation,
     checkIsRelation,
     extractVirtualProperty,
     fixColumnAlias,
     getPropertiesByColumnName,
     isISODate,
+    JoinMethod,
 } from './helper'
 
 export enum FilterOperator {
@@ -83,7 +85,8 @@ export const OperatorSymbolToFunction = new Map<
 ])
 
 type Filter = { comparator: FilterComparator; findOperator: FindOperator<string> }
-type ColumnsFilters = { [columnName: string]: Filter[] }
+type ColumnFilters = { [columnName: string]: Filter[] }
+type ColumnJoinMethods = { [columnName: string]: JoinMethod }
 
 export interface FilterToken {
     comparator: FilterComparator
@@ -160,7 +163,7 @@ export function generatePredicateCondition(
     ) as WherePredicateOperator
 }
 
-export function addWhereCondition<T>(qb: SelectQueryBuilder<T>, column: string, filter: ColumnsFilters) {
+export function addWhereCondition<T>(qb: SelectQueryBuilder<T>, column: string, filter: ColumnFilters) {
     const columnProperties = getPropertiesByColumnName(column)
     const { isVirtualProperty, query: virtualQuery } = extractVirtualProperty(qb, columnProperties)
     const isRelation = checkIsRelation(qb, columnProperties.propertyPath)
@@ -260,8 +263,8 @@ export function parseFilter<T>(
     query: PaginateQuery,
     filterableColumns?: { [column: string]: (FilterOperator | FilterSuffix)[] | true },
     qb?: SelectQueryBuilder<T>
-): ColumnsFilters {
-    const filter: ColumnsFilters = {}
+): ColumnFilters {
+    const filter: ColumnFilters = {}
     if (!filterableColumns || !query.filter) {
         return {}
     }
@@ -365,7 +368,7 @@ export function addFilter<T>(
     qb: SelectQueryBuilder<T>,
     query: PaginateQuery,
     filterableColumns?: { [column: string]: (FilterOperator | FilterSuffix)[] | true }
-): SelectQueryBuilder<T> {
+): ColumnJoinMethods {
     const filter = parseFilter(query, filterableColumns, qb)
 
     const filterEntries = Object.entries(filter)
@@ -388,5 +391,17 @@ export function addFilter<T>(
         )
     }
 
-    return qb
+    // Set the join type of every relationship used in a filter to `innerJoinAndSelect`
+    // so that records without that relationships don't show up in filters on their columns.
+    return Object.fromEntries(
+        filterEntries
+            .map(([key]) => [key, getPropertiesByColumnName(key)] as const)
+            .filter(([, properties]) => properties.propertyPath)
+            .flatMap(([, properties]) => {
+                const nesting = properties.column.split('.')
+                return Array.from({ length: nesting.length - 1 }, (_, i) => nesting.slice(0, i + 1).join('.'))
+                    .filter((relation) => checkIsNestedRelation(qb, relation))
+                    .map((relation) => [relation, 'innerJoinAndSelect'] as const)
+            })
+    )
 }
