@@ -11,8 +11,8 @@ import {
     OneToOne,
     PrimaryGeneratedColumn,
 } from 'typeorm'
-import { CatToyEntity } from './cat-toy.entity'
 import { CatHomeEntity } from './cat-home.entity'
+import { CatToyEntity } from './cat-toy.entity'
 import { SizeEmbed } from './size.embed'
 
 export enum CutenessLevel {
@@ -38,7 +38,7 @@ export class CatEntity {
     @Column({ type: 'text' }) // We don't use enum type as it makes it easier when testing across different db drivers.
     cutenessLevel: CutenessLevel
 
-    @Column({ nullable: true })
+    @Column({ type: 'timestamptz', nullable: true })
     lastVetVisit: Date | null
 
     @Column(() => SizeEmbed)

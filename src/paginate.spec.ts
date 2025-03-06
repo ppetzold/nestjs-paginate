@@ -3561,5 +3561,61 @@ describe('paginate', () => {
                 "Invalid cursorDirection 'invalid'. It must be 'before' or 'after'"
             )
         })
+
+        it('should handle date type cursor column', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id'],
+                cursorableColumns: ['lastVetVisit'],
+                paginationType: PaginationType.CURSOR,
+                defaultLimit: 2,
+            }
+            const query: PaginateQuery = {
+                path: '',
+                cursor: '2022-12-20T10:00:00.000Z', // Garfield's vet visit
+                cursorColumn: 'lastVetVisit',
+                cursorDirection: 'after',
+            }
+
+            const result = await paginate<CatEntity>(query, catRepo, config)
+
+            // Should get Shadow's record (visited after Garfield)
+            expect(result.data).toStrictEqual([cats[2]])
+            expect(result.meta.firstCursor).toBe('2022-12-21T10:00:00.000Z')
+            expect(result.meta.lastCursor).toBe('2022-12-21T10:00:00.000Z')
+            expect(result.links.before).toBe(
+                `?limit=2&sortBy=lastVetVisit:ASC&cursor=2022-12-21T10:00:00.000Z&cursorColumn=lastVetVisit&cursorDirection=before`
+            )
+            expect(result.links.next).toBe(
+                `?limit=2&sortBy=lastVetVisit:ASC&cursor=2022-12-21T10:00:00.000Z&cursorColumn=lastVetVisit&cursorDirection=after`
+            )
+        })
+
+        it('should handle date type cursor column with before direction', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id'],
+                cursorableColumns: ['lastVetVisit'],
+                paginationType: PaginationType.CURSOR,
+                defaultLimit: 2,
+            }
+            const query: PaginateQuery = {
+                path: '',
+                cursor: '2022-12-21T10:00:00.000Z', // Shadow's vet visit
+                cursorColumn: 'lastVetVisit',
+                cursorDirection: 'before',
+            }
+
+            const result = await paginate<CatEntity>(query, catRepo, config)
+
+            // Should get Milo and Garfield's records (visited before Shadow)
+            expect(result.data).toStrictEqual([cats[1], cats[0]]) // Reversed order due to 'before' direction
+            expect(result.meta.firstCursor).toBe('2022-12-20T10:00:00.000Z')
+            expect(result.meta.lastCursor).toBe('2022-12-19T10:00:00.000Z')
+            expect(result.links.before).toBe(
+                `?limit=2&sortBy=lastVetVisit:DESC&cursor=2022-12-20T10:00:00.000Z&cursorColumn=lastVetVisit&cursorDirection=after`
+            )
+            expect(result.links.next).toBe(
+                `?limit=2&sortBy=lastVetVisit:DESC&cursor=2022-12-19T10:00:00.000Z&cursorColumn=lastVetVisit&cursorDirection=before`
+            )
+        })
     })
 })

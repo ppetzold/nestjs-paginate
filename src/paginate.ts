@@ -491,8 +491,18 @@ export async function paginate<T extends ObjectLiteral>(
     let lastCursor: string | undefined
 
     if (config.paginationType === PaginationType.CURSOR && items.length > 0) {
-        firstCursor = items[0][query.cursorColumn]?.toString()
-        lastCursor = items[items.length - 1][query.cursorColumn]?.toString()
+        const cursorValueToString = (value: any): string | undefined => {
+            if (value === null || value === undefined) {
+                return undefined
+            }
+            if (value instanceof Date) {
+                return value.toISOString()
+            }
+            return String(value)
+        }
+
+        firstCursor = cursorValueToString(items[0][query.cursorColumn])
+        lastCursor = cursorValueToString(items[items.length - 1][query.cursorColumn])
     }
 
     const sortByQuery = sortBy.map((order) => `&sortBy=${order.join(':')}`).join('')
