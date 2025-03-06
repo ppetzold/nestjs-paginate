@@ -41,9 +41,9 @@ export class Paginated<T> {
     data: T[]
     meta: {
         itemsPerPage: number
-        totalItems: number
-        currentPage: number
-        totalPages: number
+        totalItems?: number
+        currentPage?: number
+        totalPages?: number
         sortBy: SortBy<T>
         searchBy: Column<T>[]
         search: string
@@ -51,10 +51,14 @@ export class Paginated<T> {
         filter?: {
             [column: string]: string | string[]
         }
+        cursor?: string // current cursor
+        firstCursor?: string // the first of the boundary values
+        lastCursor?: string // the last of the boundary values
     }
     links: {
         first?: string
         previous?: string
+        before?: string // for cursor pagination
         current: string
         next?: string
         last?: string
@@ -64,6 +68,7 @@ export class Paginated<T> {
 export enum PaginationType {
     LIMIT_AND_OFFSET = 'limit',
     TAKE_AND_SKIP = 'take',
+    CURSOR = 'cursor',
 }
 
 export interface PaginateConfig<T> {
@@ -91,6 +96,7 @@ export interface PaginateConfig<T> {
     ignoreSearchByInQueryParam?: boolean
     ignoreSelectInQueryParam?: boolean
     multiWordSearch?: boolean
+    cursorableColumns?: Column<T>[]
 }
 
 export enum PaginationLimit {
@@ -220,6 +226,33 @@ export async function paginate<T extends ObjectLiteral>(
         }
     }
 
+    if (config.paginationType === PaginationType.CURSOR) {
+        const formatMessage = (msg: string) => {
+            logger.debug(msg)
+            throw new ServiceUnavailableException(msg)
+        }
+
+        if (config.cursorableColumns.length < 1) {
+            formatMessage("Missing required 'cursorableColumns' config.")
+        }
+
+        const { cursorColumn, cursorDirection } = query
+
+        if (!cursorColumn || !cursorDirection) {
+            formatMessage('Cursor column and direction must be provided for cursor pagination.')
+        }
+
+        if (!isEntityKey(config.cursorableColumns, cursorColumn)) {
+            formatMessage(
+                `Invalid cursorColumn '${cursorColumn}'. It must be one of: ${config.cursorableColumns.join(', ')}.`
+            )
+        }
+
+        if (!['before', 'after'].includes(cursorDirection)) {
+            formatMessage(`Invalid cursorDirection '${cursorDirection}'. It must be 'before' or 'after'.`)
+        }
+    }
+
     if (isPaginated) {
         // Allow user to choose between limit/offset and take/skip.
         // However, using limit/offset can cause problems when joining one-to-many etc.
@@ -227,6 +260,15 @@ export async function paginate<T extends ObjectLiteral>(
             queryBuilder.limit(limit).offset((page - 1) * limit)
         } else {
             queryBuilder.take(limit).skip((page - 1) * limit)
+        }
+
+        if (config.paginationType === PaginationType.CURSOR && query.cursor) {
+            {
+                const columnProperties = getPropertiesByColumnName(query.cursorColumn)
+                const alias = fixColumnAlias(columnProperties, queryBuilder.alias)
+                const operator = query.cursorDirection === 'before' ? '<' : '>'
+                queryBuilder.andWhere(`${alias} ${operator} :cursor`, { cursor: query.cursor })
+            }
         }
     }
 
@@ -277,6 +319,11 @@ export async function paginate<T extends ObjectLiteral>(
         const message = "Missing required 'sortableColumns' config."
         logger.debug(message)
         throw new ServiceUnavailableException(message)
+    }
+
+    // If paginationType is cursor, add the cursor column and direction before adding other query.sortBy.
+    if (config.paginationType === PaginationType.CURSOR) {
+        sortBy.push([query.cursorColumn, query.cursorDirection === 'before' ? 'DESC' : 'ASC'] as Order<T>)
     }
 
     if (query.sortBy) {
@@ -434,10 +481,18 @@ export async function paginate<T extends ObjectLiteral>(
 
     if (query.limit === PaginationLimit.COUNTER_ONLY) {
         totalItems = await queryBuilder.getCount()
-    } else if (isPaginated) {
+    } else if (isPaginated && config.paginationType !== PaginationType.CURSOR) {
         ;[items, totalItems] = await queryBuilder.getManyAndCount()
     } else {
         items = await queryBuilder.getMany()
+    }
+
+    let firstCursor: string | undefined
+    let lastCursor: string | undefined
+
+    if (config.paginationType === PaginationType.CURSOR && items.length > 0) {
+        firstCursor = items[0][query.cursorColumn]?.toString()
+        lastCursor = items[items.length - 1][query.cursorColumn]?.toString()
     }
 
     const sortByQuery = sortBy.map((order) => `&sortBy=${order.join(':')}`).join('')
@@ -476,33 +531,55 @@ export async function paginate<T extends ObjectLiteral>(
             path = queryOrigin + queryPath
         }
     }
-    const buildLink = (p: number): string => path + '?page=' + p + options
+    const buildLink = (p: number | string, isCursor: boolean = false, isReversed: boolean = false): string => {
+        if (isCursor) {
+            return (
+                path +
+                options.replace(/^./, '?') +
+                `&${p ? 'cursor=' + p : ''}&cursorColumn=${query.cursorColumn}&cursorDirection=${
+                    isReversed ? (query.cursorDirection === 'before' ? 'after' : 'before') : query.cursorDirection
+                }`
+            )
+        }
+        return path + '?page=' + p + options
+    }
 
+    const itemsPerPage = limit === PaginationLimit.COUNTER_ONLY ? totalItems : isPaginated ? limit : items.length
+    const totalItemsForMeta = limit === PaginationLimit.COUNTER_ONLY || isPaginated ? totalItems : items.length
     const totalPages = isPaginated ? Math.ceil(totalItems / limit) : 1
 
     const results: Paginated<T> = {
         data: items,
         meta: {
-            itemsPerPage: limit === PaginationLimit.COUNTER_ONLY ? totalItems : isPaginated ? limit : items.length,
-            totalItems: limit === PaginationLimit.COUNTER_ONLY || isPaginated ? totalItems : items.length,
-            currentPage: page,
-            totalPages,
+            itemsPerPage: config.paginationType === PaginationType.CURSOR ? items.length : itemsPerPage,
+            totalItems: config.paginationType === PaginationType.CURSOR ? undefined : totalItemsForMeta,
+            currentPage: config.paginationType === PaginationType.CURSOR ? undefined : page,
+            totalPages: config.paginationType === PaginationType.CURSOR ? undefined : totalPages,
             sortBy,
             search: query.search,
             searchBy: query.search ? searchBy : undefined,
             select: isQuerySelected ? selectParams : undefined,
             filter: query.filter,
+            cursor: config.paginationType === PaginationType.CURSOR ? query.cursor : undefined,
+            firstCursor: config.paginationType === PaginationType.CURSOR ? firstCursor : undefined,
+            lastCursor: config.paginationType === PaginationType.CURSOR ? lastCursor : undefined,
         },
         // If there is no `path`, don't build links.
         links:
             path !== null
-                ? {
-                      first: page == 1 ? undefined : buildLink(1),
-                      previous: page - 1 < 1 ? undefined : buildLink(page - 1),
-                      current: buildLink(page),
-                      next: page + 1 > totalPages ? undefined : buildLink(page + 1),
-                      last: page == totalPages || !totalItems ? undefined : buildLink(totalPages),
-                  }
+                ? config.paginationType === PaginationType.CURSOR
+                    ? {
+                          before: query.cursor && items.length ? buildLink(firstCursor, true, true) : undefined, // If no data exists, firstCursor is missing, so "before" link is undefined.
+                          current: query.cursor ? buildLink(query.cursor, true) : buildLink('', true),
+                          next: lastCursor ? buildLink(lastCursor, true) : undefined,
+                      }
+                    : {
+                          first: page == 1 ? undefined : buildLink(1),
+                          previous: page - 1 < 1 ? undefined : buildLink(page - 1),
+                          current: buildLink(page),
+                          next: page + 1 > totalPages ? undefined : buildLink(page + 1),
+                          last: page == totalPages || !totalItems ? undefined : buildLink(totalPages),
+                      }
                 : ({} as Paginated<T>['links']),
     }
 
