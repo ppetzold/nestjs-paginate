@@ -38,7 +38,7 @@ export class CatEntity {
     @Column({ type: 'text' }) // We don't use enum type as it makes it easier when testing across different db drivers.
     cutenessLevel: CutenessLevel
 
-    @Column({ type: 'timestamptz', nullable: true })
+    @Column({ nullable: true })
     lastVetVisit: Date | null
 
     @Column(() => SizeEmbed)
