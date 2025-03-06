@@ -1,4 +1,13 @@
-import { Column, CreateDateColumn, Entity, OneToMany, OneToOne, PrimaryGeneratedColumn, VirtualColumn } from 'typeorm'
+import {
+    Column,
+    CreateDateColumn,
+    Entity,
+    ManyToOne,
+    OneToMany,
+    OneToOne,
+    PrimaryGeneratedColumn,
+    VirtualColumn,
+} from 'typeorm'
 import { CatHomePillowEntity } from './cat-home-pillow.entity'
 import { CatEntity } from './cat.entity'
 
@@ -10,11 +19,17 @@ export class CatHomeEntity {
     @Column()
     name: string
 
+    @Column({ nullable: true })
+    street: string | null
+
     @OneToOne(() => CatEntity, (cat) => cat.home)
     cat: CatEntity
 
     @OneToMany(() => CatHomePillowEntity, (pillow) => pillow.home)
     pillows: CatHomePillowEntity[]
+
+    @ManyToOne(() => CatHomePillowEntity, { nullable: true })
+    naptimePillow: CatHomePillowEntity | null
 
     @CreateDateColumn()
     createdAt: string

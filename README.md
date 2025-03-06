@@ -299,6 +299,22 @@ const paginateConfig: PaginateConfig<CatEntity> {
 
   /**
    * Required: false
+   * Type: 'leftJoinAndSelect' | 'innerJoinAndSelect'
+   * Default: 'leftJoinAndSelect'
+   * Description: Relationships will be joined with either LEFT JOIN or INNER JOIN, and their columns selected. Can be specified per column with `joinMethods` configuration.
+   */
+  defaultJoinMethod: 'leftJoinAndSelect'
+
+  /**
+   * Required: false
+   * Type: MappedColumns<T, JoinMethod>
+   * Default: false
+   * Description: Overrides the join method per relationship.
+   */
+  joinMethods: {age: 'innerJoinAndSelect', size: 'leftJoinAndSelect'}
+
+  /**
+   * Required: false
    * Type: boolean
    * Default: false
    * Description: Enable multi-word search behavior. When true, each word in the search query
