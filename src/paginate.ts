@@ -232,7 +232,7 @@ export async function paginate<T extends ObjectLiteral>(
             throw new ServiceUnavailableException(msg)
         }
 
-        if (config.cursorableColumns.length < 1) {
+        if (!config.cursorableColumns?.length) {
             formatMessage("Missing required 'cursorableColumns' config.")
         }
 
