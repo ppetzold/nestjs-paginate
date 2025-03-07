@@ -530,9 +530,23 @@ export async function paginate<T extends ObjectLiteral>(
     }
     const buildLink = (p: number | string, isCursor: boolean = false, isReversed: boolean = false): string => {
         if (isCursor) {
+            let adjustedOptions = options
+
+            if (isReversed) {
+                // Reverse ASC/DESC of first sortBy
+                const match = options.match(/sortBy=([^&]+)/) // Match 'sortBy=' value and extract the part after ':'
+
+                if (match) {
+                    const fullSortBy = match[0]
+                    const [column, order] = match[1].split(':')
+                    const newOrder = order === 'ASC' ? 'DESC' : 'ASC'
+                    adjustedOptions = options.replace(fullSortBy, `sortBy=${column}:${newOrder}`)
+                }
+            }
+
             return (
                 path +
-                options.replace(/^./, '?') +
+                adjustedOptions.replace(/^./, '?') +
                 `&${p ? 'cursor=' + p : ''}&cursorColumn=${cursorColumn}&cursorDirection=${
                     isReversed ? (cursorDirection === 'before' ? 'after' : 'before') : cursorDirection
                 }`
