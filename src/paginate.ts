@@ -54,7 +54,6 @@ export class Paginated<T> {
     links: {
         first?: string
         previous?: string
-        before?: string // for cursor pagination
         current: string
         next?: string
         last?: string
@@ -568,7 +567,7 @@ export async function paginate<T extends ObjectLiteral>(
             path !== null
                 ? config.paginationType === PaginationType.CURSOR
                     ? {
-                          before: query.cursor && items.length ? buildLink(firstCursor, true, true) : undefined, // If no data exists, firstCursor is missing, so "before" link is undefined.
+                          previous: query.cursor && items.length ? buildLink(firstCursor, true, true) : undefined, // If no data exists, firstCursor is missing, so "previous" link is undefined.
                           current: query.cursor ? buildLink(query.cursor, true) : buildLink('', true),
                           next: lastCursor ? buildLink(lastCursor, true) : undefined,
                       }

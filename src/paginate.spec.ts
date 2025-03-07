@@ -3405,7 +3405,7 @@ describe('paginate', () => {
             expect(result.meta.firstCursor).toBe(cats[0].id.toString())
             expect(result.meta.lastCursor).toBe(cats[1].id.toString())
             expect(result.meta.itemsPerPage).toBe(2)
-            expect(result.links.before).toBeUndefined()
+            expect(result.links.previous).toBeUndefined()
             expect(result.links.next).toBe(
                 `?limit=2&sortBy=id:ASC&cursor=${cats[1].id}&cursorColumn=id&cursorDirection=after`
             )
@@ -3430,7 +3430,7 @@ describe('paginate', () => {
             expect(result.data).toStrictEqual(cats.slice(2, 4))
             expect(result.meta.firstCursor).toBe(cats[2].id.toString())
             expect(result.meta.lastCursor).toBe(cats[3].id.toString())
-            expect(result.links.before).toBe(
+            expect(result.links.previous).toBe(
                 `?limit=2&sortBy=id:ASC&cursor=${cats[2].id}&cursorColumn=id&cursorDirection=before`
             )
             expect(result.links.next).toBe(
@@ -3457,7 +3457,7 @@ describe('paginate', () => {
             expect(result.data).toStrictEqual(cats.slice(1, 3).reverse())
             expect(result.meta.firstCursor).toBe(cats[2].id.toString())
             expect(result.meta.lastCursor).toBe(cats[1].id.toString())
-            expect(result.links.before).toBe(
+            expect(result.links.previous).toBe(
                 `?limit=2&sortBy=id:DESC&cursor=${cats[2].id}&cursorColumn=id&cursorDirection=after`
             )
             expect(result.links.next).toBe(
@@ -3484,7 +3484,7 @@ describe('paginate', () => {
             expect(result.data).toStrictEqual([cats[0]]) // in case age > 5 (only 6)
             expect(result.meta.firstCursor).toBe(cats[0].age.toString())
             expect(result.meta.lastCursor).toBe(cats[0].age.toString())
-            expect(result.links.before).toBe(
+            expect(result.links.previous).toBe(
                 `?limit=2&sortBy=age:ASC&cursor=${cats[0].age}&cursorColumn=age&cursorDirection=before`
             )
             expect(result.links.next).toBe(
@@ -3512,7 +3512,7 @@ describe('paginate', () => {
             expect(result.meta.firstCursor).toBeUndefined()
             expect(result.meta.lastCursor).toBeUndefined()
             expect(result.meta.itemsPerPage).toBe(0)
-            expect(result.links.before).toBeUndefined()
+            expect(result.links.previous).toBeUndefined()
             expect(result.links.next).toBeUndefined()
         })
 
@@ -3542,7 +3542,7 @@ describe('paginate', () => {
             expect(result.data).toStrictEqual(whiteCats.slice(0, 2))
             expect(result.meta.firstCursor).toBe(whiteCats[0].id.toString())
             expect(result.meta.lastCursor).toBe(whiteCats[1].id.toString())
-            expect(result.links.before).toBeUndefined()
+            expect(result.links.previous).toBeUndefined()
             expect(result.links.next).toBe(
                 `?limit=2&sortBy=id:ASC&filter.color=white&cursor=${whiteCats[1].id}&cursorColumn=id&cursorDirection=after`
             )
@@ -3606,7 +3606,7 @@ describe('paginate', () => {
             expect(result.data).toStrictEqual([cats[2]])
             expect(result.meta.firstCursor).toBe('2022-12-21T10:00:00.000Z')
             expect(result.meta.lastCursor).toBe('2022-12-21T10:00:00.000Z')
-            expect(result.links.before).toBe(
+            expect(result.links.previous).toBe(
                 `?limit=2&sortBy=lastVetVisit:ASC&cursor=2022-12-21T10:00:00.000Z&cursorColumn=lastVetVisit&cursorDirection=before`
             )
             expect(result.links.next).toBe(
@@ -3634,7 +3634,7 @@ describe('paginate', () => {
             expect(result.data).toStrictEqual([cats[1], cats[0]]) // Reversed order due to 'before' direction
             expect(result.meta.firstCursor).toBe('2022-12-20T10:00:00.000Z')
             expect(result.meta.lastCursor).toBe('2022-12-19T10:00:00.000Z')
-            expect(result.links.before).toBe(
+            expect(result.links.previous).toBe(
                 `?limit=2&sortBy=lastVetVisit:DESC&cursor=2022-12-20T10:00:00.000Z&cursorColumn=lastVetVisit&cursorDirection=after`
             )
             expect(result.links.next).toBe(
