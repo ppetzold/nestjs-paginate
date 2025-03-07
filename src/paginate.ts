@@ -17,6 +17,7 @@ import {
     includesAllPrimaryKeyColumns,
     isEntityKey,
     isFindOperator,
+    isISODate,
     isRepository,
     JoinMethod,
     MappedColumns,
@@ -181,6 +182,13 @@ function flattenWhereAndTransform<T>(
     })
 }
 
+function fixCursorValue(value: string): any {
+    if (isISODate(value)) {
+        return new Date(value)
+    }
+    return value
+}
+
 export async function paginate<T extends ObjectLiteral>(
     query: PaginateQuery,
     repo: Repository<T> | SelectQueryBuilder<T>,
@@ -261,7 +269,8 @@ export async function paginate<T extends ObjectLiteral>(
                 const columnProperties = getPropertiesByColumnName(query.cursorColumn)
                 const alias = fixColumnAlias(columnProperties, queryBuilder.alias)
                 const operator = query.cursorDirection === 'before' ? '<' : '>'
-                queryBuilder.andWhere(`${alias} ${operator} :cursor`, { cursor: query.cursor })
+                const cursorValue = fixCursorValue(query.cursor)
+                queryBuilder.andWhere(`${alias} ${operator} :cursor`, { cursor: cursorValue })
             }
         }
     }
