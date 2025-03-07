@@ -17,6 +17,7 @@ Pagination and filtering helper method for TypeORM repositories or query builder
 - Filter using operators (`$eq`, `$not`, `$null`, `$in`, `$gt`, `$gte`, `$lt`, `$lte`, `$btw`, `$ilike`, `$sw`, `$contains`)
 - Include relations and nested relations
 - Virtual column support
+- Cursor-based pagination
 
 ## Installation
 
@@ -89,6 +90,61 @@ http://localhost:3000/cats?limit=5&page=2&sortBy=color:DESC&search=i&filter.age=
     "current": "http://localhost:3000/cats?limit=5&page=2&sortBy=color:DESC&search=i&filter.age=$gte:3",
     "next": "http://localhost:3000/cats?limit=5&page=3&sortBy=color:DESC&search=i&filter.age=$gte:3",
     "last": "http://localhost:3000/cats?limit=5&page=3&sortBy=color:DESC&search=i&filter.age=$gte:3"
+  }
+}
+```
+
+### Example (Cursor-based Pagination)
+
+The following code exposes a route using cursor-based pagination:
+
+#### Endpoint
+
+```url
+http://localhost:3000/cats?limit=5&cursor=2022-12-20T10:00:00.000Z&cursorColumn=lastVetVisit&cursorDirection=after
+```
+
+#### Result
+
+```json
+{
+  "data": [
+    {
+      "id": 3,
+      "name": "Shadow",
+      "lastVetVisit": "2022-12-21T10:00:00.000Z"
+    },
+    {
+      "id": 4,
+      "name": "Luna",
+      "lastVetVisit": "2022-12-22T10:00:00.000Z"
+    },
+    {
+      "id": 5,
+      "name": "Pepper",
+      "lastVetVisit": "2022-12-23T10:00:00.000Z"
+    },
+    {
+      "id": 6,
+      "name": "Simba",
+      "lastVetVisit": "2022-12-24T10:00:00.000Z"
+    },
+    {
+      "id": 7,
+      "name": "Tiger",
+      "lastVetVisit": "2022-12-25T10:00:00.000Z"
+    }
+  ],
+  "meta": {
+    "itemsPerPage": 5,
+    "cursor": "2022-12-20T10:00:00.000Z",
+    "firstCursor": "2022-12-21T10:00:00.000Z",
+    "lastCursor": "2022-12-25T10:00:00.000Z"
+  },
+  "links": {
+    "previous": "http://localhost:3000/cats?limit=5&sortBy=lastVetVisit:ASC&cursor=2022-12-21T10:00:00.000Z&cursorColumn=lastVetVisit&cursorDirection=before",
+    "current": "http://localhost:3000/cats?limit=5&sortBy=lastVetVisit:ASC&cursor=2022-12-20T10:00:00.000Z&cursorColumn=lastVetVisit&cursorDirection=after",
+    "next": "http://localhost:3000/cats?limit=5&sortBy=lastVetVisit:ASC&cursor=2022-12-25T10:00:00.000Z&cursorColumn=lastVetVisit&cursorDirection=after"
   }
 }
 ```
@@ -234,6 +290,17 @@ const paginateConfig: PaginateConfig<CatEntity> {
 
   /**
    * Required: false
+   * Type: (keyof CatEntity)[]
+   * Default: None
+   * Description: Columns that can be used as cursors for cursor-based pagination.
+   * Typically used with date or unique & sequential columns like 'lastVetVisit' or 'id'.
+   * If `cursorColumn` is not provided in the query, the first column in this array is used as the default.
+   * If `cursorDirection` is not provided in the query, 'before' is used as the default direction.
+   */
+  cursorableColumns: ['lastVetVisit'],
+
+  /**
+   * Required: false
    * Type: RelationColumn<CatEntity>
    * Description: Indicates what relations of entity should be loaded.
    */
@@ -259,8 +326,10 @@ const paginateConfig: PaginateConfig<CatEntity> {
   /**
    * Required: false
    * Type: string
-   * Description: Allow user to choose between limit/offset and take/skip.
+   * Description: Allow user to choose between limit/offset and take/skip, or cursor-based pagination.
    * Default: PaginationType.TAKE_AND_SKIP
+   * Options: PaginationType.LIMIT_AND_OFFSET, PaginationType.TAKE_AND_SKIP, PaginationType.CURSOR
+   * Note: CURSOR requires `cursorableColumns` to be defined.
    *
    * However, using limit/offset can cause problems with relations.
    */
