@@ -218,6 +218,8 @@ export async function paginate<T extends ObjectLiteral>(
     const searchBy: Column<T>[] = []
 
     let [items, totalItems]: [T[], number] = [[], 0]
+    let cursorColumn: string
+    let cursorDirection: 'before' | 'after'
 
     const queryBuilder = isRepository(repo) ? repo.createQueryBuilder('__root') : repo
 
@@ -237,11 +239,8 @@ export async function paginate<T extends ObjectLiteral>(
             formatMessage("Missing required 'cursorableColumns' config.")
         }
 
-        const { cursorColumn, cursorDirection } = query
-
-        if (!cursorColumn || !cursorDirection) {
-            formatMessage('Cursor column and direction must be provided for cursor pagination.')
-        }
+        cursorColumn = query.cursorColumn || config.cursorableColumns[0]
+        cursorDirection = query.cursorDirection || 'before'
 
         if (!isEntityKey(config.cursorableColumns, cursorColumn)) {
             formatMessage(
@@ -265,9 +264,9 @@ export async function paginate<T extends ObjectLiteral>(
 
         if (config.paginationType === PaginationType.CURSOR && query.cursor) {
             {
-                const columnProperties = getPropertiesByColumnName(query.cursorColumn)
+                const columnProperties = getPropertiesByColumnName(cursorColumn)
                 const alias = fixColumnAlias(columnProperties, queryBuilder.alias)
-                const operator = query.cursorDirection === 'before' ? '<' : '>'
+                const operator = cursorDirection === 'before' ? '<' : '>'
                 const cursorValue = fixCursorValue(query.cursor)
                 queryBuilder.andWhere(`${alias} ${operator} :cursor`, { cursor: cursorValue })
             }
@@ -315,7 +314,7 @@ export async function paginate<T extends ObjectLiteral>(
 
     // If paginationType is cursor, add the cursor column and direction before adding other query.sortBy.
     if (config.paginationType === PaginationType.CURSOR) {
-        sortBy.push([query.cursorColumn, query.cursorDirection === 'before' ? 'DESC' : 'ASC'] as Order<T>)
+        sortBy.push([cursorColumn, cursorDirection === 'before' ? 'DESC' : 'ASC'] as Order<T>)
     }
 
     if (query.sortBy) {
@@ -489,8 +488,8 @@ export async function paginate<T extends ObjectLiteral>(
             return String(value)
         }
 
-        firstCursor = cursorValueToString(items[0][query.cursorColumn])
-        lastCursor = cursorValueToString(items[items.length - 1][query.cursorColumn])
+        firstCursor = cursorValueToString(items[0][cursorColumn])
+        lastCursor = cursorValueToString(items[items.length - 1][cursorColumn])
     }
 
     const sortByQuery = sortBy.map((order) => `&sortBy=${order.join(':')}`).join('')
@@ -534,8 +533,8 @@ export async function paginate<T extends ObjectLiteral>(
             return (
                 path +
                 options.replace(/^./, '?') +
-                `&${p ? 'cursor=' + p : ''}&cursorColumn=${query.cursorColumn}&cursorDirection=${
-                    isReversed ? (query.cursorDirection === 'before' ? 'after' : 'before') : query.cursorDirection
+                `&${p ? 'cursor=' + p : ''}&cursorColumn=${cursorColumn}&cursorDirection=${
+                    isReversed ? (cursorDirection === 'before' ? 'after' : 'before') : cursorDirection
                 }`
             )
         }

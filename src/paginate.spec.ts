@@ -3586,6 +3586,34 @@ describe('paginate', () => {
             )
         })
 
+        it('should use default cursorColumn and cursorDirection when not provided', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id', 'name'],
+                cursorableColumns: ['id', 'lastVetVisit'],
+                paginationType: PaginationType.CURSOR,
+                defaultLimit: 2,
+            }
+            const query: PaginateQuery = {
+                path: '',
+                cursor: cats[2].id.toString(), // id=3
+                // cursorColumn and cursorDirection are intentionally omitted
+            }
+
+            const result = await paginate<CatEntity>(query, catRepo, config)
+
+            // cursorColumn is 'id' which is the first element of cursorableColumns, cursorDirection is 'before' which is the default setting
+            expect(result.data).toStrictEqual(cats.slice(0, 2).reverse()) // Reverse data order with id < 3 (id=2, id=1)
+            expect(result.meta.firstCursor).toBe(cats[1].id.toString()) // id=2
+            expect(result.meta.lastCursor).toBe(cats[0].id.toString()) // id=1
+            expect(result.meta.itemsPerPage).toBe(2)
+            expect(result.links.previous).toBe(
+                `?limit=2&sortBy=id:DESC&cursor=${cats[1].id}&cursorColumn=id&cursorDirection=after`
+            )
+            expect(result.links.next).toBe(
+                `?limit=2&sortBy=id:DESC&cursor=${cats[0].id}&cursorColumn=id&cursorDirection=before`
+            )
+        })
+
         it('should handle date type cursor column', async () => {
             const config: PaginateConfig<CatEntity> = {
                 sortableColumns: ['id'],
