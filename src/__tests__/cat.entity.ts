@@ -11,8 +11,8 @@ import {
     OneToOne,
     PrimaryGeneratedColumn,
 } from 'typeorm'
-import { CatToyEntity } from './cat-toy.entity'
 import { CatHomeEntity } from './cat-home.entity'
+import { CatToyEntity } from './cat-toy.entity'
 import { SizeEmbed } from './size.embed'
 
 export enum CutenessLevel {

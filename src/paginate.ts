@@ -17,6 +17,7 @@ import {
     includesAllPrimaryKeyColumns,
     isEntityKey,
     isFindOperator,
+    isISODate,
     isRepository,
     JoinMethod,
     MappedColumns,
@@ -36,9 +37,9 @@ export class Paginated<T> {
     data: T[]
     meta: {
         itemsPerPage: number
-        totalItems: number
-        currentPage: number
-        totalPages: number
+        totalItems?: number
+        currentPage?: number
+        totalPages?: number
         sortBy: SortBy<T>
         searchBy: Column<T>[]
         search: string
@@ -46,6 +47,9 @@ export class Paginated<T> {
         filter?: {
             [column: string]: string | string[]
         }
+        cursor?: string // current cursor
+        firstCursor?: string // the first of the boundary values
+        lastCursor?: string // the last of the boundary values
     }
     links: {
         first?: string
@@ -59,6 +63,7 @@ export class Paginated<T> {
 export enum PaginationType {
     LIMIT_AND_OFFSET = 'limit',
     TAKE_AND_SKIP = 'take',
+    CURSOR = 'cursor',
 }
 
 // We use (string & {}) to maintain autocomplete while allowing any string
@@ -85,6 +90,7 @@ export interface PaginateConfig<T> {
     multiWordSearch?: boolean
     defaultJoinMethod?: JoinMethod
     joinMethods?: Partial<MappedColumns<T, JoinMethod>>
+    cursorableColumns?: Column<T>[]
 }
 
 export enum PaginationLimit {
@@ -175,6 +181,13 @@ function flattenWhereAndTransform<T>(
     })
 }
 
+function fixCursorValue(value: string): any {
+    if (isISODate(value)) {
+        return new Date(value)
+    }
+    return value
+}
+
 export async function paginate<T extends ObjectLiteral>(
     query: PaginateQuery,
     repo: Repository<T> | SelectQueryBuilder<T>,
@@ -205,6 +218,8 @@ export async function paginate<T extends ObjectLiteral>(
     const searchBy: Column<T>[] = []
 
     let [items, totalItems]: [T[], number] = [[], 0]
+    let cursorColumn: string
+    let cursorDirection: 'before' | 'after'
 
     const queryBuilder = isRepository(repo) ? repo.createQueryBuilder('__root') : repo
 
@@ -214,13 +229,47 @@ export async function paginate<T extends ObjectLiteral>(
         }
     }
 
+    if (config.paginationType === PaginationType.CURSOR) {
+        const formatMessage = (msg: string) => {
+            logger.debug(msg)
+            throw new ServiceUnavailableException(msg)
+        }
+
+        if (!config.cursorableColumns?.length) {
+            formatMessage("Missing required 'cursorableColumns' config.")
+        }
+
+        cursorColumn = query.cursorColumn || config.cursorableColumns[0]
+        cursorDirection = query.cursorDirection || 'before'
+
+        if (!isEntityKey(config.cursorableColumns, cursorColumn)) {
+            formatMessage(
+                `Invalid cursorColumn '${cursorColumn}'. It must be one of: ${config.cursorableColumns.join(', ')}.`
+            )
+        }
+
+        if (!['before', 'after'].includes(cursorDirection)) {
+            formatMessage(`Invalid cursorDirection '${cursorDirection}'. It must be 'before' or 'after'.`)
+        }
+    }
+
     if (isPaginated) {
-        // Allow user to choose between limit/offset and take/skip.
+        // Allow user to choose between limit/offset and take/skip, or cursor-based pagination.
         // However, using limit/offset can cause problems when joining one-to-many etc.
         if (config.paginationType === PaginationType.LIMIT_AND_OFFSET) {
             queryBuilder.limit(limit).offset((page - 1) * limit)
         } else {
             queryBuilder.take(limit).skip((page - 1) * limit)
+        }
+
+        if (config.paginationType === PaginationType.CURSOR && query.cursor) {
+            {
+                const columnProperties = getPropertiesByColumnName(cursorColumn)
+                const alias = fixColumnAlias(columnProperties, queryBuilder.alias)
+                const operator = cursorDirection === 'before' ? '<' : '>'
+                const cursorValue = fixCursorValue(query.cursor)
+                queryBuilder.andWhere(`${alias} ${operator} :cursor`, { cursor: cursorValue })
+            }
         }
     }
 
@@ -261,6 +310,11 @@ export async function paginate<T extends ObjectLiteral>(
         const message = "Missing required 'sortableColumns' config."
         logger.debug(message)
         throw new ServiceUnavailableException(message)
+    }
+
+    // If paginationType is cursor, add the cursor column and direction before adding other query.sortBy.
+    if (config.paginationType === PaginationType.CURSOR) {
+        sortBy.push([cursorColumn, cursorDirection === 'before' ? 'DESC' : 'ASC'] as Order<T>)
     }
 
     if (query.sortBy) {
@@ -414,10 +468,28 @@ export async function paginate<T extends ObjectLiteral>(
 
     if (query.limit === PaginationLimit.COUNTER_ONLY) {
         totalItems = await queryBuilder.getCount()
-    } else if (isPaginated) {
+    } else if (isPaginated && config.paginationType !== PaginationType.CURSOR) {
         ;[items, totalItems] = await queryBuilder.getManyAndCount()
     } else {
         items = await queryBuilder.getMany()
+    }
+
+    let firstCursor: string | undefined
+    let lastCursor: string | undefined
+
+    if (config.paginationType === PaginationType.CURSOR && items.length > 0) {
+        const cursorValueToString = (value: any): string | undefined => {
+            if (value === null || value === undefined) {
+                return undefined
+            }
+            if (value instanceof Date) {
+                return value.toISOString()
+            }
+            return String(value)
+        }
+
+        firstCursor = cursorValueToString(items[0][cursorColumn])
+        lastCursor = cursorValueToString(items[items.length - 1][cursorColumn])
     }
 
     const sortByQuery = sortBy.map((order) => `&sortBy=${order.join(':')}`).join('')
@@ -456,33 +528,69 @@ export async function paginate<T extends ObjectLiteral>(
             path = queryOrigin + queryPath
         }
     }
-    const buildLink = (p: number): string => path + '?page=' + p + options
+    const buildLink = (p: number | string, isCursor: boolean = false, isReversed: boolean = false): string => {
+        if (isCursor) {
+            let adjustedOptions = options
 
+            if (isReversed) {
+                // Reverse ASC/DESC of first sortBy
+                const match = options.match(/sortBy=([^&]+)/) // Match 'sortBy=' value and extract the part after ':'
+
+                if (match) {
+                    const fullSortBy = match[0]
+                    const [column, order] = match[1].split(':')
+                    const newOrder = order === 'ASC' ? 'DESC' : 'ASC'
+                    adjustedOptions = options.replace(fullSortBy, `sortBy=${column}:${newOrder}`)
+                }
+            }
+
+            return (
+                path +
+                adjustedOptions.replace(/^./, '?') +
+                `&${p ? 'cursor=' + p : ''}&cursorColumn=${cursorColumn}&cursorDirection=${
+                    isReversed ? (cursorDirection === 'before' ? 'after' : 'before') : cursorDirection
+                }`
+            )
+        }
+        return path + '?page=' + p + options
+    }
+
+    const itemsPerPage = limit === PaginationLimit.COUNTER_ONLY ? totalItems : isPaginated ? limit : items.length
+    const totalItemsForMeta = limit === PaginationLimit.COUNTER_ONLY || isPaginated ? totalItems : items.length
     const totalPages = isPaginated ? Math.ceil(totalItems / limit) : 1
 
     const results: Paginated<T> = {
         data: items,
         meta: {
-            itemsPerPage: limit === PaginationLimit.COUNTER_ONLY ? totalItems : isPaginated ? limit : items.length,
-            totalItems: limit === PaginationLimit.COUNTER_ONLY || isPaginated ? totalItems : items.length,
-            currentPage: page,
-            totalPages,
+            itemsPerPage: config.paginationType === PaginationType.CURSOR ? items.length : itemsPerPage,
+            totalItems: config.paginationType === PaginationType.CURSOR ? undefined : totalItemsForMeta,
+            currentPage: config.paginationType === PaginationType.CURSOR ? undefined : page,
+            totalPages: config.paginationType === PaginationType.CURSOR ? undefined : totalPages,
             sortBy,
             search: query.search,
             searchBy: query.search ? searchBy : undefined,
             select: isQuerySelected ? selectParams : undefined,
             filter: query.filter,
+            cursor: config.paginationType === PaginationType.CURSOR ? query.cursor : undefined,
+            firstCursor: config.paginationType === PaginationType.CURSOR ? firstCursor : undefined,
+            lastCursor: config.paginationType === PaginationType.CURSOR ? lastCursor : undefined,
         },
         // If there is no `path`, don't build links.
         links:
             path !== null
-                ? {
-                      first: page == 1 ? undefined : buildLink(1),
-                      previous: page - 1 < 1 ? undefined : buildLink(page - 1),
-                      current: buildLink(page),
-                      next: page + 1 > totalPages ? undefined : buildLink(page + 1),
-                      last: page == totalPages || !totalItems ? undefined : buildLink(totalPages),
-                  }
+                ? config.paginationType === PaginationType.CURSOR
+                    ? {
+                          previous: query.cursor && items.length ? buildLink(firstCursor, true, true) : undefined, // If no data exists, firstCursor is missing, so "previous" link is undefined.
+                          current: query.cursor ? buildLink(query.cursor, true) : buildLink('', true),
+                          next: lastCursor ? buildLink(lastCursor, true) : undefined,
+                      }
+                    : {
+                          first: page == 1 ? undefined : buildLink(1),
+                          previous: page - 1 < 1 ? undefined : buildLink(page - 1),
+                          current: buildLink(page),
+                          next: page + 1 > totalPages ? undefined : buildLink(page + 1),
+                          last: page == totalPages || !totalItems ? undefined : buildLink(totalPages),
+                      }
                 : ({} as Paginated<T>['links']),
     }
 

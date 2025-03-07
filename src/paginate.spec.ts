@@ -1,9 +1,10 @@
-import { HttpException } from '@nestjs/common'
+import { HttpException, Logger } from '@nestjs/common'
 import { clone } from 'lodash'
 import * as process from 'process'
 import { DataSource, In, Like, Repository, TypeORMError } from 'typeorm'
 import { BaseDataSourceOptions } from 'typeorm/data-source/BaseDataSourceOptions'
 import { CatHairEntity } from './__tests__/cat-hair.entity'
+import { CatHomePillowBrandEntity } from './__tests__/cat-home-pillow-brand.entity'
 import { CatHomePillowEntity } from './__tests__/cat-home-pillow.entity'
 import { CatHomeEntity } from './__tests__/cat-home.entity'
 import { CatToyEntity } from './__tests__/cat-toy.entity'
@@ -20,8 +21,16 @@ import {
     OperatorSymbolToFunction,
     parseFilterToken,
 } from './filter'
-import { paginate, PaginateConfig, Paginated, PaginationLimit } from './paginate'
-import { CatHomePillowBrandEntity } from './__tests__/cat-home-pillow-brand.entity'
+import { paginate, PaginateConfig, Paginated, PaginationLimit, PaginationType } from './paginate'
+
+// Disable debug logs during tests
+beforeAll(() => {
+    jest.spyOn(Logger.prototype, 'debug').mockImplementation(() => {})
+})
+
+afterAll(() => {
+    jest.restoreAllMocks() // Restore default logger behavior
+})
 
 const isoStringToDate = (isoString) => new Date(isoString)
 
@@ -3375,4 +3384,290 @@ describe('paginate', () => {
             })
         })
     }
+
+    describe('cursor pagination', () => {
+        it('should paginate using cursor with cursorColumn (id)', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id', 'name'],
+                cursorableColumns: ['id'],
+                paginationType: PaginationType.CURSOR,
+                defaultLimit: 2,
+            }
+            const query: PaginateQuery = {
+                path: '',
+                cursorColumn: 'id',
+                cursorDirection: 'after',
+            }
+
+            const result = await paginate<CatEntity>(query, catRepo, config)
+
+            expect(result.data).toStrictEqual(cats.slice(0, 2))
+            expect(result.meta.firstCursor).toBe(cats[0].id.toString())
+            expect(result.meta.lastCursor).toBe(cats[1].id.toString())
+            expect(result.meta.itemsPerPage).toBe(2)
+            expect(result.links.previous).toBeUndefined()
+            expect(result.links.next).toBe(
+                `?limit=2&sortBy=id:ASC&cursor=${cats[1].id}&cursorColumn=id&cursorDirection=after`
+            )
+        })
+
+        it('should paginate using cursor with specific cursor value', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id', 'name'],
+                cursorableColumns: ['id'],
+                paginationType: PaginationType.CURSOR,
+                defaultLimit: 2,
+            }
+            const query: PaginateQuery = {
+                path: '',
+                cursor: cats[1].id.toString(),
+                cursorColumn: 'id',
+                cursorDirection: 'after',
+            }
+
+            const result = await paginate<CatEntity>(query, catRepo, config)
+
+            expect(result.data).toStrictEqual(cats.slice(2, 4))
+            expect(result.meta.firstCursor).toBe(cats[2].id.toString())
+            expect(result.meta.lastCursor).toBe(cats[3].id.toString())
+            expect(result.links.previous).toBe(
+                `?limit=2&sortBy=id:DESC&cursor=${cats[2].id}&cursorColumn=id&cursorDirection=before`
+            )
+            expect(result.links.next).toBe(
+                `?limit=2&sortBy=id:ASC&cursor=${cats[3].id}&cursorColumn=id&cursorDirection=after`
+            )
+        })
+
+        it('should paginate using cursor with direction "before"', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id', 'name'],
+                cursorableColumns: ['id'],
+                paginationType: PaginationType.CURSOR,
+                defaultLimit: 2,
+            }
+            const query: PaginateQuery = {
+                path: '',
+                cursor: cats[3].id.toString(),
+                cursorColumn: 'id',
+                cursorDirection: 'before',
+            }
+
+            const result = await paginate<CatEntity>(query, catRepo, config)
+
+            expect(result.data).toStrictEqual(cats.slice(1, 3).reverse())
+            expect(result.meta.firstCursor).toBe(cats[2].id.toString())
+            expect(result.meta.lastCursor).toBe(cats[1].id.toString())
+            expect(result.links.previous).toBe(
+                `?limit=2&sortBy=id:ASC&cursor=${cats[2].id}&cursorColumn=id&cursorDirection=after`
+            )
+            expect(result.links.next).toBe(
+                `?limit=2&sortBy=id:DESC&cursor=${cats[1].id}&cursorColumn=id&cursorDirection=before`
+            )
+        })
+
+        it('should paginate using dynamic cursorColumn from query', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id', 'name', 'age'],
+                cursorableColumns: ['id', 'age'],
+                paginationType: PaginationType.CURSOR,
+                defaultLimit: 2,
+            }
+            const query: PaginateQuery = {
+                path: '',
+                cursor: '5',
+                cursorColumn: 'age',
+                cursorDirection: 'after',
+            }
+
+            const result = await paginate<CatEntity>(query, catRepo, config)
+
+            expect(result.data).toStrictEqual([cats[0]]) // in case age > 5 (only 6)
+            expect(result.meta.firstCursor).toBe(cats[0].age.toString())
+            expect(result.meta.lastCursor).toBe(cats[0].age.toString())
+            expect(result.links.previous).toBe(
+                `?limit=2&sortBy=age:DESC&cursor=${cats[0].age}&cursorColumn=age&cursorDirection=before`
+            )
+            expect(result.links.next).toBe(
+                `?limit=2&sortBy=age:ASC&cursor=${cats[0].age}&cursorColumn=age&cursorDirection=after`
+            )
+        })
+
+        it('should handle end of data with cursor pagination', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id', 'name'],
+                cursorableColumns: ['id'],
+                paginationType: PaginationType.CURSOR,
+                defaultLimit: 10,
+            }
+            const query: PaginateQuery = {
+                path: '',
+                cursor: cats[4].id.toString(),
+                cursorColumn: 'id',
+                cursorDirection: 'after',
+            }
+
+            const result = await paginate<CatEntity>(query, catRepo, config)
+
+            expect(result.data).toStrictEqual([])
+            expect(result.meta.firstCursor).toBeUndefined()
+            expect(result.meta.lastCursor).toBeUndefined()
+            expect(result.meta.itemsPerPage).toBe(0)
+            expect(result.links.previous).toBeUndefined()
+            expect(result.links.next).toBeUndefined()
+        })
+
+        it('should work with filter and cursor pagination', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id', 'name'],
+                cursorableColumns: ['id'],
+                paginationType: PaginationType.CURSOR,
+                defaultLimit: 2,
+                filterableColumns: {
+                    color: [FilterOperator.EQ],
+                },
+            }
+            const query: PaginateQuery = {
+                path: '',
+                cursor: undefined,
+                cursorColumn: 'id',
+                cursorDirection: 'after',
+                filter: {
+                    color: 'white',
+                },
+            }
+
+            const result = await paginate<CatEntity>(query, catRepo, config)
+
+            const whiteCats = cats.filter((cat) => cat.color === 'white')
+            expect(result.data).toStrictEqual(whiteCats.slice(0, 2))
+            expect(result.meta.firstCursor).toBe(whiteCats[0].id.toString())
+            expect(result.meta.lastCursor).toBe(whiteCats[1].id.toString())
+            expect(result.links.previous).toBeUndefined()
+            expect(result.links.next).toBe(
+                `?limit=2&sortBy=id:ASC&filter.color=white&cursor=${whiteCats[1].id}&cursorColumn=id&cursorDirection=after`
+            )
+        })
+
+        it('should throw error if cursorColumn is not in cursorableColumns', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id', 'name'],
+                cursorableColumns: ['id'],
+                paginationType: PaginationType.CURSOR,
+                defaultLimit: 2,
+            }
+            const query: PaginateQuery = {
+                path: '',
+                cursor: '5',
+                cursorColumn: 'age',
+                cursorDirection: 'after',
+            }
+
+            await expect(paginate<CatEntity>(query, catRepo, config)).rejects.toThrow(
+                "Invalid cursorColumn 'age'. It must be one of: id"
+            )
+        })
+
+        it('should throw error if cursorDirection is invalid', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id', 'name'],
+                cursorableColumns: ['id'],
+                paginationType: PaginationType.CURSOR,
+                defaultLimit: 2,
+            }
+            const query: PaginateQuery = {
+                path: '',
+                cursor: '1',
+                cursorColumn: 'id',
+                cursorDirection: 'invalid' as any,
+            }
+
+            await expect(paginate<CatEntity>(query, catRepo, config)).rejects.toThrow(
+                "Invalid cursorDirection 'invalid'. It must be 'before' or 'after'"
+            )
+        })
+
+        it('should use default cursorColumn and cursorDirection when not provided', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id', 'name'],
+                cursorableColumns: ['id', 'lastVetVisit'],
+                paginationType: PaginationType.CURSOR,
+                defaultLimit: 2,
+            }
+            const query: PaginateQuery = {
+                path: '',
+                cursor: cats[2].id.toString(), // id=3
+                // cursorColumn and cursorDirection are intentionally omitted
+            }
+
+            const result = await paginate<CatEntity>(query, catRepo, config)
+
+            // cursorColumn is 'id' which is the first element of cursorableColumns, cursorDirection is 'before' which is the default setting
+            expect(result.data).toStrictEqual(cats.slice(0, 2).reverse()) // Reverse data order with id < 3 (id=2, id=1)
+            expect(result.meta.firstCursor).toBe(cats[1].id.toString()) // id=2
+            expect(result.meta.lastCursor).toBe(cats[0].id.toString()) // id=1
+            expect(result.meta.itemsPerPage).toBe(2)
+            expect(result.links.previous).toBe(
+                `?limit=2&sortBy=id:ASC&cursor=${cats[1].id}&cursorColumn=id&cursorDirection=after`
+            )
+            expect(result.links.next).toBe(
+                `?limit=2&sortBy=id:DESC&cursor=${cats[0].id}&cursorColumn=id&cursorDirection=before`
+            )
+        })
+
+        it('should handle date type cursor column', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id'],
+                cursorableColumns: ['lastVetVisit'],
+                paginationType: PaginationType.CURSOR,
+                defaultLimit: 2,
+            }
+            const query: PaginateQuery = {
+                path: '',
+                cursor: '2022-12-20T10:00:00.000Z', // Garfield's vet visit
+                cursorColumn: 'lastVetVisit',
+                cursorDirection: 'after',
+            }
+
+            const result = await paginate<CatEntity>(query, catRepo, config)
+
+            // Should get Shadow's record (visited after Garfield)
+            expect(result.data).toStrictEqual([cats[2]])
+            expect(result.meta.firstCursor).toBe('2022-12-21T10:00:00.000Z')
+            expect(result.meta.lastCursor).toBe('2022-12-21T10:00:00.000Z')
+            expect(result.links.previous).toBe(
+                `?limit=2&sortBy=lastVetVisit:DESC&cursor=2022-12-21T10:00:00.000Z&cursorColumn=lastVetVisit&cursorDirection=before`
+            )
+            expect(result.links.next).toBe(
+                `?limit=2&sortBy=lastVetVisit:ASC&cursor=2022-12-21T10:00:00.000Z&cursorColumn=lastVetVisit&cursorDirection=after`
+            )
+        })
+
+        it('should handle date type cursor column with before direction', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id'],
+                cursorableColumns: ['lastVetVisit'],
+                paginationType: PaginationType.CURSOR,
+                defaultLimit: 2,
+            }
+            const query: PaginateQuery = {
+                path: '',
+                cursor: '2022-12-21T10:00:00.000Z', // Shadow's vet visit
+                cursorColumn: 'lastVetVisit',
+                cursorDirection: 'before',
+            }
+
+            const result = await paginate<CatEntity>(query, catRepo, config)
+
+            // Should get Milo and Garfield's records (visited before Shadow)
+            expect(result.data).toStrictEqual([cats[1], cats[0]]) // Reversed order due to 'before' direction
+            expect(result.meta.firstCursor).toBe('2022-12-20T10:00:00.000Z')
+            expect(result.meta.lastCursor).toBe('2022-12-19T10:00:00.000Z')
+            expect(result.links.previous).toBe(
+                `?limit=2&sortBy=lastVetVisit:ASC&cursor=2022-12-20T10:00:00.000Z&cursorColumn=lastVetVisit&cursorDirection=after`
+            )
+            expect(result.links.next).toBe(
+                `?limit=2&sortBy=lastVetVisit:DESC&cursor=2022-12-19T10:00:00.000Z&cursorColumn=lastVetVisit&cursorDirection=before`
+            )
+        })
+    })
 })

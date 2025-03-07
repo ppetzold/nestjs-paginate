@@ -108,6 +108,9 @@ describe('Decorator', () => {
             searchBy: undefined,
             filter: undefined,
             select: undefined,
+            cursor: undefined,
+            cursorColumn: undefined,
+            cursorDirection: undefined,
             path: 'http://localhost/items',
         })
     })
@@ -125,6 +128,9 @@ describe('Decorator', () => {
             searchBy: undefined,
             filter: undefined,
             select: undefined,
+            cursor: undefined,
+            cursorColumn: undefined,
+            cursorDirection: undefined,
             path: 'http://localhost/items',
         })
     })
@@ -138,6 +144,9 @@ describe('Decorator', () => {
             'filter.name': '$not:$eq:Kitty',
             'filter.createdAt': ['$gte:2020-01-01', '$lte:2020-12-31'],
             select: ['name', 'createdAt'],
+            cursor: 'abc123',
+            cursorColumn: 'id',
+            cursorDirection: 'after',
         })
 
         const result: PaginateQuery = decoratorfactory(null, context)
@@ -157,6 +166,9 @@ describe('Decorator', () => {
                 name: '$not:$eq:Kitty',
                 createdAt: ['$gte:2020-01-01', '$lte:2020-12-31'],
             },
+            cursor: 'abc123',
+            cursorColumn: 'id',
+            cursorDirection: 'after',
         })
     })
 
@@ -169,6 +181,9 @@ describe('Decorator', () => {
             'filter.name': '$not:$eq:Kitty',
             'filter.createdAt': ['$gte:2020-01-01', '$lte:2020-12-31'],
             select: ['name', 'createdAt'],
+            cursor: 'abc123',
+            cursorColumn: 'id',
+            cursorDirection: 'after',
         })
 
         const result: PaginateQuery = decoratorfactory(null, context)
@@ -188,6 +203,9 @@ describe('Decorator', () => {
                 createdAt: ['$gte:2020-01-01', '$lte:2020-12-31'],
             },
             select: ['name', 'createdAt'],
+            cursor: 'abc123',
+            cursorColumn: 'id',
+            cursorDirection: 'after',
         })
     })
 })
