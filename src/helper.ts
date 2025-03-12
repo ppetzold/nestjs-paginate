@@ -1,3 +1,4 @@
+import { mergeWith } from 'lodash'
 import {
     FindOperator,
     FindOptionsRelationByString,
@@ -7,7 +8,6 @@ import {
 } from 'typeorm'
 import { ColumnMetadata } from 'typeorm/metadata/ColumnMetadata'
 import { OrmUtils } from 'typeorm/util/OrmUtils'
-import { mergeWith } from 'lodash'
 
 /**
  * Joins 2 keys as `K`, `K.P`, `K.(P` or `K.P)`
@@ -205,10 +205,10 @@ export function checkIsJsonb(qb: SelectQueryBuilder<unknown>, propertyName: stri
         const parts = propertyName.split('.')
         const dbColumnName = parts[parts.length - 2]
 
-        return qb?.expressionMap?.mainAlias?.metadata.findColumnWithPropertyName(dbColumnName)?.type === 'json'
+        return qb?.expressionMap?.mainAlias?.metadata.findColumnWithPropertyName(dbColumnName)?.type === 'jsonb'
     }
 
-    return qb?.expressionMap?.mainAlias?.metadata.findColumnWithPropertyName(propertyName)?.type === 'json'
+    return qb?.expressionMap?.mainAlias?.metadata.findColumnWithPropertyName(propertyName)?.type === 'jsonb'
 }
 
 // This function is used to fix the column alias when using relation, embedded or virtual properties
@@ -293,7 +293,7 @@ export function isFindOperator<T>(value: unknown | FindOperator<T>): value is Fi
 export function createRelationSchema<T>(configurationRelations: RelationSchemaInput<T>): RelationSchema<T> {
     return Array.isArray(configurationRelations)
         ? OrmUtils.propertyPathsToTruthyObject(configurationRelations)
-        : configurationRelations
+        : (configurationRelations as RelationSchema<T>)
 }
 
 export function mergeRelationSchema(...schemas: RelationSchema[]) {
