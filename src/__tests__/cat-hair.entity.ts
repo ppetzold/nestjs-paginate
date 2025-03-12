@@ -14,7 +14,7 @@ export class CatHairEntity {
     @CreateDateColumn()
     createdAt: string
 
-    @Column({ type: 'json', nullable: true })
+    @Column({ type: 'jsonb', nullable: true })
     metadata: Record<string, any>
 
     @OneToOne(() => CatHairEntity, (catFur) => catFur.underCoat, { nullable: true })
