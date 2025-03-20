@@ -21,7 +21,7 @@ import { PaginateQuery } from './decorator'
 import {
     checkIsArray,
     checkIsEmbedded,
-    checkIsJsonb,
+    checkIsJson,
     checkIsNestedRelation,
     checkIsRelation,
     extractVirtualProperty,
@@ -251,7 +251,7 @@ function fixColumnFilterValue<T>(column: string, qb: SelectQueryBuilder<T>, isJs
             return new Date(value)
         }
 
-        if ((columnType === Number || isJsonb) && !Number.isNaN(value)) {
+        if ((columnType === Number || isJsonb) && !Number.isNaN(Number(value))) {
             return Number(value)
         }
 
@@ -308,7 +308,7 @@ export function parseFilter<T>(
             const fixValue = fixColumnFilterValue(column, qb)
 
             const columnProperties = getPropertiesByColumnName(column)
-            const isJsonb = checkIsJsonb(qb, columnProperties.column)
+            const isJsonb = checkIsJson(qb, columnProperties.column)
 
             switch (token.operator) {
                 case FilterOperator.BTW:
