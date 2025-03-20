@@ -251,7 +251,7 @@ function fixColumnFilterValue<T>(column: string, qb: SelectQueryBuilder<T>, isJs
             return new Date(value)
         }
 
-        if ((columnType === Number || isJsonb) && !Number.isNaN(value)) {
+        if ((columnType === Number || isJsonb) && !Number.isNaN(Number(value))) {
             return Number(value)
         }
 
