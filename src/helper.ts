@@ -205,11 +205,11 @@ export function checkIsJson(qb: SelectQueryBuilder<unknown>, propertyName: strin
         const parts = propertyName.split('.')
         const dbColumnName = parts[parts.length - 2]
 
-        const columnType = qb?.expressionMap?.mainAlias?.metadata.findColumnWithPropertyName(dbColumnName)?.type;
+        const columnType = qb?.expressionMap?.mainAlias?.metadata.findColumnWithPropertyName(dbColumnName)?.type
         return columnType === 'jsonb' || columnType === 'json'
     }
 
-    const columnType = qb?.expressionMap?.mainAlias?.metadata.findColumnWithPropertyName(propertyName)?.type;
+    const columnType = qb?.expressionMap?.mainAlias?.metadata.findColumnWithPropertyName(propertyName)?.type
     return columnType === 'jsonb' || columnType === 'json'
 }
 
