@@ -690,7 +690,7 @@ describe('paginate', () => {
     it('should sort result by virtual columns', async () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['home.countCat'],
-            relations: ['home'],
+            relations: ['home.naptimePillow.brand'],
         }
         const query: PaginateQuery = {
             path: '',
@@ -701,7 +701,9 @@ describe('paginate', () => {
 
         expect(result.meta.sortBy).toStrictEqual([['home.countCat', 'DESC']])
         const expected = [cats[0], cats[1], cats[2], cats[3], cats[4]].map(clone)
-        expected.forEach((cat) => (cat.home = null))
+        expected.forEach((cat) => {
+            cat.home = null
+        })
         catHomes.forEach((home, i) => {
             expected[i].home = clone(home)
             expected[i].home.countCat = 1
