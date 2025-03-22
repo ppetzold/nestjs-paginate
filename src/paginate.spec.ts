@@ -647,6 +647,34 @@ describe('paginate', () => {
         expect(result.data).toStrictEqual(expectedResult)
     })
 
+    it('should handle nullSort with relations properly', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id', 'age'],
+            nullSort: 'last',
+            defaultSortBy: [['age', 'ASC']],
+            relations: ['toys'],
+        }
+        const query: PaginateQuery = {
+            path: '',
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        // Prepare expected result - cats ordered by age with null age last, including toys relation
+        const expectedResult = [...cats.slice(0, -1).reverse(), cats.slice(-1)[0]].map(cat => {
+            const catWithToys = clone(cat);
+            catWithToys.toys = catToys.filter(toy => toy.cat.id === cat.id).map(toy => {
+                const clonedToy = clone(toy);
+                delete clonedToy.cat;
+                return clonedToy;
+            });
+            return catWithToys;
+        });
+
+        expect(result.meta.sortBy).toStrictEqual([['age', 'ASC']])
+        expect(result.data).toStrictEqual(expectedResult)
+    })
+
     it('should put null values first when sorting', async () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['age', 'createdAt'],
