@@ -3357,6 +3357,30 @@ describe('paginate', () => {
         })
     })
 
+    describe('$null operator', () => {
+        it('should find cats without any toys when applied on PK', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                relations: ['toys'],
+                sortableColumns: ['id', 'toys.id'],
+                filterableColumns: {
+                    'toys.id': [FilterOperator.NULL]
+                }
+            }
+            const query: PaginateQuery = {
+                filter: {
+                    // Null-filtering a relationship's PK should check
+                    // for absence of the relationship
+                    'toys.id': '$null'
+                },
+                path: '',
+            }
+
+            const result = await paginate<CatEntity>(query, catRepo, config);
+            // Should find only cats without toys.
+            expect(result.data.every(cat => cat.toys.length === 0)).toBe(true);
+        })
+    })
+
     describe('should correctly handle number column filter', () => {
         it('with $eq operator and valid number', async () => {
             const config: PaginateConfig<CatEntity> = {
