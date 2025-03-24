@@ -206,6 +206,19 @@ export function checkIsNestedRelation(qb: SelectQueryBuilder<unknown>, propertyP
     return true
 }
 
+export function checkIsOneOfNestedPrimaryColumns(qb: SelectQueryBuilder<unknown>, propertyPath: string): boolean {
+    let metadata = qb?.expressionMap?.mainAlias?.metadata
+    const [deepestProperty, ...subRelations] = propertyPath.split('.').reverse()
+    for (const relationName of subRelations.reverse()) {
+        const relation = metadata?.relations.find((relation) => relation.propertyPath === relationName)
+        if (!relation) {
+            return false
+        }
+        metadata = relation.inverseEntityMetadata
+    }
+    return !!metadata.primaryColumns.find(col => col.propertyName === deepestProperty)
+}
+
 export function checkIsEmbedded(qb: SelectQueryBuilder<unknown>, propertyPath: string): boolean {
     if (!qb || !propertyPath) {
         return false
