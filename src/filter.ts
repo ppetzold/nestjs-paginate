@@ -23,6 +23,7 @@ import {
     checkIsEmbedded,
     checkIsJsonb,
     checkIsNestedRelation,
+    checkIsOneOfNestedPrimaryColumns,
     checkIsRelation,
     extractVirtualProperty,
     fixColumnAlias,
@@ -392,17 +393,30 @@ export function addFilter<T>(
         )
     }
 
-    // Set the join type of every relationship used in a filter to `innerJoinAndSelect`
-    // so that records without that relationships don't show up in filters on their columns.
-    return Object.fromEntries(
-        filterEntries
-            .map(([key]) => [key, getPropertiesByColumnName(key)] as const)
-            .filter(([, properties]) => properties.propertyPath)
-            .flatMap(([, properties]) => {
-                const nesting = properties.column.split('.')
-                return Array.from({ length: nesting.length - 1 }, (_, i) => nesting.slice(0, i + 1).join('.'))
-                    .filter((relation) => checkIsNestedRelation(qb, relation))
-                    .map((relation) => [relation, 'innerJoinAndSelect'] as const)
-            })
-    )
+    const columnJoinMethods: ColumnJoinMethods = {}
+    const nullFilteredRelations = []
+    for (const [key, columnFilters] of filterEntries) {
+        const properties = getPropertiesByColumnName(key)
+        const relationPath = properties.column.split('.')
+        for (let i = 0; i < relationPath.length - 1; i++) {
+            const subRelation = relationPath.slice(0, i + 1).join('.')
+            if (!checkIsNestedRelation(qb, subRelation)) continue
+            columnJoinMethods[subRelation] = 'innerJoinAndSelect'
+        }
+
+        // When a $null filter is set on a primary key of a relationship,
+        // the filter acts as an absence filter (i.e., filters on results
+        // that do not have the child relationship). We mark these columns
+        // to be left joined later so that `rel.pk IS NULL` works.
+        if (
+            checkIsOneOfNestedPrimaryColumns(qb, properties.column) &&
+            columnFilters.some((filter) => filter.findOperator.type === 'isNull')
+        ) {
+            nullFilteredRelations.push(relationPath.slice(0, -1).join('.'))
+        }
+    }
+    for (const column of nullFilteredRelations) {
+        columnJoinMethods[column] = 'leftJoinAndSelect'
+    }
+    return columnJoinMethods
 }
