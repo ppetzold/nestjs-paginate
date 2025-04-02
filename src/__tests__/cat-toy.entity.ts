@@ -1,5 +1,6 @@
 import { Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm'
 import { CatEntity } from './cat.entity'
+import { DateColumnNotNull } from './column-option'
 import { SizeEmbed } from './size.embed'
 import { ToyShopEntity } from './toy-shop.entity'
 
@@ -22,6 +23,6 @@ export class CatToyEntity {
     @JoinColumn()
     cat: CatEntity
 
-    @CreateDateColumn()
+    @CreateDateColumn(DateColumnNotNull)
     createdAt: string
 }

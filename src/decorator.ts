@@ -20,8 +20,6 @@ export interface PaginateQuery {
     filter?: { [column: string]: string | string[] }
     select?: string[]
     cursor?: string
-    cursorColumn?: string
-    cursorDirection?: 'before' | 'after'
     path: string
 }
 
@@ -105,9 +103,6 @@ export const Paginate = createParamDecorator((_data: unknown, ctx: ExecutionCont
         filter: Object.keys(filter).length ? filter : undefined,
         select,
         cursor: query.cursor ? query.cursor.toString() : undefined,
-        cursorColumn: query.cursorColumn ? query.cursorColumn.toString() : undefined,
-        cursorDirection:
-            query.cursorDirection === 'after' || query.cursorDirection === 'before' ? query.cursorDirection : undefined,
         path,
     }
 })

@@ -1,4 +1,5 @@
 import { Column, CreateDateColumn, Entity, JoinColumn, OneToOne, PrimaryGeneratedColumn } from 'typeorm'
+import { DateColumnNotNull } from './column-option'
 import { ToyShopAddressEntity } from './toy-shop-address.entity'
 
 @Entity()
@@ -13,6 +14,6 @@ export class ToyShopEntity {
     @JoinColumn()
     address: ToyShopAddressEntity
 
-    @CreateDateColumn()
+    @CreateDateColumn(DateColumnNotNull)
     createdAt: string
 }

@@ -1,6 +1,7 @@
 import { Column, CreateDateColumn, Entity, ManyToOne, PrimaryGeneratedColumn } from 'typeorm'
-import { CatHomeEntity } from './cat-home.entity'
 import { CatHomePillowBrandEntity } from './cat-home-pillow-brand.entity'
+import { CatHomeEntity } from './cat-home.entity'
+import { DateColumnNotNull } from './column-option'
 
 @Entity()
 export class CatHomePillowEntity {
@@ -16,6 +17,6 @@ export class CatHomePillowEntity {
     @ManyToOne(() => CatHomePillowBrandEntity)
     brand: CatHomePillowBrandEntity
 
-    @CreateDateColumn()
+    @CreateDateColumn(DateColumnNotNull)
     createdAt: string
 }

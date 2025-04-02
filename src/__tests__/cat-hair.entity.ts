@@ -1,4 +1,5 @@
 import { Column, CreateDateColumn, Entity, JoinColumn, OneToOne, PrimaryGeneratedColumn } from 'typeorm'
+import { DateColumnNotNull } from './column-option'
 
 @Entity()
 export class CatHairEntity {
@@ -11,7 +12,7 @@ export class CatHairEntity {
     @Column({ type: 'text', array: true, default: '{}' })
     colors: string[]
 
-    @CreateDateColumn()
+    @CreateDateColumn(DateColumnNotNull)
     createdAt: string
 
     @Column({ type: 'jsonb', nullable: true })

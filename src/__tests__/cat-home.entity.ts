@@ -10,6 +10,7 @@ import {
 } from 'typeorm'
 import { CatHomePillowEntity } from './cat-home-pillow.entity'
 import { CatEntity } from './cat.entity'
+import { DateColumnNotNull } from './column-option'
 
 @Entity()
 export class CatHomeEntity {
@@ -31,7 +32,7 @@ export class CatHomeEntity {
     @ManyToOne(() => CatHomePillowEntity, { nullable: true })
     naptimePillow: CatHomePillowEntity | null
 
-    @CreateDateColumn()
+    @CreateDateColumn(DateColumnNotNull)
     createdAt: string
 
     @VirtualColumn({
