@@ -193,6 +193,7 @@ export async function paginate<T extends ObjectLiteral>(
     const dbType = (isRepository(repo) ? repo.manager : repo).connection.options.type
     const isMySqlOrMariaDb = ['mysql', 'mariadb'].includes(dbType)
     const isPostgresOrCockroachDb = ['postgres', 'cockroachdb'].includes(dbType)
+    const metadata = isRepository(repo) ? repo.metadata : repo.expressionMap.mainAlias.metadata
 
     const page = positiveNumberOrDefault(query.page, 1, 1)
 
@@ -215,27 +216,99 @@ export async function paginate<T extends ObjectLiteral>(
                 : Math.min(query.limit ?? defaultLimit, maxLimit)
             : defaultLimit
 
+    const generateNullCursor = (): string => {
+        return 'A' + '0'.repeat(15) // null values ​​should be looked up last, so use the smallest prefix
+    }
+
+    const generateDateCursor = (value: number, direction: 'ASC' | 'DESC'): string => {
+        const finalValue = direction === 'ASC' ? Math.pow(10, 15) - value : value
+        return 'V' + String(finalValue).padStart(15, '0')
+    }
+
+    const generateNumberCursor = (value: number, direction: 'ASC' | 'DESC'): string => {
+        const integerLength = 11
+        const decimalLength = 4 // sorting is not possible if the decimal point exceeds 4 digits
+        const maxIntegerDigit = Math.pow(10, integerLength)
+        const fixedScale = Math.pow(10, decimalLength)
+        const absValue = Math.abs(value)
+        const scaledValue = Math.round(absValue * fixedScale)
+        const integerPart = Math.floor(scaledValue / fixedScale)
+        const decimalPart = scaledValue % fixedScale
+
+        let integerPrefix: string
+        let decimalPrefix: string
+        let finalInteger: number
+        let finalDecimal: number
+
+        if (direction === 'ASC') {
+            if (value < 0) {
+                integerPrefix = 'Y'
+                decimalPrefix = 'V'
+                finalInteger = integerPart
+                finalDecimal = decimalPart
+            } else if (value === 0) {
+                integerPrefix = 'X'
+                decimalPrefix = 'X'
+                finalInteger = 0
+                finalDecimal = 0
+            } else {
+                integerPrefix = integerPart === 0 ? 'X' : 'V' // X > V
+                decimalPrefix = decimalPart === 0 ? 'X' : 'V' // X > V
+                finalInteger = integerPart === 0 ? 0 : maxIntegerDigit - integerPart
+                finalDecimal = decimalPart === 0 ? 0 : fixedScale - decimalPart
+            }
+        } else {
+            // DESC
+            if (value < 0) {
+                integerPrefix = integerPart === 0 ? 'N' : 'M' // N > M
+                decimalPrefix = decimalPart === 0 ? 'X' : 'V' // X > V
+                finalInteger = integerPart === 0 ? 0 : maxIntegerDigit - integerPart
+                finalDecimal = decimalPart === 0 ? 0 : fixedScale - decimalPart
+            } else if (value === 0) {
+                integerPrefix = 'N'
+                decimalPrefix = 'X'
+                finalInteger = 0
+                finalDecimal = 0
+            } else {
+                integerPrefix = 'V'
+                decimalPrefix = 'V'
+                finalInteger = integerPart
+                finalDecimal = decimalPart
+            }
+        }
+
+        return (
+            integerPrefix +
+            String(finalInteger).padStart(integerLength, '0') +
+            decimalPrefix +
+            String(finalDecimal).padStart(decimalLength, '0')
+        )
+    }
+
     const generateCursor = (item: T, sortBy: SortBy<T>): string => {
         return sortBy
             .map(([column, direction]) => {
                 const value = fixCursorValue(item[column])
-                let numericValue: number
-                let prefix: string // for null values
+                const columnMeta = metadata.columns.find(
+                    (col) => col.propertyName === getPropertiesByColumnName(column).propertyName
+                )
+                const isDateColumn =
+                    columnMeta &&
+                    (columnMeta.type === Date ||
+                        columnMeta.type === 'timestamp' ||
+                        columnMeta.type === 'timestamptz' ||
+                        columnMeta.type === 'datetime')
 
                 if (value === null) {
-                    prefix = 'N'
-                    numericValue = 0
-                } else if (value === 0 && direction === 'ASC') {
-                    prefix = 'X' // In the case of an actual value of 0, it should be retrieved first in ascending order, so set it to X which is greater than V
-                    numericValue = 0
-                } else {
-                    prefix = 'V'
-                    numericValue = value instanceof Date ? value.getTime() : Number(value)
+                    return generateNullCursor()
                 }
 
-                const finalValue =
-                    direction === 'ASC' && prefix === 'V' ? Math.pow(10, 15) - numericValue : numericValue
-                return prefix + String(finalValue).padStart(15, '0')
+                if (isDateColumn) {
+                    return generateDateCursor(value.getTime(), direction)
+                } else {
+                    const numericValue = Number(value)
+                    return generateNumberCursor(numericValue, direction)
+                }
             })
             .join('')
     }
@@ -300,10 +373,107 @@ export async function paginate<T extends ObjectLiteral>(
         } else if (config.paginationType === PaginationType.CURSOR) {
             queryBuilder.take(limit)
             const padLength = 15
+            const integerLength = 11
+            const decimalLength = 4
+            const fixedScale = Math.pow(10, 4)
+            const maxIntegerDigit = Math.pow(10, 11)
 
-            const metadata = isRepository(repo) ? repo.metadata : repo.expressionMap.mainAlias.metadata
+            const generateNullCursorExpr = (): string => {
+                const zeroPaddedExpr = isPostgresOrCockroachDb
+                    ? `LPAD(0::text, ${padLength}, '0')`
+                    : `LPAD(0, ${padLength}, '0')`
+                return isMySqlOrMariaDb ? `CONCAT('A', ${zeroPaddedExpr})` : `'A' || ${zeroPaddedExpr}`
+            }
 
-            // The same logic as generateCursor()
+            const generateDateCursorExpr = (columnExpr: string, direction: 'ASC' | 'DESC'): string => {
+                const safeExpr = `COALESCE(${columnExpr}, 0)`
+                const sqlExpr = direction === 'ASC' ? `POW(10, ${padLength}) - ${safeExpr}` : safeExpr
+                const paddedExpr = isPostgresOrCockroachDb
+                    ? `LPAD((${sqlExpr})::bigint::text, ${padLength}, '0')`
+                    : `LPAD(${sqlExpr}, ${padLength}, '0')`
+                const zeroPaddedExpr = isPostgresOrCockroachDb
+                    ? `LPAD(0::text, ${padLength}, '0')`
+                    : `LPAD(0, ${padLength}, '0')`
+                return isMySqlOrMariaDb
+                    ? `CASE 
+                        WHEN ${columnExpr} IS NULL THEN CONCAT('A', ${zeroPaddedExpr}) 
+                        ELSE CONCAT('V', ${paddedExpr}) 
+                       END`
+                    : `CASE 
+                        WHEN ${columnExpr} IS NULL THEN 'A' || ${zeroPaddedExpr} 
+                        ELSE 'V' || ${paddedExpr} 
+                       END`
+            }
+
+            const generateNumberCursorExpr = (columnExpr: string, direction: 'ASC' | 'DESC'): string => {
+                const safeExpr = `COALESCE(${columnExpr}, 0)`
+                const absSafeExpr = `ABS(${safeExpr})`
+                const scaledExpr = `ROUND(${absSafeExpr} * ${fixedScale}, 0)`
+                const intExpr = `FLOOR(${scaledExpr} / ${fixedScale})`
+                const decExpr = `${scaledExpr} % ${fixedScale}`
+
+                const paddedIntExpr = isPostgresOrCockroachDb
+                    ? `LPAD((${intExpr})::bigint::text, ${integerLength}, '0')`
+                    : `LPAD(${intExpr}, ${integerLength}, '0')`
+                const paddedDecExpr = isPostgresOrCockroachDb
+                    ? `LPAD((${decExpr})::bigint::text, ${decimalLength}, '0')`
+                    : `LPAD(${decExpr}, ${decimalLength}, '0')`
+
+                const reversedIntExpr = `${maxIntegerDigit} - ${intExpr}`
+                const reversedDecExpr = `${fixedScale} - ${decExpr}`
+
+                const zeroPaddedIntExpr = isPostgresOrCockroachDb
+                    ? `LPAD(0::text, ${integerLength}, '0')`
+                    : `LPAD(0, ${integerLength}, '0')`
+                const zeroPaddedDecExpr = isPostgresOrCockroachDb
+                    ? `LPAD(0::text, ${decimalLength}, '0')`
+                    : `LPAD(0, ${decimalLength}, '0')`
+
+                if (isMySqlOrMariaDb && direction === 'ASC') {
+                    return `CASE 
+                                WHEN ${columnExpr} IS NULL THEN ${generateNullCursorExpr()} 
+                                WHEN ${columnExpr} < 0 THEN CONCAT('Y', ${paddedIntExpr}, 'V', ${paddedDecExpr}) 
+                                WHEN ${columnExpr} = 0 THEN CONCAT('X', ${zeroPaddedIntExpr}, 'X', ${zeroPaddedDecExpr}) 
+                                WHEN ${columnExpr} > 0 AND ${intExpr} = 0 AND ${decExpr} > 0 THEN CONCAT('X', ${zeroPaddedIntExpr}, 'V', ${reversedDecExpr}) 
+                                WHEN ${columnExpr} > 0 AND ${intExpr} > 0 AND ${decExpr} = 0 THEN CONCAT('V', ${reversedIntExpr}, 'X', ${zeroPaddedDecExpr}) 
+                                WHEN ${columnExpr} > 0 AND ${intExpr} > 0 AND ${decExpr} > 0 THEN CONCAT('V', ${reversedIntExpr}, 'V', ${reversedDecExpr}) 
+                            END`
+                }
+
+                if (isMySqlOrMariaDb && direction === 'DESC') {
+                    return `CASE 
+                                WHEN ${columnExpr} IS NULL THEN ${generateNullCursorExpr()} 
+                                WHEN ${columnExpr} < 0 AND ${intExpr} > 0 AND ${decExpr} > 0 THEN CONCAT('M', ${reversedIntExpr}, 'V', ${reversedDecExpr}) 
+                                WHEN ${columnExpr} < 0 AND ${intExpr} > 0 AND ${decExpr} = 0 THEN CONCAT('M', ${reversedIntExpr}, 'X', ${zeroPaddedDecExpr}) 
+                                WHEN ${columnExpr} < 0 AND ${intExpr} = 0 AND ${decExpr} > 0 THEN CONCAT('N', ${zeroPaddedIntExpr}, 'V', ${reversedDecExpr}) 
+                                WHEN ${columnExpr} = 0 THEN CONCAT('N', ${zeroPaddedIntExpr}, 'X', ${zeroPaddedDecExpr}) 
+                                WHEN ${columnExpr} > 0 THEN CONCAT('V', ${paddedIntExpr}, 'V', ${paddedDecExpr}) 
+                            END`
+                }
+
+                if (!isMySqlOrMariaDb && direction === 'ASC') {
+                    return `CASE
+                                WHEN ${columnExpr} IS NULL THEN ${generateNullCursorExpr()} 
+                                WHEN ${columnExpr} < 0 THEN 'Y' || ${paddedIntExpr} || 'V' || ${paddedDecExpr} 
+                                WHEN ${columnExpr} = 0 THEN 'X' || ${zeroPaddedIntExpr} || 'X' || ${zeroPaddedDecExpr} 
+                                WHEN ${columnExpr} > 0 AND ${intExpr} = 0 AND ${decExpr} > 0 THEN 'X' || ${zeroPaddedIntExpr} || 'V' || ${reversedDecExpr} 
+                                WHEN ${columnExpr} > 0 AND ${intExpr} > 0 AND ${decExpr} = 0 THEN 'V' || ${reversedIntExpr} || 'X' || ${zeroPaddedDecExpr} 
+                                WHEN ${columnExpr} > 0 AND ${intExpr} > 0 AND ${decExpr} > 0 THEN 'V' || ${reversedIntExpr} || 'V' || ${reversedDecExpr} 
+                            END`
+                }
+
+                if (!isMySqlOrMariaDb && direction === 'DESC') {
+                    return `CASE 
+                                WHEN ${columnExpr} IS NULL THEN ${generateNullCursorExpr()} 
+                                WHEN ${columnExpr} < 0 AND ${intExpr} > 0 AND ${decExpr} > 0 THEN 'M' || ${reversedIntExpr} || 'V' || ${reversedDecExpr} 
+                                WHEN ${columnExpr} < 0 AND ${intExpr} > 0 AND ${decExpr} = 0 THEN 'M' || ${reversedIntExpr} || 'X' || ${zeroPaddedDecExpr} 
+                                WHEN ${columnExpr} < 0 AND ${intExpr} = 0 AND ${decExpr} > 0 THEN 'N' || ${zeroPaddedIntExpr} || 'V' || ${reversedDecExpr} 
+                                WHEN ${columnExpr} = 0 THEN 'N' || ${zeroPaddedIntExpr} || 'X' || ${zeroPaddedDecExpr} 
+                                WHEN ${columnExpr} > 0 THEN 'V' || ${paddedIntExpr} || 'V' || ${paddedDecExpr} 
+                            END`
+                }
+            }
+
             const cursorExpressions = sortBy.map(([column, direction]) => {
                 const columnProperties = getPropertiesByColumnName(column)
                 const alias = fixColumnAlias(columnProperties, queryBuilder.alias)
@@ -315,25 +485,10 @@ export async function paginate<T extends ObjectLiteral>(
                         columnMeta.type === 'timestamptz' ||
                         columnMeta.type === 'datetime')
                 const columnExpr = isDateColumn ? getDateColumnExpression(alias, dbType) : alias
-                const safeExpr = `COALESCE(${columnExpr}, 0)`
-                const sqlExpr = direction === 'ASC' ? `POW(10, ${padLength}) - ${safeExpr}` : safeExpr
-                const paddedExpr = isPostgresOrCockroachDb
-                    ? `LPAD((${sqlExpr})::bigint::text, ${padLength}, '0')`
-                    : `LPAD(${sqlExpr}, ${padLength}, '0')`
-                const zeroPaddedExpr = isPostgresOrCockroachDb
-                    ? `LPAD(0::text, ${padLength}, '0')`
-                    : `LPAD(0, ${padLength}, '0')`
-                return isMySqlOrMariaDb
-                    ? `CASE 
-                        WHEN ${columnExpr} IS NULL THEN CONCAT('N', ${zeroPaddedExpr}) 
-                        WHEN ${columnExpr} = 0 AND '${direction}' = 'ASC' THEN CONCAT('X', ${zeroPaddedExpr}) 
-                        ELSE CONCAT('V', ${paddedExpr}) 
-                       END`
-                    : `CASE 
-                        WHEN ${columnExpr} IS NULL THEN 'N' || ${zeroPaddedExpr} 
-                        WHEN ${columnExpr} = 0 AND '${direction}' = 'ASC' THEN 'X' || ${zeroPaddedExpr} 
-                        ELSE 'V' || ${paddedExpr} 
-                       END`
+
+                return isDateColumn
+                    ? generateDateCursorExpr(columnExpr, direction)
+                    : generateNumberCursorExpr(columnExpr, direction)
             })
 
             const cursorExpression =

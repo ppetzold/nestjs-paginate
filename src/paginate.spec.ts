@@ -123,6 +123,7 @@ describe('paginate', () => {
                 cutenessLevel: CutenessLevel.HIGH,
                 lastVetVisit: isoStringToDate('2022-12-19T10:00:00.000Z'),
                 size: { height: 25, width: 10, length: 40 },
+                weightChange: -0.75,
             }),
             catRepo.create({
                 name: 'Garfield',
@@ -131,6 +132,7 @@ describe('paginate', () => {
                 cutenessLevel: CutenessLevel.MEDIUM,
                 lastVetVisit: isoStringToDate('2022-12-20T10:00:00.000Z'),
                 size: { height: 30, width: 15, length: 45 },
+                weightChange: 5.25,
             }),
             catRepo.create({
                 name: 'Shadow',
@@ -139,6 +141,7 @@ describe('paginate', () => {
                 cutenessLevel: CutenessLevel.HIGH,
                 lastVetVisit: isoStringToDate('2022-12-21T10:00:00.000Z'),
                 size: { height: 25, width: 10, length: 50 },
+                weightChange: -3,
             }),
             catRepo.create({
                 name: 'George',
@@ -147,6 +150,7 @@ describe('paginate', () => {
                 cutenessLevel: CutenessLevel.LOW,
                 lastVetVisit: null,
                 size: { height: 35, width: 12, length: 40 },
+                weightChange: 0,
             }),
             catRepo.create({
                 name: 'Leche',
@@ -155,6 +159,7 @@ describe('paginate', () => {
                 cutenessLevel: CutenessLevel.HIGH,
                 lastVetVisit: null,
                 size: { height: 10, width: 5, length: 15 },
+                weightChange: -1.25,
             }),
             catRepo.create({
                 name: 'Baby',
@@ -163,6 +168,7 @@ describe('paginate', () => {
                 cutenessLevel: CutenessLevel.HIGH,
                 lastVetVisit: null,
                 size: { height: 10, width: 5, length: 10 },
+                weightChange: 0.01,
             }),
             catRepo.create({
                 name: 'Adam',
@@ -171,6 +177,7 @@ describe('paginate', () => {
                 cutenessLevel: CutenessLevel.LOW,
                 lastVetVisit: isoStringToDate('2022-12-22T10:00:00.000Z'),
                 size: { height: 20, width: 15, length: 50 },
+                weightChange: 4.75,
             }),
         ])
 
@@ -3476,8 +3483,8 @@ describe('paginate', () => {
                 expect(result.data).toStrictEqual(cats.slice(0, 2))
                 expect(result.meta.itemsPerPage).toBe(2)
                 expect(result.meta.cursor).toBeUndefined()
-                expect(result.links.previous).toBe('?limit=2&sortBy=id:DESC&cursor=V000000000000001') // id=1, DESC (Milo) -> V + LPAD(1, 15, '0')
-                expect(result.links.next).toBe(`?limit=2&sortBy=id:ASC&cursor=V999999999999998`) // id=2, ASC (Garfield) -> V + 10^15 - 2
+                expect(result.links.previous).toBe('?limit=2&sortBy=id:DESC&cursor=V00000000001V0000') // id=1, DESC (Milo) -> V + LPAD(1, 11, '0') + V + LPAD(0, 4, '0')
+                expect(result.links.next).toBe(`?limit=2&sortBy=id:ASC&cursor=V99999999998X0000`) // id=2, ASC (Garfield) -> V + 10^11 - 2 + X + LPAD(0, 4, '0')
             })
 
             it('should paginate using cursor (id, ASC)', async () => {
@@ -3496,8 +3503,8 @@ describe('paginate', () => {
                 expect(result.data).toStrictEqual(cats.slice(0, 2))
                 expect(result.meta.itemsPerPage).toBe(2)
                 expect(result.meta.cursor).toBeUndefined()
-                expect(result.links.previous).toBe('?limit=2&sortBy=id:DESC&cursor=V000000000000001') // id=1, DESC (Milo) -> V + LPAD(1, 15, '0')
-                expect(result.links.next).toBe(`?limit=2&sortBy=id:ASC&cursor=V999999999999998`) // id=2, ASC (Garfield) -> V + 10^15 - 2
+                expect(result.links.previous).toBe('?limit=2&sortBy=id:DESC&cursor=V00000000001V0000') // id=1, DESC (Milo) -> V + LPAD(1, 11, '0') + V + LPAD(0, 4, '0')
+                expect(result.links.next).toBe(`?limit=2&sortBy=id:ASC&cursor=V99999999998X0000`) // id=2, ASC (Garfield) -> V + 10^11 - 2 + X + LPAD(0, 4, '0')
             })
 
             it('should paginate using cursor with specific cursor value (id, ASC)', async () => {
@@ -3508,16 +3515,16 @@ describe('paginate', () => {
                 }
                 const query: PaginateQuery = {
                     path: '',
-                    cursor: 'V999999999999998', // id=2, ASC (Garfield) -> V + 10^15 - 2
+                    cursor: 'V99999999998X0000', // id=2, ASC (Garfield)
                 }
 
                 const result = await paginate<CatEntity>(query, catRepo, config)
 
                 expect(result.data).toStrictEqual(cats.slice(2, 4))
                 expect(result.meta.itemsPerPage).toBe(2)
-                expect(result.meta.cursor).toBe('V999999999999998')
-                expect(result.links.previous).toBe(`?limit=2&sortBy=id:DESC&cursor=V000000000000003`) // id=3, DESC (Shadow) -> V + LPAD(3, 15, '0')
-                expect(result.links.next).toBe(`?limit=2&sortBy=id:ASC&cursor=V999999999999996`) // id=4, ASC (George) -> V + 10^15 - 4
+                expect(result.meta.cursor).toBe('V99999999998X0000')
+                expect(result.links.previous).toBe(`?limit=2&sortBy=id:DESC&cursor=V00000000003V0000`) // id=3, DESC (Shadow) -> V + LPAD(3, 11, '0') + V + LPAD(0, 4, '0')
+                expect(result.links.next).toBe(`?limit=2&sortBy=id:ASC&cursor=V99999999996X0000`) // id=4, ASC (George) -> V + 10^11 - 4 + X + LPAD(0, 4, '0')
             })
 
             it('should handle end of data with cursor pagination (id, ASC)', async () => {
@@ -3528,14 +3535,14 @@ describe('paginate', () => {
                 }
                 const query: PaginateQuery = {
                     path: '',
-                    cursor: 'V999999999999993', // id=7, ASC (Baby) -> V + 10^15 - 7
+                    cursor: 'V99999999993X0000', // id=7, ASC (Baby) -> V + 10^11 - 7 + X + LPAD(0, 4, '0')
                 }
 
                 const result = await paginate<CatEntity>(query, catRepo, config)
 
                 expect(result.data).toStrictEqual([])
                 expect(result.meta.itemsPerPage).toBe(0)
-                expect(result.meta.cursor).toBe('V999999999999993')
+                expect(result.meta.cursor).toBe('V99999999993X0000')
                 expect(result.links.previous).toBeUndefined()
                 expect(result.links.next).toBeUndefined()
             })
@@ -3556,8 +3563,8 @@ describe('paginate', () => {
                 expect(result.data).toStrictEqual(cats.slice(5, 7).reverse())
                 expect(result.meta.itemsPerPage).toBe(2)
                 expect(result.meta.cursor).toBeUndefined()
-                expect(result.links.previous).toBe(`?limit=2&sortBy=id:ASC&cursor=V999999999999993`) // id=7, ASC (Adam) -> V + 10^15 - 7
-                expect(result.links.next).toBe('?limit=2&sortBy=id:DESC&cursor=V000000000000006') // id=6, DESC (Baby) -> V + LPAD(6, 15, '0')
+                expect(result.links.previous).toBe(`?limit=2&sortBy=id:ASC&cursor=V99999999993X0000`) // id=7, ASC (Adam) -> V + 10^11 - 7 + X + LPAD(0, 4, '0')
+                expect(result.links.next).toBe('?limit=2&sortBy=id:DESC&cursor=V00000000006V0000') // id=6, DESC (Baby) -> V + LPAD(6, 11, '0') + V + LPAD(0, 4, '0')
             })
 
             it('should paginate using cursor with specific cursor value (id, DESC)', async () => {
@@ -3568,7 +3575,7 @@ describe('paginate', () => {
                 }
                 const query: PaginateQuery = {
                     path: '',
-                    cursor: 'V000000000000004', // id=4, DESC (George) -> V + LPAD(4, 15, '0')
+                    cursor: 'V00000000004V0000', // id=4, DESC (George) -> V + LPAD(4, 11, '0') + V + LPAD(0, 4, '0')
                     sortBy: [['id', 'DESC']],
                 }
 
@@ -3576,9 +3583,9 @@ describe('paginate', () => {
 
                 expect(result.data).toStrictEqual(cats.slice(1, 3).reverse())
                 expect(result.meta.itemsPerPage).toBe(2)
-                expect(result.meta.cursor).toBe('V000000000000004')
-                expect(result.links.previous).toBe(`?limit=2&sortBy=id:ASC&cursor=V999999999999997`) // id=3, ASC (Shadow) -> V + 10^15 - 3
-                expect(result.links.next).toBe(`?limit=2&sortBy=id:DESC&cursor=V000000000000002`) // id=2, DESC (Garfield) -> V + LPAD(2, 15, '0')
+                expect(result.meta.cursor).toBe('V00000000004V0000')
+                expect(result.links.previous).toBe(`?limit=2&sortBy=id:ASC&cursor=V99999999997X0000`) // id=3, ASC (Shadow) -> V + 10^11 - 3 + X + LPAD(0, 4, '0')
+                expect(result.links.next).toBe(`?limit=2&sortBy=id:DESC&cursor=V00000000002V0000`) // id=2, DESC (Garfield) -> V + LPAD(2, 11, '0') + V + LPAD(0, 4, '0')
             })
 
             it('should handle end of data with cursor pagination (id, DESC)', async () => {
@@ -3589,7 +3596,7 @@ describe('paginate', () => {
                 }
                 const query: PaginateQuery = {
                     path: '',
-                    cursor: 'V000000000000001', // id=1, DESC (Milo) -> V + LPAD(1, 15, '0')
+                    cursor: 'V00000000001V0000', // id=1, DESC (Milo) -> V + LPAD(1, 11, '0') + V + LPAD(0, 4, '0')
                     sortBy: [['id', 'DESC']],
                 }
 
@@ -3597,7 +3604,7 @@ describe('paginate', () => {
 
                 expect(result.data).toStrictEqual([])
                 expect(result.meta.itemsPerPage).toBe(0)
-                expect(result.meta.cursor).toBe('V000000000000001')
+                expect(result.meta.cursor).toBe('V00000000001V0000')
                 expect(result.links.previous).toBeUndefined()
                 expect(result.links.next).toBeUndefined()
             })
@@ -3643,11 +3650,6 @@ describe('paginate', () => {
             })
         })
 
-        describe('sortBy: age', () => {
-            // 동일한 값을 가진 데이터의 경우 정렬이 보장되지 않는지 확인
-            it('test', async () => {})
-        })
-
         describe('sortBy: age, lastVetVisit', () => {
             it('should handle multiple cursor columns checking sorted data (age:ASC, lastVetVisit:ASC)', async () => {
                 const config: PaginateConfig<CatEntity> = {
@@ -3683,11 +3685,11 @@ describe('paginate', () => {
                     ['lastVetVisit', 'ASC'],
                 ])
                 expect(result.links.previous).toBe(
-                    '?limit=20&sortBy=age:DESC&sortBy=lastVetVisit:DESC&cursor=V000000000000000N000000000000000'
-                ) // age=0, DESC + lastVetVisit=null, DESC (Baby) -> V + LPAD(0, 15, '0') + N + LPAD(0, 15, '0')
+                    '?limit=20&sortBy=age:DESC&sortBy=lastVetVisit:DESC&cursor=N00000000000X0000A000000000000000'
+                ) // age=0, DESC + lastVetVisit=null, DESC (Baby) -> N + LPAD(0, 11, '0') + X + LPAD(0, 4, '0') + A + LPAD(0, 15, '0')
                 expect(result.links.next).toBe(
-                    '?limit=20&sortBy=age:ASC&sortBy=lastVetVisit:ASC&cursor=N000000000000000N000000000000000'
-                ) // age=null, ASC + lastVetVisit=null, ASC (Leche) -> N + LPAD(0, 15, '0') + N + LPAD(0, 15, '0')
+                    '?limit=20&sortBy=age:ASC&sortBy=lastVetVisit:ASC&cursor=A000000000000000A000000000000000'
+                ) // age=null, ASC + lastVetVisit=null, ASC (Leche) -> A + LPAD(0, 15, '0') + A + LPAD(0, 15, '0')
             })
 
             it('should handle multiple cursor columns checking combined cursor (age:ASC, lastVetVisit:ASC)', async () => {
@@ -3714,30 +3716,30 @@ describe('paginate', () => {
                     ['lastVetVisit', 'ASC'],
                 ])
                 expect(result.links.previous).toBe(
-                    '?limit=4&sortBy=age:DESC&sortBy=lastVetVisit:DESC&cursor=V000000000000000N000000000000000'
-                ) // age=0, DESC + lastVetVisit=null, DESC (Baby) -> V + LPAD(0, 15, '0') + N + LPAD(0, 15, '0')
+                    '?limit=4&sortBy=age:DESC&sortBy=lastVetVisit:DESC&cursor=N00000000000X0000A000000000000000'
+                ) // age=0, DESC + lastVetVisit=null, DESC (Baby) -> N + LPAD(0, 11, '0') + X + LPAD(0, 4, '0') + A + LPAD(0, 15, '0')
                 expect(result.links.next).toBe(
-                    '?limit=4&sortBy=age:ASC&sortBy=lastVetVisit:ASC&cursor=V999999999999996V998328296800000'
-                ) // age=4, ASC + lastVetVisit=2022-12-22T10:00:00.000Z, ASC (Adam) -> V + 10^15 - 4 + V + 10^15 - 1671703200000
+                    '?limit=4&sortBy=age:ASC&sortBy=lastVetVisit:ASC&cursor=V99999999996X0000V998328296800000'
+                ) // age=4, ASC + lastVetVisit=2022-12-22T10:00:00.000Z, ASC (Adam) -> V + 10^11 - 4 + X + LPAD(0, 4, '0') + V + 10^15 - 1671703200000
 
                 const result2 = await paginate<CatEntity>(
-                    { ...query, cursor: 'V999999999999996V998328296800000' },
+                    { ...query, cursor: 'V99999999996X0000V998328296800000' },
                     catRepo,
                     config
                 )
 
                 expect(result2.data).toStrictEqual([cats[1], cats[0], cats[4]]) // Garfield, Milo, Leche
-                expect(result2.meta.cursor).toBe('V999999999999996V998328296800000')
+                expect(result2.meta.cursor).toBe('V99999999996X0000V998328296800000')
                 expect(result2.meta.sortBy).toStrictEqual([
                     ['age', 'ASC'],
                     ['lastVetVisit', 'ASC'],
                 ])
                 expect(result2.links.previous).toBe(
-                    '?limit=4&sortBy=age:DESC&sortBy=lastVetVisit:DESC&cursor=V000000000000005V001671530400000'
-                ) // age=5, DESC + lastVetVisit=2022-12-20T10:00:00.000Z, DESC (Garfield) -> V + LPAD(5, 15, '0') + V + LPAD(1671530400000, 15, '0')
+                    '?limit=4&sortBy=age:DESC&sortBy=lastVetVisit:DESC&cursor=V00000000005V0000V001671530400000'
+                ) // age=5, DESC + lastVetVisit=2022-12-20T10:00:00.000Z, DESC (Garfield) -> V + LPAD(5, 11, '0') + V + LPAD(0, 4, '0') + V + LPAD(1671530400000, 15, '0')
                 expect(result2.links.next).toBe(
-                    `?limit=4&sortBy=age:ASC&sortBy=lastVetVisit:ASC&cursor=N000000000000000N000000000000000`
-                ) // age=null, ASC + lastVetVisit=null, ASC (Leche) -> N + LPAD(0, 15, '0') + N + LPAD(0, 15, '0')
+                    `?limit=4&sortBy=age:ASC&sortBy=lastVetVisit:ASC&cursor=A000000000000000A000000000000000`
+                ) // age=null, ASC + lastVetVisit=null, ASC (Leche) -> A + LPAD(0, 15, '0') + A + LPAD(0, 15, '0')
             })
 
             it('should handle multiple cursor columns with different directions (age:DESC, lastVetVisit:ASC)', async () => {
@@ -3774,11 +3776,11 @@ describe('paginate', () => {
                     ['lastVetVisit', 'ASC'],
                 ])
                 expect(result.links.previous).toBe(
-                    '?limit=20&sortBy=age:ASC&sortBy=lastVetVisit:DESC&cursor=V999999999999994V001671444000000'
-                ) // age=6, ASC + lastVetVisit=2022-12-19T10:00:00.000Z DESC (Milo) -> V + (10^15 - 6) + V + LPAD(1671444000000, 15, '0')
+                    '?limit=20&sortBy=age:ASC&sortBy=lastVetVisit:DESC&cursor=V99999999994X0000V001671444000000'
+                ) // age=6, ASC + lastVetVisit=2022-12-19T10:00:00.000Z DESC (Milo) -> V + (10^11 - 6) + X + LPAD(0, 4, '0') + V + LPAD(1671444000000, 15, '0')
                 expect(result.links.next).toBe(
-                    `?limit=20&sortBy=age:DESC&sortBy=lastVetVisit:ASC&cursor=N000000000000000N000000000000000`
-                ) // age=null, DESC + lastVetVisit=null, ASC (Leche) -> N + LPAD(0, 15, '0') + N + LPAD(0, 15, '0')
+                    `?limit=20&sortBy=age:DESC&sortBy=lastVetVisit:ASC&cursor=A000000000000000A000000000000000`
+                ) // age=null, DESC + lastVetVisit=null, ASC (Leche) -> A + LPAD(0, 15, '0') + A + LPAD(0, 15, '0')
             })
         })
 
@@ -3796,17 +3798,17 @@ describe('paginate', () => {
                 expect(result.data).toEqual(expect.arrayContaining(ageNotNullCats)) // If there are multiple data with the same age value, sorting is not guaranteed among them
                 expect(result.meta.itemsPerPage).toBe(6)
                 expect(result.meta.cursor).toBeUndefined()
-                expect(result.links.previous).toBe('?limit=6&sortBy=age:ASC&cursor=V999999999999994') // age=6 ASC (Milo) -> V + 10^15 - 6
-                expect(result.links.next).toBe('?limit=6&sortBy=age:DESC&cursor=V000000000000000') // age=0 DESC (Baby) -> V + LPAD(0, 15, '0')
+                expect(result.links.previous).toBe('?limit=6&sortBy=age:ASC&cursor=V99999999994X0000') // age=6 ASC (Milo) -> V + 10^11 - 6 + X + LPAD(0, 4, '0')
+                expect(result.links.next).toBe('?limit=6&sortBy=age:DESC&cursor=N00000000000X0000') // age=0 DESC (Baby) -> V + LPAD(0, 11, '0') + X + LPAD(0, 4, '0')
 
-                const result2 = await paginate({ path: '', cursor: 'V000000000000000', limit: 6 }, catRepo, config)
+                const result2 = await paginate({ path: '', cursor: 'N00000000000X0000', limit: 6 }, catRepo, config)
 
                 expect(result2.data).toStrictEqual([cats[4]]) // Leche
                 expect(result2.meta.itemsPerPage).toBe(1)
-                expect(result2.meta.cursor).toBe('V000000000000000')
-                expect(result2.links.previous).toBe('?limit=6&sortBy=age:ASC&cursor=N000000000000000') // age=null ASC (Leche) -> N + LPAD(0, 15, '0')
-                expect(result2.links.current).toBe('?limit=6&sortBy=age:DESC&cursor=V000000000000000')
-                expect(result2.links.next).toBe('?limit=6&sortBy=age:DESC&cursor=N000000000000000') // age=null DESC (Leche) -> N + LPAD(0, 15, '0')
+                expect(result2.meta.cursor).toBe('N00000000000X0000')
+                expect(result2.links.previous).toBe('?limit=6&sortBy=age:ASC&cursor=A000000000000000') // age=null ASC (Leche) -> A + LPAD(0, 15, '0')
+                expect(result2.links.current).toBe('?limit=6&sortBy=age:DESC&cursor=N00000000000X0000')
+                expect(result2.links.next).toBe('?limit=6&sortBy=age:DESC&cursor=A000000000000000') // age=null DESC (Leche) -> A + LPAD(0, 15, '0')
             })
 
             it('should handle 0 and null distinctly (ASC)', async () => {
@@ -3820,18 +3822,18 @@ describe('paginate', () => {
                 expect(result.data).toStrictEqual([cats[5]]) // Baby
                 expect(result.meta.itemsPerPage).toBe(1)
                 expect(result.meta.cursor).toBeUndefined()
-                expect(result.links.previous).toBe('?limit=1&sortBy=age:DESC&cursor=V000000000000000') // age=0 DESC (Baby) -> V + LPAD(0, 15, '0')
-                expect(result.links.next).toBe('?limit=1&sortBy=age:ASC&cursor=X000000000000000') // age=0 ASC (Baby) -> X + LPAD(0, 15, '0')
+                expect(result.links.previous).toBe('?limit=1&sortBy=age:DESC&cursor=N00000000000X0000') // age=0 DESC (Baby) -> N + LPAD(0, 11, '0') + X + LPAD(0, 4, '0')
+                expect(result.links.next).toBe('?limit=1&sortBy=age:ASC&cursor=X00000000000X0000') // age=0 ASC (Baby) -> X + LPAD(0, 11, '0') + X + LPAD(0, 4, '0')
 
-                const result2 = await paginate({ path: '', cursor: 'X000000000000000' }, catRepo, config)
+                const result2 = await paginate({ path: '', cursor: 'X00000000000X0000' }, catRepo, config)
 
                 const catsExceptBaby = cats.filter((cat) => cat.name !== 'Baby')
 
                 expect(result2.data).toEqual(expect.arrayContaining(catsExceptBaby)) // cats except Baby
-                expect(result2.meta.cursor).toBe('X000000000000000')
-                expect(result2.links.previous).toBe('?limit=20&sortBy=age:DESC&cursor=V000000000000003') // age=3 DESC (George) -> V + LPAD(3, 15, '0')
-                expect(result2.links.current).toBe('?limit=20&sortBy=age:ASC&cursor=X000000000000000')
-                expect(result2.links.next).toBe('?limit=20&sortBy=age:ASC&cursor=N000000000000000') // age=null ASC (Leche) -> N + LPAD(0, 15, '0')
+                expect(result2.meta.cursor).toBe('X00000000000X0000')
+                expect(result2.links.previous).toBe('?limit=20&sortBy=age:DESC&cursor=V00000000003V0000') // age=3 DESC (George) -> V + LPAD(3, 11, '0') + X + LPAD(0, 4, '0')
+                expect(result2.links.current).toBe('?limit=20&sortBy=age:ASC&cursor=X00000000000X0000')
+                expect(result2.links.next).toBe('?limit=20&sortBy=age:ASC&cursor=A000000000000000') // age=null ASC (Leche) -> A + LPAD(0, 15, '0')
             })
         })
 
@@ -3854,9 +3856,11 @@ describe('paginate', () => {
 
                 const whiteCats = cats.filter((cat) => cat.color === 'white')
                 expect(result.data).toStrictEqual(whiteCats.slice(0, 2))
-                expect(result.links.previous).toBe('?limit=2&sortBy=id:DESC&filter.color=white&cursor=V000000000000004')
+                expect(result.links.previous).toBe(
+                    '?limit=2&sortBy=id:DESC&filter.color=white&cursor=V00000000004V0000'
+                )
                 expect(result.links.current).toBe('?limit=2&sortBy=id:ASC&filter.color=white')
-                expect(result.links.next).toBe(`?limit=2&sortBy=id:ASC&filter.color=white&cursor=V999999999999995`)
+                expect(result.links.next).toBe(`?limit=2&sortBy=id:ASC&filter.color=white&cursor=V99999999995X0000`)
             })
 
             it('should work with filter and cursor pagination (sortBy id + filter age)', async () => {
@@ -3879,10 +3883,153 @@ describe('paginate', () => {
                 const ageNotNullCats = cats.filter((cat) => cat.age !== null)
                 expect(result.data).toStrictEqual(ageNotNullCats.sort((a, b) => a.id - b.id))
                 expect(result.links.previous).toBe(
-                    '?limit=20&sortBy=id:DESC&filter.age=$not:$null&cursor=V000000000000001'
+                    '?limit=20&sortBy=id:DESC&filter.age=$not:$null&cursor=V00000000001V0000'
                 )
                 expect(result.links.current).toBe('?limit=20&sortBy=id:ASC&filter.age=$not:$null')
-                expect(result.links.next).toBe('?limit=20&sortBy=id:ASC&filter.age=$not:$null&cursor=V999999999999993')
+                expect(result.links.next).toBe('?limit=20&sortBy=id:ASC&filter.age=$not:$null&cursor=V99999999993X0000')
+            })
+        })
+
+        describe('handling data including decimal and negative numbers', () => {
+            it('should handle data including decimal and negative numbers (weightChange, ASC)', async () => {
+                const config: PaginateConfig<CatEntity> = {
+                    sortableColumns: ['weightChange'],
+                    paginationType: PaginationType.CURSOR,
+                    defaultSortBy: [['weightChange', 'ASC']],
+                }
+                const query: PaginateQuery = {
+                    path: '',
+                }
+
+                const result = await paginate<CatEntity>(query, catRepo, config)
+
+                const sortedCats = cats.sort((a, b) => a.weightChange - b.weightChange)
+                expect(result.data).toEqual(sortedCats)
+                expect(result.links.previous).toBe('?limit=20&sortBy=weightChange:DESC&cursor=M99999999997X0000') // weightChange=-3.00 DESC (Shadow) -> (M + 10^11 - 3) + (X + PAD(0, 4, '0'))
+                expect(result.links.next).toBe('?limit=20&sortBy=weightChange:ASC&cursor=V99999999995V7500') // weightChange=5.25 ASC (Garfield) -> (V + 10^11 - 5) + (V + 10^4 - 2500)
+            })
+
+            it('should handle data including decimal and negative numbers (weightChange, DESC)', async () => {
+                const config: PaginateConfig<CatEntity> = {
+                    sortableColumns: ['weightChange'],
+                    paginationType: PaginationType.CURSOR,
+                    defaultSortBy: [['weightChange', 'DESC']],
+                }
+                const query: PaginateQuery = {
+                    path: '',
+                }
+
+                const result = await paginate<CatEntity>(query, catRepo, config)
+
+                const sortedCats = cats.sort((a, b) => b.weightChange - a.weightChange)
+                expect(result.data).toEqual(sortedCats)
+                expect(result.links.previous).toBe('?limit=20&sortBy=weightChange:ASC&cursor=V99999999995V7500') // weightChange=5.25 ASC (Garfield) -> (V + 10^11 - 5) + (V + 10^4 - 2500)
+                expect(result.links.next).toBe('?limit=20&sortBy=weightChange:DESC&cursor=M99999999997X0000') // weightChange=-3.00 DESC (Shadow) -> (M + 10^11 - 3) + (X + LPAD(0, 4, '0'))
+            })
+
+            it('should put null values last', async () => {
+                const nullCat = await catRepo.save(
+                    catRepo.create({
+                        name: 'nullCat',
+                        color: 'black',
+                        age: null,
+                        weightChange: null,
+                        cutenessLevel: CutenessLevel.LOW,
+                        size: { height: 0, width: 0, length: 0 },
+                    })
+                )
+                const config: PaginateConfig<CatEntity> = {
+                    sortableColumns: ['weightChange'],
+                    paginationType: PaginationType.CURSOR,
+                    defaultSortBy: [['weightChange', 'ASC']],
+                }
+                const query: PaginateQuery = {
+                    path: '',
+                }
+
+                const result = await paginate<CatEntity>(query, catRepo, config)
+                expect(result.data[result.data.length - 1]).toStrictEqual(nullCat)
+
+                await catRepo.remove(nullCat)
+            })
+
+            it('should handle multiple cursor columns checking sorted data (age:ASC, weightChange:ASC)', async () => {
+                const config: PaginateConfig<CatEntity> = {
+                    sortableColumns: ['age', 'weightChange'],
+                    paginationType: PaginationType.CURSOR,
+                    defaultSortBy: [
+                        ['age', 'ASC'],
+                        ['weightChange', 'ASC'],
+                    ],
+                }
+                const query: PaginateQuery = {
+                    path: '',
+                }
+
+                const result = await paginate<CatEntity>(query, catRepo, config)
+                const ageNotNullCats = cats.filter((cat) => cat.age !== null)
+                const ageNullCats = cats.filter((cat) => cat.age === null)
+                const sortedAgeNotNullCats = ageNotNullCats.sort((a, b) => {
+                    if (a.age === b.age) {
+                        return a.weightChange - b.weightChange
+                    }
+                    return a.age - b.age
+                })
+                const sortedAgeNullCats = ageNullCats.sort((a, b) => {
+                    return a.weightChange - b.weightChange
+                })
+
+                expect(result.data).toEqual([...sortedAgeNotNullCats, ...sortedAgeNullCats])
+                expect(result.meta.cursor).toBeUndefined()
+                expect(result.meta.sortBy).toStrictEqual([
+                    ['age', 'ASC'],
+                    ['weightChange', 'ASC'],
+                ])
+                expect(result.links.previous).toBe(
+                    '?limit=20&sortBy=age:DESC&sortBy=weightChange:DESC&cursor=N00000000000X0000V00000000000V0100'
+                ) // age=0, DESC + weightChange=0.01 DESC (Baby) -> (V + LPAD(0, 11, '0')) + (X + LPAD(0, 4, '0')) + (V + LPAD(0, 11, '0')) + (V + LPAD(100, 4, '0'))
+                expect(result.links.next).toBe(
+                    '?limit=20&sortBy=age:ASC&sortBy=weightChange:ASC&cursor=A000000000000000Y00000000001V2500'
+                ) // age=null, ASC + weightChange=-1.25 ASC (Leche) -> (A + LPAD(0, 15, '0')) + (Y + LPAD(1, 11, '0')) + (V + LPAD(2500, 4, '0'))
+            })
+
+            it('should handle multiple cursor columns with different directions (age:DESC, weightChange:ASC)', async () => {
+                const config: PaginateConfig<CatEntity> = {
+                    sortableColumns: ['age', 'weightChange'],
+                    paginationType: PaginationType.CURSOR,
+                    defaultSortBy: [
+                        ['age', 'DESC'],
+                        ['weightChange', 'ASC'],
+                    ],
+                }
+                const query: PaginateQuery = {
+                    path: '',
+                }
+
+                const result = await paginate<CatEntity>(query, catRepo, config)
+                const ageNotNullCats = cats.filter((cat) => cat.age !== null)
+                const ageNullCats = cats.filter((cat) => cat.age === null)
+                const sortedAgeNotNullCats = ageNotNullCats.sort((a, b) => {
+                    if (a.age === b.age) {
+                        return a.weightChange - b.weightChange
+                    }
+                    return b.age - a.age
+                })
+                const sortedAgeNullCats = ageNullCats.sort((a, b) => {
+                    return a.weightChange - b.weightChange
+                })
+                expect(result.data).toEqual([...sortedAgeNotNullCats, ...sortedAgeNullCats])
+                expect(result.meta.cursor).toBeUndefined()
+                expect(result.meta.sortBy).toStrictEqual([
+                    ['age', 'DESC'],
+                    ['weightChange', 'ASC'],
+                ])
+                expect(result.links.previous).toBe(
+                    '?limit=20&sortBy=age:ASC&sortBy=weightChange:DESC&cursor=V99999999994X0000N00000000000V2500'
+                ) // age=6, ASC + weightChange=-0.75 DESC (Milo) -> (V + 10^11 - 6) + (X + LPAD(0, 4, '0')) + (N + LPAD(0, 11, '0')) + (V + LPAD(10^4 - 7500), 4, '0'))
+                expect(result.links.next).toBe(
+                    '?limit=20&sortBy=age:DESC&sortBy=weightChange:ASC&cursor=A000000000000000Y00000000001V2500'
+                ) // age=null, DESC + weightChange=-1.25 ASC (Leche) -> (A + LPAD(0, 15, '0')) + (Y + LPAD(1, 11, '0')) + (V + LPAD(2500, 4, '0'))
             })
         })
     })

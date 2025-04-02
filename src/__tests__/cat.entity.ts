@@ -64,12 +64,19 @@ export class CatEntity {
     @JoinTable()
     friends: CatEntity[]
 
+    @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
+    weightChange: number | null
+
     @AfterLoad()
     // Fix due to typeorm bug that doesn't set entity to null
     // when the reletated entity have only the virtual column property with a value different from null
     private afterLoad() {
         if (this.home && !this.home?.id) {
             this.home = null
+        }
+
+        if (this.weightChange) {
+            this.weightChange = Number(this.weightChange) // convert value returned as character to number
         }
     }
 }
