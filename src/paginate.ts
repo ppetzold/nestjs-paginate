@@ -12,6 +12,7 @@ import {
     createRelationSchema,
     extractVirtualProperty,
     fixColumnAlias,
+    getPaddedExpr,
     getPropertiesByColumnName,
     getQueryUrlComponents,
     includesAllPrimaryKeyColumns,
@@ -192,7 +193,6 @@ export async function paginate<T extends ObjectLiteral>(
 ): Promise<Paginated<T>> {
     const dbType = (isRepository(repo) ? repo.manager : repo).connection.options.type
     const isMySqlOrMariaDb = ['mysql', 'mariadb'].includes(dbType)
-    const isPostgresOrCockroachDb = ['postgres', 'cockroachdb'].includes(dbType)
     const metadata = isRepository(repo) ? repo.metadata : repo.expressionMap.mainAlias.metadata
 
     const page = positiveNumberOrDefault(query.page, 1, 1)
@@ -380,30 +380,30 @@ export async function paginate<T extends ObjectLiteral>(
             const maxIntegerDigit = Math.pow(10, 11)
 
             const generateNullCursorExpr = (): string => {
-                const zeroPaddedExpr = isPostgresOrCockroachDb
-                    ? `LPAD(0::text, ${padLength}, '0')`
-                    : `LPAD(0, ${padLength}, '0')`
-                return isMySqlOrMariaDb ? `CONCAT('A', ${zeroPaddedExpr})` : `'A' || ${zeroPaddedExpr}`
+                const zeroPaddedExpr = getPaddedExpr('0', padLength, dbType)
+                const prefix = 'A'
+
+                return isMySqlOrMariaDb ? `CONCAT('${prefix}', ${zeroPaddedExpr})` : `'${prefix}' || ${zeroPaddedExpr}`
             }
 
             const generateDateCursorExpr = (columnExpr: string, direction: 'ASC' | 'DESC'): string => {
                 const safeExpr = `COALESCE(${columnExpr}, 0)`
                 const sqlExpr = direction === 'ASC' ? `POW(10, ${padLength}) - ${safeExpr}` : safeExpr
-                const paddedExpr = isPostgresOrCockroachDb
-                    ? `LPAD((${sqlExpr})::bigint::text, ${padLength}, '0')`
-                    : `LPAD(${sqlExpr}, ${padLength}, '0')`
-                const zeroPaddedExpr = isPostgresOrCockroachDb
-                    ? `LPAD(0::text, ${padLength}, '0')`
-                    : `LPAD(0, ${padLength}, '0')`
+
+                const paddedExpr = getPaddedExpr(sqlExpr, padLength, dbType)
+                const zeroPaddedExpr = getPaddedExpr('0', padLength, dbType)
+
+                const prefixNull = 'A'
+                const prefixValue = 'V'
                 return isMySqlOrMariaDb
-                    ? `CASE 
-                        WHEN ${columnExpr} IS NULL THEN CONCAT('A', ${zeroPaddedExpr}) 
-                        ELSE CONCAT('V', ${paddedExpr}) 
-                       END`
+                    ? `CASE
+                        WHEN ${columnExpr} IS NULL THEN CONCAT('${prefixNull}', ${zeroPaddedExpr}) 
+                        ELSE CONCAT('${prefixValue}', ${paddedExpr}) 
+                    END`
                     : `CASE 
-                        WHEN ${columnExpr} IS NULL THEN 'A' || ${zeroPaddedExpr} 
-                        ELSE 'V' || ${paddedExpr} 
-                       END`
+                        WHEN ${columnExpr} IS NULL THEN '${prefixNull}' || ${zeroPaddedExpr} 
+                        ELSE '${prefixValue}' || ${paddedExpr} 
+                    END`
             }
 
             const generateNumberCursorExpr = (columnExpr: string, direction: 'ASC' | 'DESC'): string => {
@@ -411,67 +411,68 @@ export async function paginate<T extends ObjectLiteral>(
                 const absSafeExpr = `ABS(${safeExpr})`
                 const scaledExpr = `ROUND(${absSafeExpr} * ${fixedScale}, 0)`
                 const intExpr = `FLOOR(${scaledExpr} / ${fixedScale})`
-                const decExpr = `${scaledExpr} % ${fixedScale}`
+                const decExpr = `(${scaledExpr} % ${fixedScale})`
+                const reversedIntExpr = `(${maxIntegerDigit} - ${intExpr})`
+                const reversedDecExpr = `(${fixedScale} - ${decExpr})`
 
-                const paddedIntExpr = isPostgresOrCockroachDb
-                    ? `LPAD((${intExpr})::bigint::text, ${integerLength}, '0')`
-                    : `LPAD(${intExpr}, ${integerLength}, '0')`
-                const paddedDecExpr = isPostgresOrCockroachDb
-                    ? `LPAD((${decExpr})::bigint::text, ${decimalLength}, '0')`
-                    : `LPAD(${decExpr}, ${decimalLength}, '0')`
+                const paddedIntExpr = getPaddedExpr(intExpr, integerLength, dbType)
+                const paddedDecExpr = getPaddedExpr(decExpr, decimalLength, dbType)
+                const reversedIntPaddedExpr = getPaddedExpr(reversedIntExpr, integerLength, dbType)
+                const reversedDecPaddedExpr = getPaddedExpr(reversedDecExpr, decimalLength, dbType)
+                const zeroPaddedIntExpr = getPaddedExpr('0', integerLength, dbType)
+                const zeroPaddedDecExpr = getPaddedExpr('0', decimalLength, dbType)
 
-                const reversedIntExpr = `${maxIntegerDigit} - ${intExpr}`
-                const reversedDecExpr = `${fixedScale} - ${decExpr}`
+                const concat = (parts: string[]): string =>
+                    isMySqlOrMariaDb ? `CONCAT(${parts.join(', ')})` : parts.join(' || ')
 
-                const zeroPaddedIntExpr = isPostgresOrCockroachDb
-                    ? `LPAD(0::text, ${integerLength}, '0')`
-                    : `LPAD(0, ${integerLength}, '0')`
-                const zeroPaddedDecExpr = isPostgresOrCockroachDb
-                    ? `LPAD(0::text, ${decimalLength}, '0')`
-                    : `LPAD(0, ${decimalLength}, '0')`
-
-                if (isMySqlOrMariaDb && direction === 'ASC') {
-                    return `CASE 
-                                WHEN ${columnExpr} IS NULL THEN ${generateNullCursorExpr()} 
-                                WHEN ${columnExpr} < 0 THEN CONCAT('Y', ${paddedIntExpr}, 'V', ${paddedDecExpr}) 
-                                WHEN ${columnExpr} = 0 THEN CONCAT('X', ${zeroPaddedIntExpr}, 'X', ${zeroPaddedDecExpr}) 
-                                WHEN ${columnExpr} > 0 AND ${intExpr} = 0 AND ${decExpr} > 0 THEN CONCAT('X', ${zeroPaddedIntExpr}, 'V', ${reversedDecExpr}) 
-                                WHEN ${columnExpr} > 0 AND ${intExpr} > 0 AND ${decExpr} = 0 THEN CONCAT('V', ${reversedIntExpr}, 'X', ${zeroPaddedDecExpr}) 
-                                WHEN ${columnExpr} > 0 AND ${intExpr} > 0 AND ${decExpr} > 0 THEN CONCAT('V', ${reversedIntExpr}, 'V', ${reversedDecExpr}) 
-                            END`
-                }
-
-                if (isMySqlOrMariaDb && direction === 'DESC') {
-                    return `CASE 
-                                WHEN ${columnExpr} IS NULL THEN ${generateNullCursorExpr()} 
-                                WHEN ${columnExpr} < 0 AND ${intExpr} > 0 AND ${decExpr} > 0 THEN CONCAT('M', ${reversedIntExpr}, 'V', ${reversedDecExpr}) 
-                                WHEN ${columnExpr} < 0 AND ${intExpr} > 0 AND ${decExpr} = 0 THEN CONCAT('M', ${reversedIntExpr}, 'X', ${zeroPaddedDecExpr}) 
-                                WHEN ${columnExpr} < 0 AND ${intExpr} = 0 AND ${decExpr} > 0 THEN CONCAT('N', ${zeroPaddedIntExpr}, 'V', ${reversedDecExpr}) 
-                                WHEN ${columnExpr} = 0 THEN CONCAT('N', ${zeroPaddedIntExpr}, 'X', ${zeroPaddedDecExpr}) 
-                                WHEN ${columnExpr} > 0 THEN CONCAT('V', ${paddedIntExpr}, 'V', ${paddedDecExpr}) 
-                            END`
-                }
-
-                if (!isMySqlOrMariaDb && direction === 'ASC') {
+                if (direction === 'ASC') {
                     return `CASE
-                                WHEN ${columnExpr} IS NULL THEN ${generateNullCursorExpr()} 
-                                WHEN ${columnExpr} < 0 THEN 'Y' || ${paddedIntExpr} || 'V' || ${paddedDecExpr} 
-                                WHEN ${columnExpr} = 0 THEN 'X' || ${zeroPaddedIntExpr} || 'X' || ${zeroPaddedDecExpr} 
-                                WHEN ${columnExpr} > 0 AND ${intExpr} = 0 AND ${decExpr} > 0 THEN 'X' || ${zeroPaddedIntExpr} || 'V' || ${reversedDecExpr} 
-                                WHEN ${columnExpr} > 0 AND ${intExpr} > 0 AND ${decExpr} = 0 THEN 'V' || ${reversedIntExpr} || 'X' || ${zeroPaddedDecExpr} 
-                                WHEN ${columnExpr} > 0 AND ${intExpr} > 0 AND ${decExpr} > 0 THEN 'V' || ${reversedIntExpr} || 'V' || ${reversedDecExpr} 
-                            END`
-                }
-
-                if (!isMySqlOrMariaDb && direction === 'DESC') {
-                    return `CASE 
-                                WHEN ${columnExpr} IS NULL THEN ${generateNullCursorExpr()} 
-                                WHEN ${columnExpr} < 0 AND ${intExpr} > 0 AND ${decExpr} > 0 THEN 'M' || ${reversedIntExpr} || 'V' || ${reversedDecExpr} 
-                                WHEN ${columnExpr} < 0 AND ${intExpr} > 0 AND ${decExpr} = 0 THEN 'M' || ${reversedIntExpr} || 'X' || ${zeroPaddedDecExpr} 
-                                WHEN ${columnExpr} < 0 AND ${intExpr} = 0 AND ${decExpr} > 0 THEN 'N' || ${zeroPaddedIntExpr} || 'V' || ${reversedDecExpr} 
-                                WHEN ${columnExpr} = 0 THEN 'N' || ${zeroPaddedIntExpr} || 'X' || ${zeroPaddedDecExpr} 
-                                WHEN ${columnExpr} > 0 THEN 'V' || ${paddedIntExpr} || 'V' || ${paddedDecExpr} 
-                            END`
+                        WHEN ${columnExpr} IS NULL THEN ${generateNullCursorExpr()}
+                        WHEN ${columnExpr} < 0 THEN ${concat(["'Y'", paddedIntExpr, "'V'", paddedDecExpr])}
+                        WHEN ${columnExpr} = 0 THEN ${concat(["'X'", zeroPaddedIntExpr, "'X'", zeroPaddedDecExpr])}
+                        WHEN ${columnExpr} > 0 AND ${intExpr} = 0 AND ${decExpr} > 0 THEN ${concat([
+                            "'X'",
+                            zeroPaddedIntExpr,
+                            "'V'",
+                            reversedDecPaddedExpr,
+                        ])}
+                        WHEN ${columnExpr} > 0 AND ${intExpr} > 0 AND ${decExpr} = 0 THEN ${concat([
+                            "'V'",
+                            reversedIntPaddedExpr,
+                            "'X'",
+                            zeroPaddedDecExpr,
+                        ])}
+                        WHEN ${columnExpr} > 0 AND ${intExpr} > 0 AND ${decExpr} > 0 THEN ${concat([
+                            "'V'",
+                            reversedIntPaddedExpr,
+                            "'V'",
+                            reversedDecPaddedExpr,
+                        ])}
+                    END`
+                } else {
+                    return `CASE
+                        WHEN ${columnExpr} IS NULL THEN ${generateNullCursorExpr()}
+                        WHEN ${columnExpr} < 0 AND ${intExpr} > 0 AND ${decExpr} > 0 THEN ${concat([
+                            "'M'",
+                            reversedIntPaddedExpr,
+                            "'V'",
+                            reversedDecPaddedExpr,
+                        ])}
+                        WHEN ${columnExpr} < 0 AND ${intExpr} > 0 AND ${decExpr} = 0 THEN ${concat([
+                            "'M'",
+                            reversedIntPaddedExpr,
+                            "'X'",
+                            zeroPaddedDecExpr,
+                        ])}
+                        WHEN ${columnExpr} < 0 AND ${intExpr} = 0 AND ${decExpr} > 0 THEN ${concat([
+                            "'N'",
+                            zeroPaddedIntExpr,
+                            "'V'",
+                            reversedDecPaddedExpr,
+                        ])}
+                        WHEN ${columnExpr} = 0 THEN ${concat(["'N'", zeroPaddedIntExpr, "'X'", zeroPaddedDecExpr])}
+                        WHEN ${columnExpr} > 0 THEN ${concat(["'V'", paddedIntExpr, "'V'", paddedDecExpr])}
+                    END`
                 }
             }
 
