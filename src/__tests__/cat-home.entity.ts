@@ -38,7 +38,8 @@ export class CatHomeEntity {
     @VirtualColumn({
         query: (alias) => {
             const tck = process.env.DB === 'mariadb' ? '`' : '"'
-            return `SELECT CAST(COUNT(*) AS INT) FROM ${tck}cat${tck} WHERE ${tck}cat${tck}.${tck}homeId${tck} = ${alias}.id`
+            const intType = process.env.DB === 'mariadb' ? 'UNSIGNED' : 'INT'
+            return `SELECT CAST(COUNT(*) AS ${intType}) FROM ${tck}cat${tck} WHERE ${tck}cat${tck}.${tck}homeId${tck} = ${alias}.id`
         },
     })
     countCat: number

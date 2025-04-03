@@ -3448,7 +3448,7 @@ describe('paginate', () => {
                 }
 
                 const result = await paginate<CatEntity>(query, catRepo, config)
-                const expectedResult = [3, 4, 0, 1, 2].map((i) => {
+                const expectedResult = [3, 4, 5, 6, 0, 1, 2].map((i) => {
                     const ret = clone(cats[i])
                     if (i < 3) {
                         ret.home = clone(catHomes[i])
