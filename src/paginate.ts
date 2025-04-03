@@ -316,6 +316,7 @@ export async function paginate<T extends ObjectLiteral>(
     const getDateColumnExpression = (alias: string, dbType: string): string => {
         switch (dbType) {
             case 'mysql':
+            case 'mariadb':
                 return `UNIX_TIMESTAMP(${alias}) * 1000`
             case 'postgres':
                 return `EXTRACT(EPOCH FROM ${alias}) * 1000`
