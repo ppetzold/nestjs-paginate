@@ -17,7 +17,6 @@ const getDateColumnType = () => {
 
 export const DateColumnNotNull: ColumnOptions = {
     type: getDateColumnType(),
-    precision: 3,
 }
 
 export const DateColumnNullable: ColumnOptions = {

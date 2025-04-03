@@ -503,7 +503,7 @@ export async function paginate<T extends ObjectLiteral>(
                 queryBuilder.andWhere(`${cursorExpression} < :cursor`, { cursor: query.cursor })
             }
 
-            queryBuilder.orderBy('cursor', 'DESC')
+            queryBuilder.orderBy('`cursor`', 'DESC') // since cursor is a reserved word in mysql, wrap it in backticks to recognize it as an alias
         }
     }
 
@@ -681,6 +681,7 @@ export async function paginate<T extends ObjectLiteral>(
         ;[items, totalItems] = await queryBuilder.getManyAndCount()
     } else {
         items = await queryBuilder.getMany()
+        console.log(queryBuilder.getSql())
     }
 
     const sortByQuery = sortBy.map((order) => `&sortBy=${order.join(':')}`).join('')
