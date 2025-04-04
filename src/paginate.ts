@@ -16,6 +16,7 @@ import {
     getPropertiesByColumnName,
     getQueryUrlComponents,
     includesAllPrimaryKeyColumns,
+    isDateColumnType,
     isEntityKey,
     isFindOperator,
     isISODate,
@@ -292,12 +293,7 @@ export async function paginate<T extends ObjectLiteral>(
                 const columnMeta = metadata.columns.find(
                     (col) => col.propertyName === getPropertiesByColumnName(column).propertyName
                 )
-                const isDateColumn =
-                    columnMeta &&
-                    (columnMeta.type === Date ||
-                        columnMeta.type === 'timestamp' ||
-                        columnMeta.type === 'timestamptz' ||
-                        columnMeta.type === 'datetime')
+                const isDateColumn = columnMeta && isDateColumnType(columnMeta.type)
 
                 if (value === null) {
                     return generateNullCursor()
@@ -480,12 +476,7 @@ export async function paginate<T extends ObjectLiteral>(
                 const columnProperties = getPropertiesByColumnName(column)
                 const alias = fixColumnAlias(columnProperties, queryBuilder.alias)
                 const columnMeta = metadata.columns.find((col) => col.propertyName === columnProperties.propertyName)
-                const isDateColumn =
-                    columnMeta &&
-                    (columnMeta.type === Date ||
-                        columnMeta.type === 'timestamp' ||
-                        columnMeta.type === 'timestamptz' ||
-                        columnMeta.type === 'datetime')
+                const isDateColumn = columnMeta && isDateColumnType(columnMeta.type)
                 const columnExpr = isDateColumn ? getDateColumnExpression(alias, dbType) : alias
 
                 return isDateColumn

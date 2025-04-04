@@ -313,3 +313,13 @@ export function getPaddedExpr(valueExpr: string, length: number, dbType: string)
         return `SUBSTR('${padding}' || CAST(${valueExpr} AS INTEGER), -${lengthStr}, ${lengthStr})`
     }
 }
+
+export function isDateColumnType(type: any): boolean {
+    const dateTypes = [
+        Date, // JavaScript Date class
+        'datetime',
+        'timestamp',
+        'timestamptz',
+    ]
+    return dateTypes.includes(type)
+}

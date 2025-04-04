@@ -27,6 +27,7 @@ import {
     extractVirtualProperty,
     fixColumnAlias,
     getPropertiesByColumnName,
+    isDateColumnType,
     isISODate,
     JoinMethod,
 } from './helper'
@@ -247,7 +248,7 @@ function fixColumnFilterValue<T>(column: string, qb: SelectQueryBuilder<T>, isJs
     const columnType = virtualProperty.type
 
     return (value: string) => {
-        if ((columnType === Date || isJsonb) && isISODate(value)) {
+        if ((isDateColumnType(columnType) || isJsonb) && isISODate(value)) {
             return new Date(value)
         }
 
