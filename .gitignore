@@ -6,3 +6,4 @@ npm-debug.log
 .history
 .idea/
 .env
+test.sql

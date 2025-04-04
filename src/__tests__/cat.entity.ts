@@ -13,6 +13,7 @@ import {
 } from 'typeorm'
 import { CatHomeEntity } from './cat-home.entity'
 import { CatToyEntity } from './cat-toy.entity'
+import { DateColumnNotNull, DateColumnNullable } from './column-option'
 import { SizeEmbed } from './size.embed'
 
 export enum CutenessLevel {
@@ -38,7 +39,7 @@ export class CatEntity {
     @Column({ type: 'text' }) // We don't use enum type as it makes it easier when testing across different db drivers.
     cutenessLevel: CutenessLevel
 
-    @Column({ nullable: true })
+    @Column(DateColumnNullable)
     lastVetVisit: Date | null
 
     @Column(() => SizeEmbed)
@@ -53,15 +54,18 @@ export class CatEntity {
     @JoinColumn()
     home: CatHomeEntity
 
-    @CreateDateColumn()
+    @CreateDateColumn(DateColumnNotNull)
     createdAt: string
 
-    @DeleteDateColumn({ nullable: true })
+    @DeleteDateColumn(DateColumnNullable)
     deletedAt?: string
 
     @ManyToMany(() => CatEntity)
     @JoinTable()
     friends: CatEntity[]
+
+    @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
+    weightChange: number | null
 
     @AfterLoad()
     // Fix due to typeorm bug that doesn't set entity to null
@@ -69,6 +73,10 @@ export class CatEntity {
     private afterLoad() {
         if (this.home && !this.home?.id) {
             this.home = null
+        }
+
+        if (this.weightChange) {
+            this.weightChange = Number(this.weightChange) // convert value returned as character to number
         }
     }
 }

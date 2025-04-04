@@ -300,3 +300,26 @@ export function mergeRelationSchema(...schemas: RelationSchema[]) {
     const noTrueOverride = (obj, source) => (source === true && obj !== undefined ? obj : undefined)
     return mergeWith({}, ...schemas, noTrueOverride)
 }
+
+export function getPaddedExpr(valueExpr: string, length: number, dbType: string): string {
+    const lengthStr = String(length)
+    if (dbType === 'postgres' || dbType === 'cockroachdb') {
+        return `LPAD((${valueExpr})::bigint::text, ${lengthStr}, '0')`
+    } else if (dbType === 'mysql' || dbType === 'mariadb') {
+        return `LPAD(${valueExpr}, ${lengthStr}, '0')`
+    } else {
+        // sqlite
+        const padding = '0'.repeat(length)
+        return `SUBSTR('${padding}' || CAST(${valueExpr} AS INTEGER), -${lengthStr}, ${lengthStr})`
+    }
+}
+
+export function isDateColumnType(type: any): boolean {
+    const dateTypes = [
+        Date, // JavaScript Date class
+        'datetime',
+        'timestamp',
+        'timestamptz',
+    ]
+    return dateTypes.includes(type)
+}

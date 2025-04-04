@@ -101,7 +101,7 @@ The following code exposes a route using cursor-based pagination:
 #### Endpoint
 
 ```url
-http://localhost:3000/cats?limit=5&cursor=2022-12-20T10:00:00.000Z&cursorColumn=lastVetVisit&cursorDirection=after
+http://localhost:3000/cats?limit=5&sortBy=lastVetVisit:ASC&cursor=V998328469600000
 ```
 
 #### Result
@@ -137,14 +137,12 @@ http://localhost:3000/cats?limit=5&cursor=2022-12-20T10:00:00.000Z&cursorColumn=
   ],
   "meta": {
     "itemsPerPage": 5,
-    "cursor": "2022-12-20T10:00:00.000Z",
-    "firstCursor": "2022-12-21T10:00:00.000Z",
-    "lastCursor": "2022-12-25T10:00:00.000Z"
+    "cursor": "V998328469600000"
   },
   "links": {
-    "previous": "http://localhost:3000/cats?limit=5&sortBy=lastVetVisit:ASC&cursor=2022-12-21T10:00:00.000Z&cursorColumn=lastVetVisit&cursorDirection=before",
-    "current": "http://localhost:3000/cats?limit=5&sortBy=lastVetVisit:ASC&cursor=2022-12-20T10:00:00.000Z&cursorColumn=lastVetVisit&cursorDirection=after",
-    "next": "http://localhost:3000/cats?limit=5&sortBy=lastVetVisit:ASC&cursor=2022-12-25T10:00:00.000Z&cursorColumn=lastVetVisit&cursorDirection=after"
+    "previous": "http://localhost:3000/cats?limit=5&sortBy=lastVetVisit:DESC&cursor=V001671616800000",
+    "current": "http://localhost:3000/cats?limit=5&sortBy=lastVetVisit:ASC&cursor=V998328469600000",
+    "next": "http://localhost:3000/cats?limit=5&sortBy=lastVetVisit:ASC&cursor=V998328037600000"
   }
 }
 ```
@@ -290,17 +288,6 @@ const paginateConfig: PaginateConfig<CatEntity> {
 
   /**
    * Required: false
-   * Type: (keyof CatEntity)[]
-   * Default: None
-   * Description: Columns that can be used as cursors for cursor-based pagination.
-   * Typically used with date or unique & sequential columns like 'lastVetVisit' or 'id'.
-   * If `cursorColumn` is not provided in the query, the first column in this array is used as the default.
-   * If `cursorDirection` is not provided in the query, 'before' is used as the default direction.
-   */
-  cursorableColumns: ['lastVetVisit'],
-
-  /**
-   * Required: false
    * Type: RelationColumn<CatEntity>
    * Description: Indicates what relations of entity should be loaded.
    */
@@ -329,7 +316,6 @@ const paginateConfig: PaginateConfig<CatEntity> {
    * Description: Allow user to choose between limit/offset and take/skip, or cursor-based pagination.
    * Default: PaginationType.TAKE_AND_SKIP
    * Options: PaginationType.LIMIT_AND_OFFSET, PaginationType.TAKE_AND_SKIP, PaginationType.CURSOR
-   * Note: CURSOR requires `cursorableColumns` to be defined.
    *
    * However, using limit/offset can cause problems with relations.
    */
@@ -573,6 +559,38 @@ Multi filters are filters that can be applied to a single column with a comparat
 is resolved to:
 
 `WHERE ... AND (id = 5 OR id = 7) AND name = 'Milo' AND ...`
+
+## Cursor-based Pagination
+
+- `paginationType: PaginationType.CURSOR`
+- Cursor format:
+  - Numbers: `[prefix1][integer:11 digits][prefix2][decimal:4 digits]` (e.g., `Y00000000001V2500` for -1.25 in ASC).
+  - Dates: `[prefix][value:15 digits]` (e.g., `V001671444000000` for a timestamp in DESC).
+- Prefixes:
+  - `null`: `A` (lowest priority, last in results).
+  - ASC:
+    - positive-int: `V` (greater than or equal to 1), `X` (less than 1)
+    - positive-decimal: `V` (not zero), `X` (zero)
+    - zero-int: `X`
+    - zero-decimal: `X`
+    - negative-int: `Y`
+    - negative-decimal: `V`
+  - DESC:
+    - positive-int: `V`
+    - positive-decimal: `V`
+    - zero-int: `N`
+    - zero-decimal: `X`
+    - negative-int: `M` (less than or equal to -1), `N` (greater than -1)
+    - negative-decimal: `V` (not zero), `X` (zero)
+- Logic:
+  - Numbers: Split into integer (11 digits) and decimal (4 digits) parts, with separate prefixes. Supports negative values, with sorting adjusted per direction.
+  - Dates: Single prefix with 15-digit timestamp padded with zeros.
+  - ASC: Negative → Zero → Positive → Null.
+  - DESC: Positive → Zero → Negative → Null.
+- Notes:
+  - Multiple columns: `sortBy` can include multiple columns to create and sort by the cursor (e.g., `sortBy=age:ASC,createdAt:DESC`), but at least one column must be unique to ensure consistent ordering.
+  - Supported columns: Cursor sorting is available for numeric and date-related columns (string columns are not supported).
+  - Decimal support: Numeric columns can include decimals, limited to 11 digits for the integer part and 4 digits for the decimal part.
 
 ## Swagger
 

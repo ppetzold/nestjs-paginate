@@ -1,4 +1,5 @@
 import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn } from 'typeorm'
+import { DateColumnNotNull } from './column-option'
 
 @Entity()
 export class ToyShopAddressEntity {
@@ -8,6 +9,6 @@ export class ToyShopAddressEntity {
     @Column()
     address: string
 
-    @CreateDateColumn()
+    @CreateDateColumn(DateColumnNotNull)
     createdAt: string
 }

@@ -12,9 +12,11 @@ import {
     createRelationSchema,
     extractVirtualProperty,
     fixColumnAlias,
+    getPaddedExpr,
     getPropertiesByColumnName,
     getQueryUrlComponents,
     includesAllPrimaryKeyColumns,
+    isDateColumnType,
     isEntityKey,
     isFindOperator,
     isISODate,
@@ -47,9 +49,7 @@ export class Paginated<T> {
         filter?: {
             [column: string]: string | string[]
         }
-        cursor?: string // current cursor
-        firstCursor?: string // the first of the boundary values
-        lastCursor?: string // the last of the boundary values
+        cursor?: string
     }
     links: {
         first?: string
@@ -90,7 +90,6 @@ export interface PaginateConfig<T> {
     multiWordSearch?: boolean
     defaultJoinMethod?: JoinMethod
     joinMethods?: Partial<MappedColumns<T, JoinMethod>>
-    cursorableColumns?: Column<T>[]
 }
 
 export enum PaginationLimit {
@@ -181,7 +180,7 @@ function flattenWhereAndTransform<T>(
     })
 }
 
-function fixCursorValue(value: string): any {
+function fixCursorValue(value: any): any {
     if (isISODate(value)) {
         return new Date(value)
     }
@@ -193,6 +192,10 @@ export async function paginate<T extends ObjectLiteral>(
     repo: Repository<T> | SelectQueryBuilder<T>,
     config: PaginateConfig<T>
 ): Promise<Paginated<T>> {
+    const dbType = (isRepository(repo) ? repo.manager : repo).connection.options.type
+    const isMySqlOrMariaDb = ['mysql', 'mariadb'].includes(dbType)
+    const metadata = isRepository(repo) ? repo.metadata : repo.expressionMap.mainAlias.metadata
+
     const page = positiveNumberOrDefault(query.page, 1, 1)
 
     const defaultLimit = config.defaultLimit || PaginationLimit.DEFAULT_LIMIT
@@ -214,12 +217,138 @@ export async function paginate<T extends ObjectLiteral>(
                 : Math.min(query.limit ?? defaultLimit, maxLimit)
             : defaultLimit
 
+    const generateNullCursor = (): string => {
+        return 'A' + '0'.repeat(15) // null values ​​should be looked up last, so use the smallest prefix
+    }
+
+    const generateDateCursor = (value: number, direction: 'ASC' | 'DESC'): string => {
+        const finalValue = direction === 'ASC' ? Math.pow(10, 15) - value : value
+        return 'V' + String(finalValue).padStart(15, '0')
+    }
+
+    const generateNumberCursor = (value: number, direction: 'ASC' | 'DESC'): string => {
+        const integerLength = 11
+        const decimalLength = 4 // sorting is not possible if the decimal point exceeds 4 digits
+        const maxIntegerDigit = Math.pow(10, integerLength)
+        const fixedScale = Math.pow(10, decimalLength)
+        const absValue = Math.abs(value)
+        const scaledValue = Math.round(absValue * fixedScale)
+        const integerPart = Math.floor(scaledValue / fixedScale)
+        const decimalPart = scaledValue % fixedScale
+
+        let integerPrefix: string
+        let decimalPrefix: string
+        let finalInteger: number
+        let finalDecimal: number
+
+        if (direction === 'ASC') {
+            if (value < 0) {
+                integerPrefix = 'Y'
+                decimalPrefix = 'V'
+                finalInteger = integerPart
+                finalDecimal = decimalPart
+            } else if (value === 0) {
+                integerPrefix = 'X'
+                decimalPrefix = 'X'
+                finalInteger = 0
+                finalDecimal = 0
+            } else {
+                integerPrefix = integerPart === 0 ? 'X' : 'V' // X > V
+                decimalPrefix = decimalPart === 0 ? 'X' : 'V' // X > V
+                finalInteger = integerPart === 0 ? 0 : maxIntegerDigit - integerPart
+                finalDecimal = decimalPart === 0 ? 0 : fixedScale - decimalPart
+            }
+        } else {
+            // DESC
+            if (value < 0) {
+                integerPrefix = integerPart === 0 ? 'N' : 'M' // N > M
+                decimalPrefix = decimalPart === 0 ? 'X' : 'V' // X > V
+                finalInteger = integerPart === 0 ? 0 : maxIntegerDigit - integerPart
+                finalDecimal = decimalPart === 0 ? 0 : fixedScale - decimalPart
+            } else if (value === 0) {
+                integerPrefix = 'N'
+                decimalPrefix = 'X'
+                finalInteger = 0
+                finalDecimal = 0
+            } else {
+                integerPrefix = 'V'
+                decimalPrefix = 'V'
+                finalInteger = integerPart
+                finalDecimal = decimalPart
+            }
+        }
+
+        return (
+            integerPrefix +
+            String(finalInteger).padStart(integerLength, '0') +
+            decimalPrefix +
+            String(finalDecimal).padStart(decimalLength, '0')
+        )
+    }
+
+    const generateCursor = (item: T, sortBy: SortBy<T>): string => {
+        return sortBy
+            .map(([column, direction]) => {
+                const value = fixCursorValue(item[column])
+                const columnMeta = metadata.columns.find(
+                    (col) => col.propertyName === getPropertiesByColumnName(column).propertyName
+                )
+                const isDateColumn = columnMeta && isDateColumnType(columnMeta.type)
+
+                if (value === null) {
+                    return generateNullCursor()
+                }
+
+                if (isDateColumn) {
+                    return generateDateCursor(value.getTime(), direction)
+                } else {
+                    const numericValue = Number(value)
+                    return generateNumberCursor(numericValue, direction)
+                }
+            })
+            .join('')
+    }
+
+    const getDateColumnExpression = (alias: string, dbType: string): string => {
+        switch (dbType) {
+            case 'mysql':
+            case 'mariadb':
+                return `UNIX_TIMESTAMP(${alias}) * 1000`
+            case 'postgres':
+                return `EXTRACT(EPOCH FROM ${alias}) * 1000`
+            case 'sqlite':
+                return `(STRFTIME('%s', ${alias}) + (STRFTIME('%f', ${alias}) - STRFTIME('%S', ${alias}))) * 1000`
+            default:
+                return alias
+        }
+    }
+
+    const logAndThrowException = (msg: string) => {
+        logger.debug(msg)
+        throw new ServiceUnavailableException(msg)
+    }
+
+    if (config.sortableColumns.length < 1) {
+        logAndThrowException("Missing required 'sortableColumns' config.")
+    }
+
     const sortBy = [] as SortBy<T>
+
+    if (query.sortBy) {
+        for (const order of query.sortBy) {
+            if (isEntityKey(config.sortableColumns, order[0]) && ['ASC', 'DESC'].includes(order[1])) {
+                sortBy.push(order as Order<T>)
+            }
+        }
+    }
+
+    if (!sortBy.length) {
+        sortBy.push(...(config.defaultSortBy || [[config.sortableColumns[0], 'ASC']]))
+    }
+
     const searchBy: Column<T>[] = []
 
     let [items, totalItems]: [T[], number] = [[], 0]
-    let cursorColumn: string
-    let cursorDirection: 'before' | 'after'
 
     const queryBuilder = isRepository(repo) ? repo.createQueryBuilder('__root') : repo
 
@@ -229,47 +358,145 @@ export async function paginate<T extends ObjectLiteral>(
         }
     }
 
-    if (config.paginationType === PaginationType.CURSOR) {
-        const formatMessage = (msg: string) => {
-            logger.debug(msg)
-            throw new ServiceUnavailableException(msg)
-        }
-
-        if (!config.cursorableColumns?.length) {
-            formatMessage("Missing required 'cursorableColumns' config.")
-        }
-
-        cursorColumn = query.cursorColumn || config.cursorableColumns[0]
-        cursorDirection = query.cursorDirection || 'before'
-
-        if (!isEntityKey(config.cursorableColumns, cursorColumn)) {
-            formatMessage(
-                `Invalid cursorColumn '${cursorColumn}'. It must be one of: ${config.cursorableColumns.join(', ')}.`
-            )
-        }
-
-        if (!['before', 'after'].includes(cursorDirection)) {
-            formatMessage(`Invalid cursorDirection '${cursorDirection}'. It must be 'before' or 'after'.`)
-        }
-    }
-
     if (isPaginated) {
+        config.paginationType = config.paginationType || PaginationType.TAKE_AND_SKIP
+
         // Allow user to choose between limit/offset and take/skip, or cursor-based pagination.
         // However, using limit/offset can cause problems when joining one-to-many etc.
         if (config.paginationType === PaginationType.LIMIT_AND_OFFSET) {
             queryBuilder.limit(limit).offset((page - 1) * limit)
-        } else {
+        } else if (config.paginationType === PaginationType.TAKE_AND_SKIP) {
             queryBuilder.take(limit).skip((page - 1) * limit)
-        }
+        } else if (config.paginationType === PaginationType.CURSOR) {
+            queryBuilder.take(limit)
+            const padLength = 15
+            const integerLength = 11
+            const decimalLength = 4
+            const fixedScale = Math.pow(10, 4)
+            const maxIntegerDigit = Math.pow(10, 11)
 
-        if (config.paginationType === PaginationType.CURSOR && query.cursor) {
-            {
-                const columnProperties = getPropertiesByColumnName(cursorColumn)
-                const alias = fixColumnAlias(columnProperties, queryBuilder.alias)
-                const operator = cursorDirection === 'before' ? '<' : '>'
-                const cursorValue = fixCursorValue(query.cursor)
-                queryBuilder.andWhere(`${alias} ${operator} :cursor`, { cursor: cursorValue })
+            const generateNullCursorExpr = (): string => {
+                const zeroPaddedExpr = getPaddedExpr('0', padLength, dbType)
+                const prefix = 'A'
+
+                return isMySqlOrMariaDb ? `CONCAT('${prefix}', ${zeroPaddedExpr})` : `'${prefix}' || ${zeroPaddedExpr}`
             }
+
+            const generateDateCursorExpr = (columnExpr: string, direction: 'ASC' | 'DESC'): string => {
+                const safeExpr = `COALESCE(${columnExpr}, 0)`
+                const sqlExpr = direction === 'ASC' ? `POW(10, ${padLength}) - ${safeExpr}` : safeExpr
+
+                const paddedExpr = getPaddedExpr(sqlExpr, padLength, dbType)
+                const zeroPaddedExpr = getPaddedExpr('0', padLength, dbType)
+
+                const prefixNull = 'A'
+                const prefixValue = 'V'
+                return isMySqlOrMariaDb
+                    ? `CASE
+                        WHEN ${columnExpr} IS NULL THEN CONCAT('${prefixNull}', ${zeroPaddedExpr}) 
+                        ELSE CONCAT('${prefixValue}', ${paddedExpr}) 
+                    END`
+                    : `CASE 
+                        WHEN ${columnExpr} IS NULL THEN '${prefixNull}' || ${zeroPaddedExpr} 
+                        ELSE '${prefixValue}' || ${paddedExpr} 
+                    END`
+            }
+
+            const generateNumberCursorExpr = (columnExpr: string, direction: 'ASC' | 'DESC'): string => {
+                const safeExpr = `COALESCE(${columnExpr}, 0)`
+                const absSafeExpr = `ABS(${safeExpr})`
+                const scaledExpr = `ROUND(${absSafeExpr} * ${fixedScale}, 0)`
+                const intExpr = `FLOOR(${scaledExpr} / ${fixedScale})`
+                const decExpr = `(${scaledExpr} % ${fixedScale})`
+                const reversedIntExpr = `(${maxIntegerDigit} - ${intExpr})`
+                const reversedDecExpr = `(${fixedScale} - ${decExpr})`
+
+                const paddedIntExpr = getPaddedExpr(intExpr, integerLength, dbType)
+                const paddedDecExpr = getPaddedExpr(decExpr, decimalLength, dbType)
+                const reversedIntPaddedExpr = getPaddedExpr(reversedIntExpr, integerLength, dbType)
+                const reversedDecPaddedExpr = getPaddedExpr(reversedDecExpr, decimalLength, dbType)
+                const zeroPaddedIntExpr = getPaddedExpr('0', integerLength, dbType)
+                const zeroPaddedDecExpr = getPaddedExpr('0', decimalLength, dbType)
+
+                const concat = (parts: string[]): string =>
+                    isMySqlOrMariaDb ? `CONCAT(${parts.join(', ')})` : parts.join(' || ')
+
+                if (direction === 'ASC') {
+                    return `CASE
+                        WHEN ${columnExpr} IS NULL THEN ${generateNullCursorExpr()}
+                        WHEN ${columnExpr} < 0 THEN ${concat(["'Y'", paddedIntExpr, "'V'", paddedDecExpr])}
+                        WHEN ${columnExpr} = 0 THEN ${concat(["'X'", zeroPaddedIntExpr, "'X'", zeroPaddedDecExpr])}
+                        WHEN ${columnExpr} > 0 AND ${intExpr} = 0 AND ${decExpr} > 0 THEN ${concat([
+                            "'X'",
+                            zeroPaddedIntExpr,
+                            "'V'",
+                            reversedDecPaddedExpr,
+                        ])}
+                        WHEN ${columnExpr} > 0 AND ${intExpr} > 0 AND ${decExpr} = 0 THEN ${concat([
+                            "'V'",
+                            reversedIntPaddedExpr,
+                            "'X'",
+                            zeroPaddedDecExpr,
+                        ])}
+                        WHEN ${columnExpr} > 0 AND ${intExpr} > 0 AND ${decExpr} > 0 THEN ${concat([
+                            "'V'",
+                            reversedIntPaddedExpr,
+                            "'V'",
+                            reversedDecPaddedExpr,
+                        ])}
+                    END`
+                } else {
+                    return `CASE
+                        WHEN ${columnExpr} IS NULL THEN ${generateNullCursorExpr()}
+                        WHEN ${columnExpr} < 0 AND ${intExpr} > 0 AND ${decExpr} > 0 THEN ${concat([
+                            "'M'",
+                            reversedIntPaddedExpr,
+                            "'V'",
+                            reversedDecPaddedExpr,
+                        ])}
+                        WHEN ${columnExpr} < 0 AND ${intExpr} > 0 AND ${decExpr} = 0 THEN ${concat([
+                            "'M'",
+                            reversedIntPaddedExpr,
+                            "'X'",
+                            zeroPaddedDecExpr,
+                        ])}
+                        WHEN ${columnExpr} < 0 AND ${intExpr} = 0 AND ${decExpr} > 0 THEN ${concat([
+                            "'N'",
+                            zeroPaddedIntExpr,
+                            "'V'",
+                            reversedDecPaddedExpr,
+                        ])}
+                        WHEN ${columnExpr} = 0 THEN ${concat(["'N'", zeroPaddedIntExpr, "'X'", zeroPaddedDecExpr])}
+                        WHEN ${columnExpr} > 0 THEN ${concat(["'V'", paddedIntExpr, "'V'", paddedDecExpr])}
+                    END`
+                }
+            }
+
+            const cursorExpressions = sortBy.map(([column, direction]) => {
+                const columnProperties = getPropertiesByColumnName(column)
+                const alias = fixColumnAlias(columnProperties, queryBuilder.alias)
+                const columnMeta = metadata.columns.find((col) => col.propertyName === columnProperties.propertyName)
+                const isDateColumn = columnMeta && isDateColumnType(columnMeta.type)
+                const columnExpr = isDateColumn ? getDateColumnExpression(alias, dbType) : alias
+
+                return isDateColumn
+                    ? generateDateCursorExpr(columnExpr, direction)
+                    : generateNumberCursorExpr(columnExpr, direction)
+            })
+
+            const cursorExpression =
+                cursorExpressions.length > 1
+                    ? isMySqlOrMariaDb
+                        ? `CONCAT(${cursorExpressions.join(', ')})`
+                        : cursorExpressions.join(' || ')
+                    : cursorExpressions[0]
+            queryBuilder.addSelect(cursorExpression, 'cursor')
+
+            if (query.cursor) {
+                queryBuilder.andWhere(`${cursorExpression} < :cursor`, { cursor: query.cursor })
+            }
+
+            isMySqlOrMariaDb ? queryBuilder.orderBy('`cursor`', 'DESC') : queryBuilder.orderBy('cursor', 'DESC') // since cursor is a reserved word in mysql, wrap it in backticks to recognize it as an alias
         }
     }
 
@@ -293,62 +520,37 @@ export async function paginate<T extends ObjectLiteral>(
         addRelationsFromSchema(queryBuilder, relationsSchema, config, joinMethods)
     }
 
-    const dbType = (isRepository(repo) ? repo.manager : repo).connection.options.type
-    const isMariaDbOrMySql = (dbType: string) => dbType === 'mariadb' || dbType === 'mysql'
-    const isMMDb = isMariaDbOrMySql(dbType)
-
-    let nullSort: string | undefined
-    if (config.nullSort) {
-        if (isMMDb) {
-            nullSort = config.nullSort === 'last' ? 'IS NULL' : 'IS NOT NULL'
-        } else {
-            nullSort = config.nullSort === 'last' ? 'NULLS LAST' : 'NULLS FIRST'
-        }
-    }
-
-    if (config.sortableColumns.length < 1) {
-        const message = "Missing required 'sortableColumns' config."
-        logger.debug(message)
-        throw new ServiceUnavailableException(message)
-    }
-
-    // If paginationType is cursor, add the cursor column and direction before adding other query.sortBy.
-    if (config.paginationType === PaginationType.CURSOR) {
-        sortBy.push([cursorColumn, cursorDirection === 'before' ? 'DESC' : 'ASC'] as Order<T>)
-    }
-
-    if (query.sortBy) {
-        for (const order of query.sortBy) {
-            if (isEntityKey(config.sortableColumns, order[0]) && ['ASC', 'DESC'].includes(order[1])) {
-                sortBy.push(order as Order<T>)
+    if (config.paginationType !== PaginationType.CURSOR) {
+        let nullSort: string | undefined
+        if (config.nullSort) {
+            if (isMySqlOrMariaDb) {
+                nullSort = config.nullSort === 'last' ? 'IS NULL' : 'IS NOT NULL'
+            } else {
+                nullSort = config.nullSort === 'last' ? 'NULLS LAST' : 'NULLS FIRST'
             }
         }
-    }
 
-    if (!sortBy.length) {
-        sortBy.push(...(config.defaultSortBy || [[config.sortableColumns[0], 'ASC']]))
-    }
+        for (const order of sortBy) {
+            const columnProperties = getPropertiesByColumnName(order[0])
+            const { isVirtualProperty } = extractVirtualProperty(queryBuilder, columnProperties)
+            const isRelation = checkIsRelation(queryBuilder, columnProperties.propertyPath)
+            const isEmbeded = checkIsEmbedded(queryBuilder, columnProperties.propertyPath)
+            let alias = fixColumnAlias(columnProperties, queryBuilder.alias, isRelation, isVirtualProperty, isEmbeded)
 
-    for (const order of sortBy) {
-        const columnProperties = getPropertiesByColumnName(order[0])
-        const { isVirtualProperty } = extractVirtualProperty(queryBuilder, columnProperties)
-        const isRelation = checkIsRelation(queryBuilder, columnProperties.propertyPath)
-        const isEmbeded = checkIsEmbedded(queryBuilder, columnProperties.propertyPath)
-        let alias = fixColumnAlias(columnProperties, queryBuilder.alias, isRelation, isVirtualProperty, isEmbeded)
-
-        if (isMMDb) {
-            if (isVirtualProperty) {
-                alias = `\`${alias}\``
+            if (isMySqlOrMariaDb) {
+                if (isVirtualProperty) {
+                    alias = `\`${alias}\``
+                }
+                if (nullSort) {
+                    queryBuilder.addOrderBy(`${alias} ${nullSort}`)
+                }
+                queryBuilder.addOrderBy(alias, order[1])
+            } else {
+                if (isVirtualProperty) {
+                    alias = `"${alias}"`
+                }
+                queryBuilder.addOrderBy(alias, order[1], nullSort as 'NULLS FIRST' | 'NULLS LAST' | undefined)
             }
-            if (nullSort) {
-                queryBuilder.addOrderBy(`${alias} ${nullSort}`)
-            }
-            queryBuilder.addOrderBy(alias, order[1])
-        } else {
-            if (isVirtualProperty) {
-                alias = `"${alias}"`
-            }
-            queryBuilder.addOrderBy(alias, order[1], nullSort as 'NULLS FIRST' | 'NULLS LAST' | undefined)
         }
     }
 
@@ -474,24 +676,6 @@ export async function paginate<T extends ObjectLiteral>(
         items = await queryBuilder.getMany()
     }
 
-    let firstCursor: string | undefined
-    let lastCursor: string | undefined
-
-    if (config.paginationType === PaginationType.CURSOR && items.length > 0) {
-        const cursorValueToString = (value: any): string | undefined => {
-            if (value === null || value === undefined) {
-                return undefined
-            }
-            if (value instanceof Date) {
-                return value.toISOString()
-            }
-            return String(value)
-        }
-
-        firstCursor = cursorValueToString(items[0][cursorColumn])
-        lastCursor = cursorValueToString(items[items.length - 1][cursorColumn])
-    }
-
     const sortByQuery = sortBy.map((order) => `&sortBy=${order.join(':')}`).join('')
     const searchQuery = query.search ? `&search=${query.search}` : ''
 
@@ -528,31 +712,21 @@ export async function paginate<T extends ObjectLiteral>(
             path = queryOrigin + queryPath
         }
     }
-    const buildLink = (p: number | string, isCursor: boolean = false, isReversed: boolean = false): string => {
-        if (isCursor) {
-            let adjustedOptions = options
 
-            if (isReversed) {
-                // Reverse ASC/DESC of first sortBy
-                const match = options.match(/sortBy=([^&]+)/) // Match 'sortBy=' value and extract the part after ':'
+    const buildLink = (p: number): string => path + '?page=' + p + options
 
-                if (match) {
-                    const fullSortBy = match[0]
-                    const [column, order] = match[1].split(':')
-                    const newOrder = order === 'ASC' ? 'DESC' : 'ASC'
-                    adjustedOptions = options.replace(fullSortBy, `sortBy=${column}:${newOrder}`)
-                }
-            }
+    const reversedSortBy = sortBy.map(([col, dir]) => [col, dir === 'ASC' ? 'DESC' : 'ASC'] as Order<T>)
 
-            return (
-                path +
-                adjustedOptions.replace(/^./, '?') +
-                `&${p ? 'cursor=' + p : ''}&cursorColumn=${cursorColumn}&cursorDirection=${
-                    isReversed ? (cursorDirection === 'before' ? 'after' : 'before') : cursorDirection
-                }`
-            )
+    const buildLinkForCursor = (cursor: string | undefined, isReversed: boolean = false): string => {
+        let adjustedOptions = options
+
+        if (isReversed && sortBy.length > 0) {
+            adjustedOptions = `&limit=${limit}${reversedSortBy
+                .map((order) => `&sortBy=${order.join(':')}`)
+                .join('')}${searchQuery}${searchByQuery}${selectQuery}${filterQuery}`
         }
-        return path + '?page=' + p + options
+
+        return path + adjustedOptions.replace(/^./, '?') + (cursor ? `&cursor=${cursor}` : '')
     }
 
     const itemsPerPage = limit === PaginationLimit.COUNTER_ONLY ? totalItems : isPaginated ? limit : items.length
@@ -572,17 +746,19 @@ export async function paginate<T extends ObjectLiteral>(
             select: isQuerySelected ? selectParams : undefined,
             filter: query.filter,
             cursor: config.paginationType === PaginationType.CURSOR ? query.cursor : undefined,
-            firstCursor: config.paginationType === PaginationType.CURSOR ? firstCursor : undefined,
-            lastCursor: config.paginationType === PaginationType.CURSOR ? lastCursor : undefined,
         },
         // If there is no `path`, don't build links.
         links:
             path !== null
                 ? config.paginationType === PaginationType.CURSOR
                     ? {
-                          previous: query.cursor && items.length ? buildLink(firstCursor, true, true) : undefined, // If no data exists, firstCursor is missing, so "previous" link is undefined.
-                          current: query.cursor ? buildLink(query.cursor, true) : buildLink('', true),
-                          next: lastCursor ? buildLink(lastCursor, true) : undefined,
+                          previous: items.length
+                              ? buildLinkForCursor(generateCursor(items[0], reversedSortBy), true)
+                              : undefined,
+                          current: buildLinkForCursor(query.cursor),
+                          next: items.length
+                              ? buildLinkForCursor(generateCursor(items[items.length - 1], sortBy))
+                              : undefined,
                       }
                     : {
                           first: page == 1 ? undefined : buildLink(1),
