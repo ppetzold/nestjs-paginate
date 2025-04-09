@@ -3648,6 +3648,88 @@ describe('paginate', () => {
                 expect(result.links.previous).toBe(`?limit=2&sortBy=lastVetVisit:ASC&cursor=V998328469600000`) // lastVetVisit=2022-12-20T10:00:00.000Z, ASC (Garfield) -> V + 10^15 - 1671530400000
                 expect(result.links.next).toBe(`?limit=2&sortBy=lastVetVisit:DESC&cursor=V001671444000000`) // lastVetVisit=2022-12-19T10:00:00.000Z, DESC (Milo) -> V + LPAD(1671444000000, 15, '0')
             })
+
+            // The range of mysql timestamp is from 1970-01-01 00:00:01
+            if (process.env.DB !== 'mariadb') {
+                it('should handle date type cursor column with zero timestamp (lastVetVisit, ASC)', async () => {
+                    // Create a new cat with lastVetVisit = new Date(0)
+                    const zeroDateCat = await catRepo.save(
+                        catRepo.create({
+                            name: 'ZeroCat',
+                            color: 'grey',
+                            age: 1,
+                            cutenessLevel: CutenessLevel.LOW,
+                            lastVetVisit: isoStringToDate('1970-01-01T00:00:00.000Z'), // new Date(0)
+                            size: { height: 20, width: 10, length: 30 },
+                            weightChange: 0,
+                        })
+                    )
+
+                    const config: PaginateConfig<CatEntity> = {
+                        sortableColumns: ['id', 'lastVetVisit'],
+                        paginationType: PaginationType.CURSOR,
+                        defaultSortBy: [['lastVetVisit', 'ASC']],
+                        defaultLimit: 2,
+                    }
+                    const query: PaginateQuery = {
+                        path: '',
+                    }
+
+                    const result = await paginate<CatEntity>(query, catRepo, config)
+
+                    // Should appear first as it has the earliest possible timestamp
+                    expect(result.data[0]).toStrictEqual(zeroDateCat)
+                    expect(result.links.previous).toBe(`?limit=2&sortBy=lastVetVisit:DESC&cursor=V000000000000000`) // lastVetVisit=1970-01-01T00:00:00.000Z, DESC (ZeroCat)
+                    expect(result.links.next).toBe(`?limit=2&sortBy=lastVetVisit:ASC&cursor=V998328556000000`) // lastVetVisit=2022-12-19T10:00:00.000Z, ASC (Milo)
+
+                    // Clean up
+                    await catRepo.remove(zeroDateCat)
+                })
+
+                it('should handle date type cursor column with zero timestamp (lastVetVisit, DESC)', async () => {
+                    // Create a new cat with lastVetVisit = new Date(0)
+                    const zeroDateCat = await catRepo.save(
+                        catRepo.create({
+                            name: 'ZeroCat',
+                            color: 'grey',
+                            age: 1,
+                            cutenessLevel: CutenessLevel.LOW,
+                            lastVetVisit: isoStringToDate('1970-01-01T00:00:00.000Z'), // new Date(0)
+                            size: { height: 20, width: 10, length: 30 },
+                            weightChange: 0,
+                        })
+                    )
+
+                    const config: PaginateConfig<CatEntity> = {
+                        sortableColumns: ['id', 'lastVetVisit'],
+                        paginationType: PaginationType.CURSOR,
+                        defaultSortBy: [['lastVetVisit', 'DESC']],
+                        defaultLimit: 2,
+                        filterableColumns: {
+                            lastVetVisit: [FilterOperator.NULL, FilterSuffix.NOT],
+                        },
+                    }
+                    const query: PaginateQuery = {
+                        path: '',
+                        filter: { lastVetVisit: '$not:$null' }, // to ensure null values are not included
+                        cursor: 'V001671444000000', // lastVetVisit=2022-12-19T10:00:00.000Z, DESC (Milo)
+                    }
+
+                    const result = await paginate<CatEntity>(query, catRepo, config)
+
+                    // Should appear last as it has the earliest possible timestamp
+                    expect(result.data[result.data.length - 1]).toStrictEqual(zeroDateCat)
+                    expect(result.links.previous).toBe(
+                        `?limit=2&sortBy=lastVetVisit:ASC&filter.lastVetVisit=$not:$null&cursor=X000000000000000`
+                    ) // lastVetVisit=1970-01-01T00:00:00.000Z, ASC (ZeroCat)
+                    expect(result.links.next).toBe(
+                        `?limit=2&sortBy=lastVetVisit:DESC&filter.lastVetVisit=$not:$null&cursor=V000000000000000`
+                    ) // lastVetVisit=1970-01-01T00:00:00.000Z, DESC (ZeroCat)
+
+                    // Clean up
+                    await catRepo.remove(zeroDateCat)
+                })
+            }
         })
 
         describe('sortBy: age, lastVetVisit', () => {

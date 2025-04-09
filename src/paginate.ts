@@ -222,7 +222,12 @@ export async function paginate<T extends ObjectLiteral>(
     }
 
     const generateDateCursor = (value: number, direction: 'ASC' | 'DESC'): string => {
+        if (direction === 'ASC' && value === 0) {
+            return 'X' + '0'.repeat(15)
+        }
+
         const finalValue = direction === 'ASC' ? Math.pow(10, 15) - value : value
+
         return 'V' + String(finalValue).padStart(15, '0')
     }
 
@@ -375,6 +380,9 @@ export async function paginate<T extends ObjectLiteral>(
             const fixedScale = Math.pow(10, 4)
             const maxIntegerDigit = Math.pow(10, 11)
 
+            const concat = (parts: string[]): string =>
+                isMySqlOrMariaDb ? `CONCAT(${parts.join(', ')})` : parts.join(' || ')
+
             const generateNullCursorExpr = (): string => {
                 const zeroPaddedExpr = getPaddedExpr('0', padLength, dbType)
                 const prefix = 'A'
@@ -389,17 +397,22 @@ export async function paginate<T extends ObjectLiteral>(
                 const paddedExpr = getPaddedExpr(sqlExpr, padLength, dbType)
                 const zeroPaddedExpr = getPaddedExpr('0', padLength, dbType)
 
-                const prefixNull = 'A'
-                const prefixValue = 'V'
-                return isMySqlOrMariaDb
-                    ? `CASE
-                        WHEN ${columnExpr} IS NULL THEN CONCAT('${prefixNull}', ${zeroPaddedExpr}) 
-                        ELSE CONCAT('${prefixValue}', ${paddedExpr}) 
+                const prefixNull = "'A'"
+                const prefixValue = "'V'"
+                const prefixZero = "'X'"
+
+                if (direction === 'ASC') {
+                    return `CASE
+                        WHEN ${columnExpr} IS NULL THEN ${concat([prefixNull, zeroPaddedExpr])}
+                        WHEN ${columnExpr} = 0 THEN ${concat([prefixZero, zeroPaddedExpr])}
+                        ELSE ${concat([prefixValue, paddedExpr])}
                     END`
-                    : `CASE 
-                        WHEN ${columnExpr} IS NULL THEN '${prefixNull}' || ${zeroPaddedExpr} 
-                        ELSE '${prefixValue}' || ${paddedExpr} 
+                } else {
+                    return `CASE
+                        WHEN ${columnExpr} IS NULL THEN ${concat([prefixNull, zeroPaddedExpr])}
+                        ELSE ${concat([prefixValue, paddedExpr])}
                     END`
+                }
             }
 
             const generateNumberCursorExpr = (columnExpr: string, direction: 'ASC' | 'DESC'): string => {
@@ -417,9 +430,6 @@ export async function paginate<T extends ObjectLiteral>(
                 const reversedDecPaddedExpr = getPaddedExpr(reversedDecExpr, decimalLength, dbType)
                 const zeroPaddedIntExpr = getPaddedExpr('0', integerLength, dbType)
                 const zeroPaddedDecExpr = getPaddedExpr('0', decimalLength, dbType)
-
-                const concat = (parts: string[]): string =>
-                    isMySqlOrMariaDb ? `CONCAT(${parts.join(', ')})` : parts.join(' || ')
 
                 if (direction === 'ASC') {
                     return `CASE
