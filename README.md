@@ -588,7 +588,7 @@ is resolved to:
   - ASC: Negative → Zero → Positive → Null.
   - DESC: Positive → Zero → Negative → Null.
 - Notes:
-  - Multiple columns: `sortBy` can include multiple columns to create and sort by the cursor (e.g., `sortBy=age:ASC,createdAt:DESC`), but at least one column must be unique to ensure consistent ordering.
+  - Multiple columns: `sortBy` can include multiple columns to create and sort by the cursor (e.g., `sortBy=age:ASC&sortBy=createdAt:DESC`), but at least one column must be unique to ensure consistent ordering.
   - Supported columns: Cursor sorting is available for numeric and date-related columns (string columns are not supported).
   - Decimal support: Numeric columns can include decimals, limited to 11 digits for the integer part and 4 digits for the decimal part.
 
