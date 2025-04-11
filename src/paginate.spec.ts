@@ -2515,7 +2515,7 @@ describe('paginate', () => {
         )
     })
 
-    it("should return all columns if select doesn't contain all primary columns", async () => {
+    it("should return primary columns if select doesn't contain all primary columns", async () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id', 'name'],
             select: ['name'],
@@ -2526,7 +2526,10 @@ describe('paginate', () => {
 
         const result = await paginate<CatEntity>(query, catRepo, config)
 
-        expect(result.data).toStrictEqual(cats)
+        result.data.forEach((cat, index) => {
+            expect(cat.id).toBe(cats[index].id)
+            expect(cat.name).toBe(cats[index].name)
+        })
         expect(result.meta.select).toStrictEqual(undefined)
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC')
     })

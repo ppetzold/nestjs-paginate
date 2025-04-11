@@ -153,6 +153,30 @@ export function includesAllPrimaryKeyColumns(qb: SelectQueryBuilder<unknown>, pr
         .every((column) => propertyPath.includes(column))
 }
 
+export function getPrimaryKeyColumns(qb: SelectQueryBuilder<any>, entityName?: string): string[] {
+    return qb.expressionMap.mainAlias?.metadata?.primaryColumns.map((column) =>
+        entityName ? `${entityName}.${column.propertyName}` : column.propertyName
+    )
+}
+
+export function getMissingPrimaryKeyColumns(qb: SelectQueryBuilder<any>, transformedCols: string[]): string[] {
+    if (!transformedCols || transformedCols.length === 0) return []
+
+    const mainEntityPrimaryKeys = getPrimaryKeyColumns(qb)
+    const missingPrimaryKeys: string[] = []
+
+    for (const pk of mainEntityPrimaryKeys) {
+        const columnProperties = getPropertiesByColumnName(pk)
+        const pkAlias = fixColumnAlias(columnProperties, qb.alias, false)
+
+        if (!transformedCols.includes(pkAlias)) {
+            missingPrimaryKeys.push(pkAlias)
+        }
+    }
+
+    return missingPrimaryKeys
+}
+
 export function hasColumnWithPropertyPath(
     qb: SelectQueryBuilder<unknown>,
     columnProperties: ColumnProperties

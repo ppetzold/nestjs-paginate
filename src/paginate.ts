@@ -12,10 +12,10 @@ import {
     createRelationSchema,
     extractVirtualProperty,
     fixColumnAlias,
+    getMissingPrimaryKeyColumns,
     getPaddedExpr,
     getPropertiesByColumnName,
     getQueryUrlComponents,
-    includesAllPrimaryKeyColumns,
     isDateColumnType,
     isEntityKey,
     isFindOperator,
@@ -566,20 +566,26 @@ export async function paginate<T extends ObjectLiteral>(
 
     // When we partial select the columns (main or relation) we must add the primary key column otherwise
     // typeorm will not be able to map the result.
-    let selectParams =
+    // so, we check if the selected columns are a subset of the primary key columns
+    // and add the missing ones.
+    const selectParams =
         config.select && query.select && !config.ignoreSelectInQueryParam
             ? config.select.filter((column) => query.select.includes(column))
             : config.select
-    if (!includesAllPrimaryKeyColumns(queryBuilder, query.select)) {
-        selectParams = config.select
-    }
-    if (selectParams?.length > 0 && includesAllPrimaryKeyColumns(queryBuilder, selectParams)) {
-        const cols: string[] = selectParams.reduce((cols, currentCol) => {
+
+    if (selectParams?.length > 0) {
+        let cols: string[] = selectParams.reduce((cols, currentCol) => {
             const columnProperties = getPropertiesByColumnName(currentCol)
             const isRelation = checkIsRelation(queryBuilder, columnProperties.propertyPath)
             cols.push(fixColumnAlias(columnProperties, queryBuilder.alias, isRelation))
             return cols
         }, [])
+
+        const missingPrimaryKeys = getMissingPrimaryKeyColumns(queryBuilder, cols)
+        if (missingPrimaryKeys.length > 0) {
+            cols = cols.concat(missingPrimaryKeys)
+        }
+
         queryBuilder.select(cols)
     }
 

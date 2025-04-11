@@ -250,7 +250,7 @@ const paginateConfig: PaginateConfig<CatEntity> {
    * Default: None
    * Description: TypeORM partial selection. Limit selection further by using `select` query param.
    * https://typeorm.io/select-query-builder#partial-selection
-   * Note: You must include the primary key in the selection.
+   * Note: if you do not contain the primary key in the select array, primary key will be added automatically.
    */
   select: ['id', 'name', 'color'],
 
