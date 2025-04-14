@@ -291,16 +291,106 @@ export async function paginate<T extends ObjectLiteral>(
         )
     }
 
-    const generateCursor = (item: T, sortBy: SortBy<T>): string => {
+    const generateCursor = (item: T, sortBy: SortBy<T>, linkType: 'previous' | 'next' = 'next'): string => {
         return sortBy
             .map(([column, direction]) => {
-                const value = fixCursorValue(item[column])
-                const columnMeta = metadata.columns.find(
-                    (col) => col.propertyName === getPropertiesByColumnName(column).propertyName
-                )
+                const columnProperties = getPropertiesByColumnName(String(column))
+
+                let propertyPath = []
+                if (columnProperties.isNested) {
+                    if (columnProperties.propertyPath) {
+                        propertyPath.push(columnProperties.propertyPath)
+                    }
+                    propertyPath = propertyPath.concat(columnProperties.propertyName.split('.'))
+                } else if (columnProperties.propertyPath) {
+                    propertyPath = [columnProperties.propertyPath, columnProperties.propertyName]
+                } else {
+                    propertyPath = [columnProperties.propertyName]
+                }
+
+                // Extract value from nested object
+                let value = item
+                for (let i = 0; i < propertyPath.length; i++) {
+                    const key = propertyPath[i]
+
+                    if (value === null || value === undefined) {
+                        value = null
+                        break
+                    }
+
+                    // Handle case where value is an array
+                    if (Array.isArray(value[key])) {
+                        const arrayValues = value[key]
+                            .map((item: any) => {
+                                let nestedValue = item
+                                for (let j = i + 1; j < propertyPath.length; j++) {
+                                    if (nestedValue === null || nestedValue === undefined) {
+                                        return null
+                                    }
+
+                                    // Handle embedded properties
+                                    if (propertyPath[j].includes('.')) {
+                                        const nestedProperties = propertyPath[j].split('.')
+                                        for (const nestedProperty of nestedProperties) {
+                                            nestedValue = nestedValue[nestedProperty]
+                                        }
+                                    } else {
+                                        nestedValue = nestedValue[propertyPath[j]]
+                                    }
+                                }
+                                return nestedValue
+                            })
+                            .filter((v: any) => v !== null && v !== undefined)
+
+                        if (arrayValues.length === 0) {
+                            value = null
+                        } else {
+                            // Select min or max value based on sort direction and linkType (XOR)
+                            value = (
+                                (direction === 'ASC') !== (linkType === 'previous')
+                                    ? Math.min(...arrayValues)
+                                    : Math.max(...arrayValues)
+                            ) as any
+                        }
+                        break
+                    } else {
+                        value = value[key]
+                    }
+                }
+
+                value = fixCursorValue(value)
+
+                // Find column metadata
+                let columnMeta = null
+                if (propertyPath.length === 1) {
+                    // For regular column
+                    columnMeta = metadata.columns.find((col) => col.propertyName === columnProperties.propertyName)
+                } else {
+                    // For relation column
+                    let currentMetadata = metadata
+                    let currentPath = ''
+
+                    // Traverse the relation path except for the last part
+                    for (let i = 0; i < propertyPath.length - 1; i++) {
+                        const relationName = propertyPath[i]
+                        currentPath = currentPath ? `${currentPath}.${relationName}` : relationName
+                        const relation = currentMetadata.findRelationWithPropertyPath(relationName)
+
+                        if (relation) {
+                            currentMetadata = relation.inverseEntityMetadata
+                        } else {
+                            break
+                        }
+                    }
+
+                    // Find column by the last property name
+                    const propertyName = propertyPath[propertyPath.length - 1]
+                    columnMeta = currentMetadata.columns.find((col) => col.propertyName === propertyName)
+                }
+
                 const isDateColumn = columnMeta && isDateColumnType(columnMeta.type)
 
-                if (value === null) {
+                if (value === null || value === undefined) {
                     return generateNullCursor()
                 }
 
@@ -484,8 +574,50 @@ export async function paginate<T extends ObjectLiteral>(
 
             const cursorExpressions = sortBy.map(([column, direction]) => {
                 const columnProperties = getPropertiesByColumnName(column)
-                const alias = fixColumnAlias(columnProperties, queryBuilder.alias)
-                const columnMeta = metadata.columns.find((col) => col.propertyName === columnProperties.propertyName)
+                const { isVirtualProperty, query: virtualQuery } = extractVirtualProperty(
+                    queryBuilder,
+                    columnProperties
+                )
+                const isRelation = checkIsRelation(queryBuilder, columnProperties.propertyPath)
+                const isEmbedded = checkIsEmbedded(queryBuilder, columnProperties.propertyPath)
+                const alias = fixColumnAlias(
+                    columnProperties,
+                    queryBuilder.alias,
+                    isRelation,
+                    isVirtualProperty,
+                    isEmbedded,
+                    virtualQuery
+                )
+
+                // Find column metadata to determine type for proper cursor handling
+                let columnMeta = metadata.columns.find((col) => col.propertyName === columnProperties.propertyName)
+
+                // If it's a relation column, we need to find the target column metadata
+                if (isRelation) {
+                    // Find the relation by path and get the target entity metadata
+                    const relationPath = columnProperties.column.split('.')
+                    // The base entity is the starting point
+                    let currentMetadata = metadata
+
+                    // Traverse the relation path to find the target metadata
+                    for (let i = 0; i < relationPath.length - 1; i++) {
+                        const relationName = relationPath[i]
+                        const relation = currentMetadata.findRelationWithPropertyPath(relationName)
+
+                        if (relation) {
+                            // Update the metadata to the target entity metadata for the next iteration
+                            currentMetadata = relation.inverseEntityMetadata
+                        } else {
+                            break
+                        }
+                    }
+
+                    // Now get the property from the target entity
+                    const propertyName = relationPath[relationPath.length - 1]
+                    columnMeta = currentMetadata.columns.find((col) => col.propertyName === propertyName)
+                }
+
+                // Determine whether it's a date column
                 const isDateColumn = columnMeta && isDateColumnType(columnMeta.type)
                 const columnExpr = isDateColumn ? getDateColumnExpression(alias, dbType) : alias
 
@@ -544,8 +676,8 @@ export async function paginate<T extends ObjectLiteral>(
             const columnProperties = getPropertiesByColumnName(order[0])
             const { isVirtualProperty } = extractVirtualProperty(queryBuilder, columnProperties)
             const isRelation = checkIsRelation(queryBuilder, columnProperties.propertyPath)
-            const isEmbeded = checkIsEmbedded(queryBuilder, columnProperties.propertyPath)
-            let alias = fixColumnAlias(columnProperties, queryBuilder.alias, isRelation, isVirtualProperty, isEmbeded)
+            const isEmbedded = checkIsEmbedded(queryBuilder, columnProperties.propertyPath)
+            let alias = fixColumnAlias(columnProperties, queryBuilder.alias, isRelation, isVirtualProperty, isEmbedded)
 
             if (isMySqlOrMariaDb) {
                 if (isVirtualProperty) {
@@ -769,7 +901,7 @@ export async function paginate<T extends ObjectLiteral>(
                 ? config.paginationType === PaginationType.CURSOR
                     ? {
                           previous: items.length
-                              ? buildLinkForCursor(generateCursor(items[0], reversedSortBy), true)
+                              ? buildLinkForCursor(generateCursor(items[0], reversedSortBy, 'previous'), true)
                               : undefined,
                           current: buildLinkForCursor(query.cursor),
                           next: items.length
