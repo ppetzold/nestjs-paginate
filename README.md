@@ -211,7 +211,7 @@ export class CatsController {
 
 ### Config
 
-```ts
+````ts
 const paginateConfig: PaginateConfig<CatEntity> {
   /**
    * Required: true (must have a minimum of one column)
@@ -376,8 +376,31 @@ const paginateConfig: PaginateConfig<CatEntity> {
    * will be treated as a separate search term, allowing for more flexible matching.
    */
   multiWordSearch: false,
+
+  /**
+   * Required: false
+   * Type: (qb: SelectQueryBuilder<T>) => SelectQueryBuilder<any>
+   * Default: undefined
+   * Description: Callback that lets you override the COUNT query executed by
+   * paginate(). The function receives a **clone** of the original QueryBuilder,
+   * so it already contains every WHERE clause and parameter parsed by
+   * nestjs-paginate.
+   *
+   * Typical use-case: remove expensive LEFT JOINs or build a lighter DISTINCT
+   * count when getManyAndCount() becomes a bottleneck.
+   *
+   * Example:
+   * ```ts
+   * buildCountQuery: qb => {
+   *   qb.expressionMap.joinAttributes = [];   // drop all joins
+   *   qb.select('p.id').distinct(true);       // keep DISTINCT on primary key
+   *   return qb;                              // paginate() will call .getCount()
+   * }
+   * ```
+   */
+  buildCountQuery: (qb: SelectQueryBuilder<T>) => SelectQueryBuilder<any>,
 }
-```
+````
 
 ## Usage with Query Builder
 
