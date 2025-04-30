@@ -2993,6 +2993,24 @@ describe('paginate', () => {
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC')
     })
 
+    it('uses custom count builder when provided', async () => {
+        const fakeQB = { getCount: jest.fn().mockResolvedValue(42) } as any
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            select: ['id', 'name', 'color'],
+            buildCountQuery: () => fakeQB,
+        }
+        const query: PaginateQuery = {
+            path: '',
+            select: ['id', 'color'],
+        }
+
+        const page = await paginate<CatEntity>(query, catRepo, config)
+
+        expect(fakeQB.getCount).toHaveBeenCalledTimes(1)
+        expect(page.meta.totalItems).toBe(42)
+    })
+
     describe('should return result based on date column filter', () => {
         it('with $not and $null operators', async () => {
             const config: PaginateConfig<CatEntity> = {
