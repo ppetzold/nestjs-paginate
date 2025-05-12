@@ -734,7 +734,7 @@ export async function paginate<T extends ObjectLiteral>(
                                 .flat()
                                 .includes(col.propertyName)
                     )
-                    .map((col) => `${entityPath}.${col.propertyName}`)
+                    .map((col) => (entityPath ? `${entityPath}.${col.propertyName}` : col.propertyName))
             )
 
             // Add columns from embedded entities in the relation
@@ -749,7 +749,7 @@ export async function paginate<T extends ObjectLiteral>(
 
         for (const param of selectParams) {
             if (param === '*') {
-                expandedParams.push(..._expandWidcard(mainAlias.tablePath, mainMetadata))
+                expandedParams.push(..._expandWidcard('', mainMetadata))
             } else if (param.endsWith('.*')) {
                 // Handle relation entity wildcards (e.g. 'user.*', 'user.profile.*')
                 const parts = param.slice(0, -2).split('.')

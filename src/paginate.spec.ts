@@ -4770,5 +4770,59 @@ describe('paginate', () => {
             expect(result.data[0].toys[1].shop.address).toHaveProperty('id')
             expect(result.data[0].toys[1].shop.address).toHaveProperty('address')
         })
+
+        it('should restrict query.select to only fields allowed in config.select', async () => {
+            // Server-side config only allows id and name
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id'],
+                select: ['id', 'name'],
+            }
+
+            // Client tries to request additional fields
+            const query: PaginateQuery = {
+                page: 1,
+                limit: 10,
+                select: ['id', 'name', 'color', 'age'], // color and age not in config.select
+                path: '/cats',
+            }
+
+            const result = await paginate(query, catRepo, config)
+
+            // Should only include fields that exist in both config.select and query.select
+            expect(result.data[0]).toHaveProperty('id')
+            expect(result.data[0]).toHaveProperty('name')
+            expect(result.data[0]).not.toHaveProperty('color')
+            expect(result.data[0]).not.toHaveProperty('age')
+        })
+
+        it('should restrict wildcard query.select to only fields allowed in config.select', async () => {
+            // Server-side config only allows id, name and toys.id
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id'],
+                select: ['id', 'name', 'toys.id'],
+                relations: ['toys'],
+            }
+
+            // Client tries to request all fields with wildcards
+            const query: PaginateQuery = {
+                page: 1,
+                limit: 10,
+                select: ['*', 'toys.*'], // Requesting all fields with wildcards
+                path: '/cats',
+            }
+
+            const result = await paginate(query, catRepo, config)
+
+            // Should only include fields that exist in both expanded config.select and expanded query.select
+            expect(result.data[0]).toHaveProperty('id')
+            expect(result.data[0]).toHaveProperty('name')
+            expect(result.data[0]).not.toHaveProperty('color')
+            expect(result.data[0]).not.toHaveProperty('age')
+
+            // Should only have toys.id, not other toy properties
+            expect(result.data[0].toys[0]).toHaveProperty('id')
+            expect(result.data[0].toys[0]).not.toHaveProperty('name')
+            expect(result.data[0].toys[0]).not.toHaveProperty('createdAt')
+        })
     })
 })
