@@ -4748,16 +4748,18 @@ describe('paginate', () => {
                 page: 1,
                 limit: 10,
                 select: ['*', 'toys.*', 'toys.shop.*', 'toys.shop.address.*'],
+                sortBy: [
+                    ['id', 'ASC'],
+                    ['toys.id', 'ASC'],
+                ],
                 path: '/cats',
             }
 
             const result = await paginate(query, catRepo, {
-                sortableColumns: ['id'],
+                sortableColumns: ['id', 'toys.id'],
                 select: ['*', 'toys.*', 'toys.shop.*', 'toys.shop.address.*'],
                 relations: ['toys', 'toys.shop', 'toys.shop.address'],
             })
-
-            console.log(result.data[0])
 
             expect(result.data[0]).toHaveProperty('id')
             expect(result.data[0]).toHaveProperty('name')
