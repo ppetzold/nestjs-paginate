@@ -1,7 +1,15 @@
 import { Logger, ServiceUnavailableException } from '@nestjs/common'
 import { mapKeys } from 'lodash'
 import { stringify } from 'querystring'
-import { Brackets, FindOptionsUtils, FindOptionsWhere, ObjectLiteral, Repository, SelectQueryBuilder } from 'typeorm'
+import {
+    Brackets,
+    EntityMetadata,
+    FindOptionsUtils,
+    FindOptionsWhere,
+    ObjectLiteral,
+    Repository,
+    SelectQueryBuilder,
+} from 'typeorm'
 import { WherePredicateOperator } from 'typeorm/query-builder/WhereClause'
 import { PaginateQuery } from './decorator'
 import { addFilter, FilterOperator, FilterSuffix } from './filter'
@@ -697,14 +705,96 @@ export async function paginate<T extends ObjectLiteral>(
         }
     }
 
-    // When we partial select the columns (main or relation) we must add the primary key column otherwise
-    // typeorm will not be able to map the result.
-    // so, we check if the selected columns are a subset of the primary key columns
-    // and add the missing ones.
-    const selectParams =
-        config.select && query.select && !config.ignoreSelectInQueryParam
-            ? config.select.filter((column) => query.select.includes(column))
-            : config.select
+    /**
+     * Expands select parameters containing wildcards (*) into actual column lists
+     *
+     * @returns Array of expanded column names
+     */
+    const expandWildcardSelect = <T>(selectParams: string[], queryBuilder: SelectQueryBuilder<T>): string[] => {
+        const expandedParams: string[] = []
+
+        const mainAlias = queryBuilder.expressionMap.mainAlias
+        const mainMetadata = mainAlias.metadata
+
+        /**
+         * Internal function to expand wildcards for relation entities
+         *
+         * @returns Array of expanded column names
+         */
+        const expandRelationWildcard = (entityPath: string, metadata: EntityMetadata): string[] => {
+            const expanded: string[] = []
+
+            // Add all columns from the relation entity
+            expanded.push(...metadata.columns.map((col) => `${entityPath}.${col.propertyName}`))
+
+            // Add columns from embedded entities in the relation
+            metadata.embeddeds.forEach((embedded) => {
+                expanded.push(
+                    ...embedded.columns.map((col) => `${entityPath}.(${embedded.propertyName}.${col.propertyName})`)
+                )
+            })
+
+            return expanded
+        }
+
+        for (const param of selectParams) {
+            if (param === '*') {
+                // Add all columns from the main entity
+                expandedParams.push(...mainMetadata.columns.map((col) => `${col.propertyName}`))
+
+                // Add columns from embedded entities in the main entity
+                mainMetadata.embeddeds.forEach((embedded) => {
+                    expandedParams.push(
+                        ...embedded.columns.map(
+                            (col) => `${mainAlias.tablePath}.(${embedded.propertyName}.${col.propertyName})`
+                        )
+                    )
+                })
+            } else if (param.endsWith('.*')) {
+                // Handle relation entity wildcards (e.g. 'user.*', 'user.profile.*')
+                const parts = param.slice(0, -2).split('.')
+                let currentPath = ''
+                let currentMetadata = mainMetadata
+
+                for (let i = 0; i < parts.length; i++) {
+                    const part = parts[i]
+                    currentPath = currentPath ? `${currentPath}.${part}` : part
+                    const relation = currentMetadata.findRelationWithPropertyPath(part)
+
+                    if (relation) {
+                        currentMetadata = relation.inverseEntityMetadata
+                        if (i === parts.length - 1) {
+                            // Expand wildcard at the last part
+                            expandedParams.push(...expandRelationWildcard(currentPath, currentMetadata))
+                        }
+                    } else {
+                        break
+                    }
+                }
+            } else {
+                // Add regular columns as is
+                expandedParams.push(param)
+            }
+        }
+
+        // Remove duplicates while preserving order
+        return [...new Set(expandedParams)]
+    }
+
+    const selectParams = (() => {
+        // Expand wildcards in config.select if it exists
+        const expandedConfigSelect = config.select ? expandWildcardSelect(config.select, queryBuilder) : undefined
+
+        // Expand wildcards in query.select if it exists
+        const expandedQuerySelect = query.select ? expandWildcardSelect(query.select, queryBuilder) : undefined
+
+        // Filter config.select with expanded query.select if both exist and ignoreSelectInQueryParam is false
+        if (expandedConfigSelect && expandedQuerySelect && !config.ignoreSelectInQueryParam) {
+            return expandedConfigSelect.filter((column) => expandedQuerySelect.includes(column))
+        }
+
+        return expandedConfigSelect
+    })()
 
     if (selectParams?.length > 0) {
         let cols: string[] = selectParams.reduce((cols, currentCol) => {

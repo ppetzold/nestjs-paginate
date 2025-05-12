@@ -4635,4 +4635,136 @@ describe('paginate', () => {
             })
         })
     })
+
+    describe('Wildcard Select', () => {
+        it('should expand * wildcard to all main entity columns', async () => {
+            const query: PaginateQuery = {
+                page: 1,
+                limit: 10,
+                select: ['*'],
+                path: '/cats',
+            }
+
+            const result = await paginate(query, catRepo, {
+                sortableColumns: ['id'],
+                select: ['*'],
+            })
+
+            expect(result.data[0]).toHaveProperty('id')
+            expect(result.data[0]).toHaveProperty('name')
+            expect(result.data[0]).toHaveProperty('color')
+            expect(result.data[0]).toHaveProperty('age')
+            expect(result.data[0]).toHaveProperty('cutenessLevel')
+            expect(result.data[0]).toHaveProperty('lastVetVisit')
+            expect(result.data[0]).toHaveProperty('createdAt')
+            expect(result.data[0]).toHaveProperty('deletedAt')
+            expect(result.data[0]).toHaveProperty('weightChange')
+            expect(result.data[0]).toHaveProperty('size')
+            expect(result.data[0]).toHaveProperty('size.height')
+            expect(result.data[0]).toHaveProperty('size.width')
+            expect(result.data[0]).toHaveProperty('size.length')
+        })
+
+        it('should expand relation.* wildcard to all relation columns', async () => {
+            const query: PaginateQuery = {
+                page: 1,
+                limit: 10,
+                select: ['id', 'name', 'toys.*'],
+                path: '/cats',
+            }
+
+            const result = await paginate(query, catRepo, {
+                sortableColumns: ['id'],
+                select: ['id', 'name', 'toys.*'],
+                relations: ['toys'],
+            })
+
+            expect(result.data[0]).toHaveProperty('id')
+            expect(result.data[0]).toHaveProperty('name')
+            expect(result.data[0]).not.toHaveProperty('color')
+            expect(result.data[0]).not.toHaveProperty('age')
+            expect(result.data[0]).not.toHaveProperty('cutenessLevel')
+            expect(result.data[0]).not.toHaveProperty('lastVetVisit')
+            expect(result.data[0]).not.toHaveProperty('createdAt')
+            expect(result.data[0]).not.toHaveProperty('deletedAt')
+            expect(result.data[0]).not.toHaveProperty('weightChange')
+            expect(result.data[0].toys[0]).toHaveProperty('id')
+            expect(result.data[0].toys[0]).toHaveProperty('name')
+            expect(result.data[0].toys[0]).toHaveProperty('createdAt')
+            expect(result.data[0].toys[0]).toHaveProperty('size')
+            expect(result.data[0].toys[0]).toHaveProperty('size.height')
+            expect(result.data[0].toys[0]).toHaveProperty('size.width')
+            expect(result.data[0].toys[0]).toHaveProperty('size.length')
+        })
+
+        it('should handle both * and relation.* wildcards together', async () => {
+            const query: PaginateQuery = {
+                page: 1,
+                limit: 10,
+                select: ['*', 'toys.*'],
+                path: '/cats',
+            }
+
+            const result = await paginate(query, catRepo, {
+                sortableColumns: ['id'],
+                select: ['*', 'toys.*'],
+                relations: ['toys'],
+            })
+
+            expect(result.data[0]).toHaveProperty('id')
+            expect(result.data[0]).toHaveProperty('name')
+            expect(result.data[0]).toHaveProperty('color')
+            expect(result.data[0]).toHaveProperty('age')
+            expect(result.data[0]).toHaveProperty('cutenessLevel')
+            expect(result.data[0]).toHaveProperty('lastVetVisit')
+            expect(result.data[0]).toHaveProperty('createdAt')
+            expect(result.data[0]).toHaveProperty('deletedAt')
+            expect(result.data[0]).toHaveProperty('weightChange')
+            expect(result.data[0].toys[0]).toHaveProperty('id')
+            expect(result.data[0].toys[0]).toHaveProperty('name')
+            expect(result.data[0].toys[0]).toHaveProperty('createdAt')
+        })
+
+        it('should handle non-existent relation wildcard gracefully', async () => {
+            const query: PaginateQuery = {
+                page: 1,
+                limit: 10,
+                select: ['id', 'name', 'nonExistentRelation.*'],
+                path: '/cats',
+            }
+
+            const result = await paginate(query, catRepo, {
+                sortableColumns: ['id'],
+                select: ['id', 'name', 'nonExistentRelation.*'],
+            })
+
+            expect(result.data[0]).toHaveProperty('id')
+            expect(result.data[0]).toHaveProperty('name')
+            expect(result.data[0]).not.toHaveProperty('nonExistentRelation.*')
+        })
+
+        it('should handle nested relation wildcards correctly', async () => {
+            const query: PaginateQuery = {
+                page: 1,
+                limit: 10,
+                select: ['id', 'name', 'toys.*', 'toys.shop.*', 'toys.shop.address.*'],
+                path: '/cats',
+            }
+
+            const result = await paginate(query, catRepo, {
+                sortableColumns: ['id'],
+                select: ['id', 'name', 'toys.*', 'toys.shop.*', 'toys.shop.address.*'],
+                relations: ['toys', 'toys.shop', 'toys.shop.address'],
+            })
+
+            expect(result.data[0]).toHaveProperty('id')
+            expect(result.data[0]).toHaveProperty('name')
+            expect(result.data[0].toys[0]).toHaveProperty('id')
+            expect(result.data[0].toys[0]).toHaveProperty('name')
+            expect(result.data[0].toys[0].shop).toHaveProperty('id')
+            expect(result.data[0].toys[0].shop).toHaveProperty('shopName')
+            expect(result.data[0].toys[0].shop.address).toHaveProperty('id')
+            expect(result.data[0].toys[0].shop.address).toHaveProperty('address')
+        })
+    })
 })
