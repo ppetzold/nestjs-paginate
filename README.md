@@ -251,6 +251,16 @@ const paginateConfig: PaginateConfig<CatEntity> {
    * Description: TypeORM partial selection. Limit selection further by using `select` query param.
    * https://typeorm.io/select-query-builder#partial-selection
    * Note: if you do not contain the primary key in the select array, primary key will be added automatically.
+   * 
+   * Wildcard support:
+   * - Use '*' to select all columns from the main entity.
+   * - Use 'relation.*' to select all columns from a relation.
+   * - Use 'relation.subrelation.*' to select all columns from nested relations.
+   * 
+   * Examples:
+   * select: ['*'] - Selects all columns from main entity
+   * select: ['id', 'name', 'toys.*'] - Selects id, name from main entity and all columns from toys relation
+   * select: ['*', 'toys.*'] - Selects all columns from both main entity and toys relation
    */
   select: ['id', 'name', 'color'],
 
