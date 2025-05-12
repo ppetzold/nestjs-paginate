@@ -717,15 +717,25 @@ export async function paginate<T extends ObjectLiteral>(
         const mainMetadata = mainAlias.metadata
 
         /**
-         * Internal function to expand wildcards for relation entities
+         * Internal function to expand wildcards
          *
          * @returns Array of expanded column names
          */
-        const expandRelationWildcard = (entityPath: string, metadata: EntityMetadata): string[] => {
+        const _expandWidcard = (entityPath: string, metadata: EntityMetadata): string[] => {
             const expanded: string[] = []
 
             // Add all columns from the relation entity
-            expanded.push(...metadata.columns.map((col) => `${entityPath}.${col.propertyName}`))
+            expanded.push(
+                ...metadata.columns
+                    .filter(
+                        (col) =>
+                            !metadata.embeddeds
+                                .map((embedded) => embedded.columns.map((embeddedCol) => embeddedCol.propertyName))
+                                .flat()
+                                .includes(col.propertyName)
+                    )
+                    .map((col) => `${entityPath}.${col.propertyName}`)
+            )
 
             // Add columns from embedded entities in the relation
             metadata.embeddeds.forEach((embedded) => {
@@ -739,17 +749,7 @@ export async function paginate<T extends ObjectLiteral>(
 
         for (const param of selectParams) {
             if (param === '*') {
-                // Add all columns from the main entity
-                expandedParams.push(...mainMetadata.columns.map((col) => `${col.propertyName}`))
-
-                // Add columns from embedded entities in the main entity
-                mainMetadata.embeddeds.forEach((embedded) => {
-                    expandedParams.push(
-                        ...embedded.columns.map(
-                            (col) => `${mainAlias.tablePath}.(${embedded.propertyName}.${col.propertyName})`
-                        )
-                    )
-                })
+                expandedParams.push(..._expandWidcard(mainAlias.tablePath, mainMetadata))
             } else if (param.endsWith('.*')) {
                 // Handle relation entity wildcards (e.g. 'user.*', 'user.profile.*')
                 const parts = param.slice(0, -2).split('.')
@@ -765,7 +765,7 @@ export async function paginate<T extends ObjectLiteral>(
                         currentMetadata = relation.inverseEntityMetadata
                         if (i === parts.length - 1) {
                             // Expand wildcard at the last part
-                            expandedParams.push(...expandRelationWildcard(currentPath, currentMetadata))
+                            expandedParams.push(..._expandWidcard(currentPath, currentMetadata))
                         }
                     } else {
                         break

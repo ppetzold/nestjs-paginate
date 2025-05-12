@@ -4747,24 +4747,26 @@ describe('paginate', () => {
             const query: PaginateQuery = {
                 page: 1,
                 limit: 10,
-                select: ['id', 'name', 'toys.*', 'toys.shop.*', 'toys.shop.address.*'],
+                select: ['*', 'toys.*', 'toys.shop.*', 'toys.shop.address.*'],
                 path: '/cats',
             }
 
             const result = await paginate(query, catRepo, {
                 sortableColumns: ['id'],
-                select: ['id', 'name', 'toys.*', 'toys.shop.*', 'toys.shop.address.*'],
+                select: ['*', 'toys.*', 'toys.shop.*', 'toys.shop.address.*'],
                 relations: ['toys', 'toys.shop', 'toys.shop.address'],
             })
 
+            console.log(result.data[0])
+
             expect(result.data[0]).toHaveProperty('id')
             expect(result.data[0]).toHaveProperty('name')
-            expect(result.data[0].toys[0]).toHaveProperty('id')
-            expect(result.data[0].toys[0]).toHaveProperty('name')
-            expect(result.data[0].toys[0].shop).toHaveProperty('id')
-            expect(result.data[0].toys[0].shop).toHaveProperty('shopName')
-            expect(result.data[0].toys[0].shop.address).toHaveProperty('id')
-            expect(result.data[0].toys[0].shop.address).toHaveProperty('address')
+            expect(result.data[0].toys[1]).toHaveProperty('id')
+            expect(result.data[0].toys[1]).toHaveProperty('name')
+            expect(result.data[0].toys[1].shop).toHaveProperty('id')
+            expect(result.data[0].toys[1].shop).toHaveProperty('shopName')
+            expect(result.data[0].toys[1].shop.address).toHaveProperty('id')
+            expect(result.data[0].toys[1].shop.address).toHaveProperty('address')
         })
     })
 })
