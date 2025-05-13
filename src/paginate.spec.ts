@@ -22,6 +22,7 @@ import {
     parseFilterToken,
 } from './filter'
 import { paginate, PaginateConfig, Paginated, PaginationLimit, PaginationType } from './paginate'
+import 'dotenv/config'
 
 // Disable debug logs during tests
 beforeAll(() => {
@@ -728,6 +729,31 @@ describe('paginate', () => {
             ['name', 'ASC'],
         ])
         expect(result.data).toStrictEqual(sortedCats)
+    })
+
+    it('should sort result by virtual columns', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['home.countCat'],
+            relations: ['home.naptimePillow.brand'],
+        }
+        const query: PaginateQuery = {
+            path: '',
+            sortBy: [['home.countCat', 'DESC']],
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        expect(result.meta.sortBy).toStrictEqual([['home.countCat', 'DESC']])
+        const expected = [cats[0], cats[1], cats[2], cats[3], cats[4]].map(clone)
+        expected.forEach((cat) => {
+            cat.home = null
+        })
+        catHomes.forEach((home, i) => {
+            expected[i].home = clone(home)
+            expected[i].home.countCat = 1
+            delete expected[i].home.cat
+        })
+        expect(result.data).toStrictEqual(expected)
     })
 
     it('should sort result by camelcase columns', async () => {
