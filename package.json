@@ -1,14 +1,14 @@
 {
-  "name": "nestjs-paginate",
+  "name": "@flywl/nestjs-paginate",
   "version": "0.1.0",
-  "author": "Philipp Petzold <ppetzold@protonmail.com>",
+  "author": "Rontu Barhoi <rontu@flywl.com>",
   "license": "MIT",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "files": [
     "lib/**/*"
   ],
-  "description": "Pagination and filtering helper method for TypeORM repositories or query builders using Nest.js framework.",
+  "description": "A fork of nestjs-paginate library",
   "keywords": [
     "nestjs",
     "typeorm",
@@ -51,12 +51,13 @@
     "pg": "^8.14.0",
     "prettier": "^3.0.3",
     "reflect-metadata": "^0.2.2",
+    "rimraf": "^6.0.1",
     "rxjs": "^7.8.2",
     "sqlite3": "^5.1.7",
     "ts-jest": "^29.2.6",
     "ts-node": "^10.9.2",
     "typeorm": "^0.3.17",
-    "typescript": "^5.5.4"
+    "typescript": "^5.8.3"
   },
   "dependencies": {
     "lodash": "^4.17.21"
