@@ -890,7 +890,7 @@ describe('paginate', () => {
         const result = await paginate<CatEntity>(query, catRepo, config)
 
         // Prepare expected result - cats ordered by age with null age last, including toys relation
-        const expectedResult = cats
+        const expectedResult = [...cats]
             .sort((a, b) => {
                 if (a.age === null && b.age === null) return 0
                 if (a.age === null) return 1
