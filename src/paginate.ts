@@ -33,7 +33,8 @@ import {
     MappedColumns,
     mergeRelationSchema,
     Order,
-    positiveNumberOrDefault, quoteVirtualColumn,
+    positiveNumberOrDefault,
+    quoteVirtualColumn,
     RelationSchema,
     RelationSchemaInput,
     SortBy,
@@ -689,14 +690,14 @@ export async function paginate<T extends ObjectLiteral>(
             let alias = fixColumnAlias(columnProperties, queryBuilder.alias, isRelation, isVirtualProperty, isEmbedded)
 
             if (isVirtualProperty) {
-                alias = quoteVirtualColumn(alias, isMySqlOrMariaDb);
+                alias = quoteVirtualColumn(alias, isMySqlOrMariaDb)
             }
 
             if (isMySqlOrMariaDb) {
                 if (nullSort) {
-                    const selectionAliasName = `${alias.replace(/\./g, "_")}IsNull`
-                    queryBuilder.addSelect(`${alias} ${nullSort}`, selectionAliasName);
-                    queryBuilder.addOrderBy(selectionAliasName);
+                    const selectionAliasName = `${alias.replace(/\./g, '_')}IsNull`
+                    queryBuilder.addSelect(`${alias} ${nullSort}`, selectionAliasName)
+                    queryBuilder.addOrderBy(selectionAliasName)
                 }
                 queryBuilder.addOrderBy(alias, order[1])
             } else {
