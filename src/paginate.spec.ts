@@ -876,6 +876,33 @@ describe('paginate', () => {
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=cat.id:DESC')
     })
 
+    it('should handle nullSort with relations properly', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id', 'age'],
+            nullSort: 'last',
+            defaultSortBy: [['age', 'ASC']],
+            relations: ['toys'],
+        }
+        const query: PaginateQuery = {
+            path: '',
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        // Prepare expected result - cats ordered by age with null age last, including toys relation
+        const expectedResult = [...cats]
+            .sort((a, b) => {
+                if (a.age === null && b.age === null) return 0
+                if (a.age === null) return 1
+                if (b.age === null) return -1
+                return a.age - b.age
+            })
+            .map((cat) => cat.id)
+
+        expect(result.meta.sortBy).toStrictEqual([['age', 'ASC']])
+        expect(result.data.map((v) => v.id)).toStrictEqual(expectedResult)
+    })
+
     it('should return result based on sort and search on many-to-one relation', async () => {
         const config: PaginateConfig<CatToyEntity> = {
             relations: ['cat'],
