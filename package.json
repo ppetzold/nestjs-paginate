@@ -21,7 +21,7 @@
   "scripts": {
     "prebuild": "rimraf lib",
     "build": "tsc",
-    "prepare": "tsc",
+    "prepare": "tsc && husky",
     "dev:yalc": "nodemon --watch src --ext ts --exec 'npm run build && yalc push'",
     "format": "prettier --write \"src/**/*.ts\"",
     "format:ci": "prettier --list-different \"src/**/*.ts\"",
@@ -46,6 +46,7 @@
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-prettier": "^5.2.3",
     "fastify": "^5.2.1",
+    "husky": "^9.1.7",
     "jest": "^29.7.0",
     "mysql2": "^3.14.0",
     "pg": "^8.14.0",
