@@ -44,6 +44,10 @@ export enum FilterOperator {
     ILIKE = '$ilike',
     SW = '$sw',
     CONTAINS = '$contains',
+    NEQ = '$neq',
+    NINC = '$ninc',
+    NCONTAINS = '$ncontains',
+    NOT_NULL = '$notnull',
 }
 
 export function isOperator(value: unknown): value is FilterOperator {
@@ -76,6 +80,7 @@ export const OperatorSymbolToFunction = new Map<
     [FilterOperator.GTE, MoreThanOrEqual],
     [FilterOperator.IN, In],
     [FilterOperator.NULL, IsNull],
+    [FilterOperator.NOT_NULL, () => Not(IsNull())],
     [FilterOperator.LT, LessThan],
     [FilterOperator.LTE, LessThanOrEqual],
     [FilterOperator.BTW, Between],
@@ -83,6 +88,9 @@ export const OperatorSymbolToFunction = new Map<
     [FilterSuffix.NOT, Not],
     [FilterOperator.SW, ILike],
     [FilterOperator.CONTAINS, ArrayContains],
+    [FilterOperator.NCONTAINS, (v: any) => Not(ArrayContains(v))],
+    [FilterOperator.NINC, (v: string) => Not(ILike(`%${v}%`))],
+    [FilterOperator.NEQ, (v: any) => Not(Equal(v))],
 ])
 
 type Filter = { comparator: FilterComparator; findOperator: FindOperator<string> }

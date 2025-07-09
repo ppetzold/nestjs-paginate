@@ -174,7 +174,7 @@ describe('PaginatedEndpoint decorator', () => {
                 required: false,
                 in: 'query',
                 description:
-                    'Filter by id query param.\n          <p>\n             <b>Format: </b> filter.id={$not}:OPERATION:VALUE\n          </p>\n          <p>\n             <b>Example: </b> filter.id=$not:$like:John Doe&filter.id=like:John\n          </p>\n          <h4>Available Operations</h4><ul><li>$and</li>\n<li>$or</li>\n<li>$not</li>\n<li>$eq</li>\n<li>$gt</li>\n<li>$gte</li>\n<li>$in</li>\n<li>$null</li>\n<li>$lt</li>\n<li>$lte</li>\n<li>$btw</li>\n<li>$ilike</li>\n<li>$sw</li>\n<li>$contains</li></ul>',
+                    'Filter by id query param.\n          <p>\n             <b>Format: </b> filter.id={$not}:OPERATION:VALUE\n          </p>\n          <p>\n             <b>Example: </b> filter.id=$not:$like:John Doe&filter.id=like:John\n          </p>\n          <h4>Available Operations</h4><ul><li>$and</li>\n<li>$or</li>\n<li>$not</li>\n<li>$eq</li>\n<li>$gt</li>\n<li>$gte</li>\n<li>$in</li>\n<li>$null</li>\n<li>$lt</li>\n<li>$lte</li>\n<li>$btw</li>\n<li>$ilike</li>\n<li>$sw</li>\n<li>$contains</li>\n<li>$neq</li>\n<li>$ninc</li>\n<li>$ncontains</li>\n<li>$notnull</li></ul>',
                 schema: {
                     type: 'array',
                     items: {
