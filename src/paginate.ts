@@ -28,6 +28,8 @@ import {
     isEntityKey,
     isFindOperator,
     isISODate,
+    isNil,
+    isNotNil,
     isRepository,
     JoinMethod,
     MappedColumns,
@@ -39,6 +41,7 @@ import {
     RelationSchemaInput,
     SortBy,
 } from './helper'
+import globalConfig from './global-config'
 
 const logger: Logger = new Logger('nestjs-paginate')
 
@@ -105,8 +108,6 @@ export interface PaginateConfig<T> {
 export enum PaginationLimit {
     NO_PAGINATION = -1,
     COUNTER_ONLY = 0,
-    DEFAULT_LIMIT = 20,
-    DEFAULT_MAX_LIMIT = 100,
 }
 
 function generateWhereStatement<T>(
@@ -208,8 +209,8 @@ export async function paginate<T extends ObjectLiteral>(
 
     const page = positiveNumberOrDefault(query.page, 1, 1)
 
-    const defaultLimit = config.defaultLimit || PaginationLimit.DEFAULT_LIMIT
-    const maxLimit = config.maxLimit || PaginationLimit.DEFAULT_MAX_LIMIT
+    const defaultLimit = config.defaultLimit || globalConfig.defaultLimit
+    const maxLimit = config.maxLimit || globalConfig.defaultMaxLimit
 
     const isPaginated = !(
         query.limit === PaginationLimit.COUNTER_ONLY ||
@@ -951,10 +952,10 @@ export async function paginate<T extends ObjectLiteral>(
         const { queryOrigin, queryPath } = getQueryUrlComponents(query.path)
         if (config.relativePath) {
             path = queryPath
-        } else if (config.origin) {
+        } else if (isNotNil(config.origin)) {
             path = config.origin + queryPath
         } else {
-            path = queryOrigin + queryPath
+            path = (isNil(globalConfig.defaultOrigin) ? queryOrigin : globalConfig.defaultOrigin) + queryPath
         }
     }
 
