@@ -680,6 +680,50 @@ There is also some syntax sugar for this, and you can use only one decorator `@P
   }
 ```
 
+It is also possible to customize a swagger UI completely or partially, by following the default implementation and creating your own version of PaginatedSwaggerDocs decorator
+
+Let's say you want some custom appearance for SortBy, you need to create a decorator for it
+
+```typescript
+export function CustomSortBy(paginationConfig: PaginateConfig<any>) {
+  return ApiQuery({
+    name: 'sortBy',
+    isArray: true,
+    description: `My custom sort by description`,
+    required: false,
+    type: 'string',
+  })
+}
+```
+
+Now you can create your version of the whole docs decorator and use it
+
+```typescript
+
+const CustomApiPaginationQuery = (paginationConfig: PaginateConfig<any>) => {
+  return applyDecorators(
+    ...[
+      Page(),
+      Limit(paginationConfig),
+      Where(paginationConfig),
+      CustomSortBy(paginationConfig),
+      Search(paginationConfig),
+      SearchBy(paginationConfig),
+      Select(paginationConfig),
+    ].filter((v): v is MethodDecorator => v !== undefined)
+  )
+}
+
+function CustomPaginatedSwaggerDocs<DTO extends Type<unknown>>(dto: DTO, paginatedConfig: PaginateConfig<any>) {
+  return applyDecorators(ApiOkPaginatedResponse(dto, paginatedConfig), CustomApiPaginationQuery(paginatedConfig))
+}
+
+```
+
+You can use CustomPaginatedSwaggerDocs instead of default PaginatedSwaggerDocs
+
+
+
 ## Troubleshooting
 
 The package does not report error reasons in the response bodies. They are instead
