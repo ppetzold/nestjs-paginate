@@ -94,6 +94,7 @@ export interface PaginateConfig<T> {
     filterableColumns?: Partial<MappedColumns<T, (FilterOperator | FilterSuffix)[] | true>>
     loadEagerRelations?: boolean
     withDeleted?: boolean
+    allowWithDeletedInQuery?: boolean
     paginationType?: PaginationType
     relativePath?: boolean
     origin?: string
@@ -653,7 +654,7 @@ export async function paginate<T extends ObjectLiteral>(
         }
     }
 
-    if (config.withDeleted) {
+    if (config.withDeleted || (config.allowWithDeletedInQuery && query.withDeleted)) {
         queryBuilder.withDeleted()
     }
 

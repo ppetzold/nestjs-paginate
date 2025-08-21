@@ -2627,6 +2627,51 @@ describe('paginate', () => {
         await catRepo.restore({ id: cats[0].id })
     })
 
+    it('should return all items even if deleted, by passing with deleted in query params', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            allowWithDeletedInQuery: true,
+        }
+        const query: PaginateQuery = {
+            path: '',
+            withDeleted: true,
+        }
+        await catRepo.softDelete({ id: cats[0].id })
+        const result = await paginate<CatEntity>(query, catRepo, config)
+        expect(result.meta.totalItems).toBe(cats.length)
+        await catRepo.restore({ id: cats[0].id })
+    })
+
+    it('should return all items even if deleted if config specified withDeleted false', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            allowWithDeletedInQuery: true,
+            withDeleted: false,
+        }
+        const query: PaginateQuery = {
+            path: '',
+            withDeleted: true,
+        }
+        await catRepo.softDelete({ id: cats[0].id })
+        const result = await paginate<CatEntity>(query, catRepo, config)
+        expect(result.meta.totalItems).toBe(cats.length)
+        await catRepo.restore({ id: cats[0].id })
+    })
+
+    it('should not return items with deleted not allowed in config', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+        }
+        const query: PaginateQuery = {
+            path: '',
+            withDeleted: true,
+        }
+        await catRepo.softDelete({ id: cats[0].id })
+        const result = await paginate<CatEntity>(query, catRepo, config)
+        expect(result.meta.totalItems).toBe(cats.length - 1)
+        await catRepo.restore({ id: cats[0].id })
+    })
+
     it('should return all relation items even if deleted', async () => {
         const config: PaginateConfig<CatHomeEntity> = {
             sortableColumns: ['id'],

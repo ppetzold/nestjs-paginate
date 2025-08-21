@@ -53,7 +53,7 @@ The following code exposes a route that can be utilized like so:
 #### Endpoint
 
 ```url
-http://localhost:3000/cats?limit=5&page=2&sortBy=color:DESC&search=i&filter.age=$gte:3&select=id,name,color,age
+http://localhost:3000/cats?limit=5&page=2&sortBy=color:DESC&search=i&filter.age=$gte:3&select=id,name,color,age&withDeleted=true
 ```
 
 #### Result
@@ -338,6 +338,13 @@ const paginateConfig: PaginateConfig<CatEntity> {
    * https://typeorm.io/select-query-builder#querying-deleted-rows
    */
   withDeleted: false,
+
+  /**
+   * Required: false
+   * Type: boolean
+   * Description: Allows to specify withDeleted in query params to retrieve soft deleted records, convinient when you have archive functionality and some toggle to show or hide them. If not enabled explicitly the withDeleted query param will be ignored.
+   */
+  allowWithDeletedInQuery: false,
 
   /**
    * Required: false
