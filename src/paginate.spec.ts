@@ -22,6 +22,7 @@ import {
     parseFilterToken,
 } from './filter'
 import { paginate, PaginateConfig, Paginated, PaginationLimit, PaginationType } from './paginate'
+import globalConfig, { updateGlobalConfig } from './global-config'
 
 // Disable debug logs during tests
 beforeAll(() => {
@@ -285,6 +286,57 @@ describe('paginate', () => {
         expect(result.data).toStrictEqual(cats.slice(0, 1))
     })
 
+    it('should accept and use empty string as default origin in config, even if global provided', async () => {
+        updateGlobalConfig({
+            defaultOrigin: 'http://localhost:8081',
+        })
+
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            defaultSortBy: [['id', 'ASC']],
+            defaultLimit: 1,
+            origin: '',
+        }
+
+        const query: PaginateQuery = {
+            path: 'http://localhost:8080/cat',
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        expect(result).toBeInstanceOf(Paginated)
+        expect(result.links.current).toStrictEqual('/cat?page=1&limit=1&sortBy=id:ASC')
+
+        updateGlobalConfig({
+            defaultOrigin: undefined,
+        })
+    })
+
+    it('should use default origin from global config if provided, over the one from request', async () => {
+        updateGlobalConfig({
+            defaultOrigin: 'http://localhost:8081',
+        })
+
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            defaultSortBy: [['id', 'ASC']],
+            defaultLimit: 1,
+        }
+
+        const query: PaginateQuery = {
+            path: 'http://localhost:8080/cat',
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        expect(result).toBeInstanceOf(Paginated)
+        expect(result.links.current).toStrictEqual('http://localhost:8081/cat?page=1&limit=1&sortBy=id:ASC')
+
+        updateGlobalConfig({
+            defaultOrigin: undefined,
+        })
+    })
+
     it('should accept a query builder', async () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id'],
@@ -499,7 +551,7 @@ describe('paginate', () => {
 
         const result = await paginate<CatEntity>(query, catRepo, config)
 
-        expect(result.data).toStrictEqual(cats.slice(0, PaginationLimit.DEFAULT_LIMIT))
+        expect(result.data).toStrictEqual(cats.slice(0, globalConfig.defaultLimit))
     })
 
     it('should return the count without data ignoring maxLimit if limit is COUNTER_ONLY', async () => {

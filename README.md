@@ -27,6 +27,25 @@ npm install nestjs-paginate
 
 ## Usage
 
+### Global configurations
+
+You can configure the global settings for all paginated routes by updating the default global configuration
+using below method. Ideally, you need to do it as soon as possible in your application main bootstrap method,
+as it affects all paginated routes, and swagger generation logic.
+
+```typescript
+import { updateGlobalConfig } from 'nestjs-paginate'
+
+updateGlobalConfig({
+  // this is default configuration
+  defaultOrigin: undefined,
+  defaultLimit: 20,
+  defaultMaxLimit: 100,
+});
+```
+
+
+
 ### Example
 
 The following code exposes a route that can be utilized like so:

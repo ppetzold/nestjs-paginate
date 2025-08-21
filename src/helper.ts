@@ -351,3 +351,11 @@ export function isDateColumnType(type: any): boolean {
 export function quoteVirtualColumn(columnName: string, isMySqlOrMariaDb: boolean): string {
     return isMySqlOrMariaDb ? `\`${columnName}\`` : `"${columnName}"`
 }
+
+export function isNil(v: unknown): boolean {
+    return v === null || v === undefined
+}
+
+export function isNotNil(v: unknown): boolean {
+    return !isNil(v)
+}

@@ -1,7 +1,8 @@
 import { applyDecorators } from '@nestjs/common'
 import { ApiQuery } from '@nestjs/swagger'
 import { FilterComparator } from '../filter'
-import { FilterOperator, FilterSuffix, PaginateConfig, PaginationLimit } from '../paginate'
+import { FilterOperator, FilterSuffix, PaginateConfig } from '../paginate'
+import globalConfig from '../global-config'
 
 const DEFAULT_VALUE_KEY = 'Default Value'
 
@@ -45,8 +46,8 @@ function Limit(paginationConfig: PaginateConfig<any>) {
         name: 'limit',
         description: `Number of records per page.
       ${p('Example', '20')}
-      ${p(DEFAULT_VALUE_KEY, paginationConfig?.defaultLimit?.toString() || PaginationLimit.DEFAULT_LIMIT.toString())}
-      ${p('Max Value', paginationConfig.maxLimit?.toString() || PaginationLimit.DEFAULT_MAX_LIMIT.toString())}
+      ${p(DEFAULT_VALUE_KEY, paginationConfig?.defaultLimit?.toString() || globalConfig.defaultLimit.toString())}
+      ${p('Max Value', paginationConfig.maxLimit?.toString() || globalConfig.defaultMaxLimit.toString())}
 
       If provided value is greater than max value, max value will be applied.
       `,
