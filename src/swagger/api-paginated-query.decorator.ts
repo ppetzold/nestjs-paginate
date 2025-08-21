@@ -97,7 +97,6 @@ function Where(paginationConfig: PaginateConfig<any>) {
           ${li('Available Operations', operations)}`,
                 required: false,
                 type: 'string',
-                isArray: true,
             })
         })
         .filter((v) => v !== undefined)

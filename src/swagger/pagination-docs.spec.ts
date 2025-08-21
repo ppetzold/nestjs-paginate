@@ -176,10 +176,7 @@ describe('PaginatedEndpoint decorator', () => {
                 description:
                     'Filter by id query param.\n          <p>\n             <b>Format: </b> filter.id={$not}:OPERATION:VALUE\n          </p>\n          <p>\n             <b>Example: </b> filter.id=$not:$like:John Doe&filter.id=like:John\n          </p>\n          <h4>Available Operations</h4><ul><li>$and</li>\n<li>$or</li>\n<li>$not</li>\n<li>$eq</li>\n<li>$gt</li>\n<li>$gte</li>\n<li>$in</li>\n<li>$null</li>\n<li>$lt</li>\n<li>$lte</li>\n<li>$btw</li>\n<li>$ilike</li>\n<li>$sw</li>\n<li>$contains</li></ul>',
                 schema: {
-                    type: 'array',
-                    items: {
-                        type: 'string',
-                    },
+                    type: 'string',
                 },
             },
             {
@@ -189,10 +186,7 @@ describe('PaginatedEndpoint decorator', () => {
                 description:
                     'Filter by name query param.\n          <p>\n             <b>Format: </b> filter.name={$not}:OPERATION:VALUE\n          </p>\n          <p>\n             <b>Example: </b> filter.name=$not:$like:John Doe&filter.name=like:John\n          </p>\n          <h4>Available Operations</h4><ul><li>$eq</li>\n<li>$not</li></ul>',
                 schema: {
-                    type: 'array',
-                    items: {
-                        type: 'string',
-                    },
+                    type: 'string',
                 },
             },
             {
