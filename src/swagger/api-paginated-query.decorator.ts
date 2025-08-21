@@ -127,7 +127,6 @@ ${p(
 ${li('Available Operations', [...operations, ...Object.values(FilterComparator)])}`,
                 required: false,
                 type: 'string',
-                isArray: true,
             })
         })
         .filter((v) => v !== undefined)
