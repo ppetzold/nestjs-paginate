@@ -109,6 +109,7 @@ describe('Decorator', () => {
             filter: undefined,
             select: undefined,
             cursor: undefined,
+            withDeleted: undefined,
             path: 'http://localhost/items',
         })
     })
@@ -127,6 +128,7 @@ describe('Decorator', () => {
             filter: undefined,
             select: undefined,
             cursor: undefined,
+            withDeleted: undefined,
             path: 'http://localhost/items',
         })
     })
@@ -137,6 +139,7 @@ describe('Decorator', () => {
             limit: '20',
             sortBy: ['id:ASC', 'createdAt:DESC'],
             search: 'white',
+            withDeleted: 'true',
             'filter.name': '$not:$eq:Kitty',
             'filter.createdAt': ['$gte:2020-01-01', '$lte:2020-12-31'],
             select: ['name', 'createdAt'],
@@ -154,6 +157,7 @@ describe('Decorator', () => {
             ],
             search: 'white',
             searchBy: undefined,
+            withDeleted: true,
             select: ['name', 'createdAt'],
             path: 'http://localhost/items',
             filter: {
@@ -170,6 +174,7 @@ describe('Decorator', () => {
             limit: '20',
             sortBy: ['id:ASC', 'createdAt:DESC'],
             search: 'white',
+            withDeleted: 'false',
             'filter.name': '$not:$eq:Kitty',
             'filter.createdAt': ['$gte:2020-01-01', '$lte:2020-12-31'],
             select: ['name', 'createdAt'],
@@ -187,6 +192,7 @@ describe('Decorator', () => {
             ],
             search: 'white',
             searchBy: undefined,
+            withDeleted: false,
             path: 'http://localhost/items',
             filter: {
                 name: '$not:$eq:Kitty',
