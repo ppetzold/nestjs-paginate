@@ -2,6 +2,7 @@ import { createParamDecorator, ExecutionContext } from '@nestjs/common'
 import type { Request as ExpressRequest } from 'express'
 import type { FastifyRequest } from 'fastify'
 import { Dictionary, isString, mapKeys, pickBy } from 'lodash'
+import { isNil } from './helper'
 
 function isRecord(data: unknown): data is Record<string, unknown> {
     return data !== null && typeof data === 'object' && !Array.isArray(data)
@@ -51,6 +52,19 @@ function parseParam<T>(queryParam: unknown, parserLogic: (param: string, res: an
     return res.length ? res : undefined
 }
 
+function parseIntParam(v: unknown): number | undefined {
+    if (isNil(v)) {
+        return undefined
+    }
+
+    const result = Number.parseInt(v.toString(), 10)
+
+    if (Number.isNaN(result)) {
+        return undefined
+    }
+    return result
+}
+
 export const Paginate = createParamDecorator((_data: unknown, ctx: ExecutionContext): PaginateQuery => {
     let path: string
     let query: Record<string, unknown>
@@ -96,8 +110,8 @@ export const Paginate = createParamDecorator((_data: unknown, ctx: ExecutionCont
     )
 
     return {
-        page: query.page ? parseInt(query.page.toString(), 10) : undefined,
-        limit: query.limit ? parseInt(query.limit.toString(), 10) : undefined,
+        page: parseIntParam(query.page),
+        limit: parseIntParam(query.limit),
         sortBy,
         search: query.search ? query.search.toString() : undefined,
         searchBy,
