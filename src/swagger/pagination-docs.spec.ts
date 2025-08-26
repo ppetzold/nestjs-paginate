@@ -5,6 +5,8 @@ import { Test } from '@nestjs/testing'
 import { PaginatedSwaggerDocs } from './api-paginated-swagger-docs.decorator'
 import { ApiPaginationQuery } from './api-paginated-query.decorator'
 import { ApiOkPaginatedResponse } from './api-ok-paginated-response.decorator'
+import * as fs from 'node:fs'
+import * as path from 'node:path'
 
 const BASE_PAGINATION_CONFIG = {
     sortableColumns: ['id'],
@@ -311,5 +313,14 @@ describe('PaginatedEndpoint decorator', () => {
                 },
             },
         })
+    })
+
+    it('should match a base config, snapshot test for all config', async () => {
+        const openApiDefinition = await getSwaggerDefinitionForEndpoint(TestDto, FULL_CONFIG)
+        const fullOpenApiDefinition = JSON.parse(
+            fs.readFileSync(path.join(__dirname, 'resources/full-openapi-definition.json')).toString('utf-8')
+        )
+
+        expect(openApiDefinition).toStrictEqual(fullOpenApiDefinition)
     })
 })
