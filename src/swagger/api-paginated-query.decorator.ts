@@ -180,6 +180,17 @@ ${li('Available Fields', paginateConfig.searchableColumns)}
     })
 }
 
+export function WithDeleted(paginateConfig: PaginateConfig<any>) {
+    if (!paginateConfig.allowWithDeletedInQuery) return
+
+    return ApiQuery({
+        name: 'withDeleted',
+        description: `Retrieve records including soft deleted ones`,
+        required: false,
+        type: 'boolean',
+    })
+}
+
 export const ApiPaginationQuery = (paginationConfig: PaginateConfig<any>) => {
     return applyDecorators(
         ...[
@@ -190,6 +201,7 @@ export const ApiPaginationQuery = (paginationConfig: PaginateConfig<any>) => {
             Search(paginationConfig),
             SearchBy(paginationConfig),
             Select(paginationConfig),
+            WithDeleted(paginationConfig),
         ].filter((v): v is MethodDecorator => v !== undefined)
     )
 }

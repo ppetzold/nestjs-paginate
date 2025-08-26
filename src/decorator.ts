@@ -20,6 +20,7 @@ export interface PaginateQuery {
     filter?: { [column: string]: string | string[] }
     select?: string[]
     cursor?: string
+    withDeleted?: boolean
     path: string
 }
 
@@ -103,6 +104,7 @@ export const Paginate = createParamDecorator((_data: unknown, ctx: ExecutionCont
         filter: Object.keys(filter).length ? filter : undefined,
         select,
         cursor: query.cursor ? query.cursor.toString() : undefined,
+        withDeleted: query.withDeleted === 'true' ? true : query.withDeleted === 'false' ? false : undefined,
         path,
     }
 })
