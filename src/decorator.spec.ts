@@ -202,4 +202,35 @@ describe('Decorator', () => {
             cursor: 'abc123',
         })
     })
+
+    it('should use default params if not valid values provided', () => {
+        const context = fastifyContextFactory({
+            page: 'NOTANUMBER',
+            limit: 'NOTANUMBER',
+            sortBy: ['NOTEXISTEN:BLABLA'],
+            search: 'white',
+            'filter.notUsed': '$fake:$eqaa:Kitty',
+            'filter.notUsedSecond': 'something',
+            select: ['notExisted'],
+            cursor: 'abc123',
+        })
+
+        const result: PaginateQuery = decoratorfactory(null, context)
+
+        expect(result).toStrictEqual({
+            page: undefined,
+            limit: undefined,
+            sortBy: [['NOTEXISTEN', 'BLABLA']],
+            search: 'white',
+            searchBy: undefined,
+            withDeleted: undefined,
+            path: 'http://localhost/items',
+            filter: {
+                notUsed: '$fake:$eqaa:Kitty',
+                notUsedSecond: 'something',
+            },
+            select: ['notExisted'],
+            cursor: 'abc123',
+        })
+    })
 })
