@@ -178,10 +178,7 @@ describe('PaginatedEndpoint decorator', () => {
                 description:
                     'Filter by id query param.\n\n**Format:** filter.id={$not}:OPERATION:VALUE\n\n\n\n**Example:** filter.id=$btw:John Doe&filter.id=$contains:John Doe\n\n**Available Operations**\n- $eq\n\n- $gt\n\n- $gte\n\n- $in\n\n- $null\n\n- $lt\n\n- $lte\n\n- $btw\n\n- $ilike\n\n- $sw\n\n- $contains\n\n- $not\n\n- $and\n\n- $or',
                 schema: {
-                    type: 'array',
-                    items: {
-                        type: 'string',
-                    },
+                    type: 'string',
                 },
             },
             {
@@ -191,10 +188,7 @@ describe('PaginatedEndpoint decorator', () => {
                 description:
                     'Filter by name query param.\n\n**Format:** filter.name={$not}:OPERATION:VALUE\n\n\n\n**Example:** filter.name=$eq:John Doe\n\n**Available Operations**\n- $eq\n\n- $not\n\n- $and\n\n- $or',
                 schema: {
-                    type: 'array',
-                    items: {
-                        type: 'string',
-                    },
+                    type: 'string',
                 },
             },
             {
