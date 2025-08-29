@@ -220,7 +220,7 @@ export function checkIsArray(qb: SelectQueryBuilder<unknown>, propertyName: stri
     return !!qb?.expressionMap?.mainAlias?.metadata.findColumnWithPropertyName(propertyName)?.isArray
 }
 
-export function checkIsJsonb(qb: SelectQueryBuilder<unknown>, propertyName: string): boolean {
+export function checkIsJson(qb: SelectQueryBuilder<unknown>, propertyName: string): boolean {
     if (!qb || !propertyName) {
         return false
     }
@@ -229,10 +229,12 @@ export function checkIsJsonb(qb: SelectQueryBuilder<unknown>, propertyName: stri
         const parts = propertyName.split('.')
         const dbColumnName = parts[parts.length - 2]
 
-        return qb?.expressionMap?.mainAlias?.metadata.findColumnWithPropertyName(dbColumnName)?.type === 'jsonb'
+        const columnType = qb?.expressionMap?.mainAlias?.metadata.findColumnWithPropertyName(dbColumnName)?.type
+        return columnType === 'jsonb' || columnType === 'json'
     }
 
-    return qb?.expressionMap?.mainAlias?.metadata.findColumnWithPropertyName(propertyName)?.type === 'jsonb'
+    const columnType = qb?.expressionMap?.mainAlias?.metadata.findColumnWithPropertyName(propertyName)?.type
+    return columnType === 'jsonb' || columnType === 'json'
 }
 
 // This function is used to fix the column alias when using relation, embedded or virtual properties
