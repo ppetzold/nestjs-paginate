@@ -12,7 +12,7 @@ export const ApiOkPaginatedResponse = <DTO extends Type<unknown> | string>(
     const cols = paginatedConfig?.filterableColumns || {}
 
     return applyDecorators(
-        ...[typeof dataDto !== 'string' && ApiExtraModels(PaginatedDocumented, dataDto)],
+        ...(typeof dataDto !== 'string' ? [ApiExtraModels(PaginatedDocumented, dataDto)] : []),
         ApiOkResponse({
             schema: {
                 allOf: [
