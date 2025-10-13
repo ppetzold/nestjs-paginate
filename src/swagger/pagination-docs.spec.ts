@@ -67,9 +67,9 @@ describe('PaginatedEndpoint decorator', () => {
         const openApiDefinition = await getSwaggerDefinitionForEndpoint(TestDto, BASE_PAGINATION_CONFIG)
         const testGetParams = openApiDefinition.paths['/test'].get.parameters
 
-        expect(testGetParams).toStrictEqual(openApiDefinition.paths['/test'].post.parameters)
+        expect(openApiDefinition.paths['/test-referenced'].get.parameters).toStrictEqual(testGetParams)
 
-        expect(testGetParams).toStrictEqual(openApiDefinition.paths['/test'].post.parameters)
+        expect(openApiDefinition.paths['/test'].post.parameters).toStrictEqual(testGetParams)
     })
 
     it.each(['/test', '/test-referenced'])(
