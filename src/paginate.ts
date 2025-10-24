@@ -671,7 +671,7 @@ export async function paginate<T extends ObjectLiteral>(
             createRelationSchema(config.relations),
             createRelationSchema(Object.keys(joinMethods))
         )
-        addRelationsFromSchema(queryBuilder, relationsSchema, config, joinMethods)
+        addRelationsFromSchema(queryBuilder, relationsSchema, joinMethods, config.defaultJoinMethod)
     }
 
     if (config.paginationType !== PaginationType.CURSOR) {
@@ -1023,11 +1023,9 @@ export async function paginate<T extends ObjectLiteral>(
 export function addRelationsFromSchema<T>(
     queryBuilder: SelectQueryBuilder<T>,
     schema: RelationSchema<T>,
-    config: PaginateConfig<T>,
-    joinMethods: Partial<MappedColumns<T, JoinMethod>>
+    joinMethods: Partial<MappedColumns<T, JoinMethod>>,
+    defaultJoinMethod: 'leftJoin' | 'innerJoin' | 'leftJoinAndSelect' | 'innerJoinAndSelect' = 'leftJoinAndSelect',
 ): void {
-    const defaultJoinMethod = config.defaultJoinMethod ?? 'leftJoinAndSelect'
-
     const createQueryBuilderRelations = (
         prefix: string,
         relations: RelationSchema,

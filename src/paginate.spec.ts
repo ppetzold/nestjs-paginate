@@ -1,7 +1,7 @@
 import { HttpException, Logger } from '@nestjs/common'
 import { clone } from 'lodash'
 import * as process from 'process'
-import { DataSource, In, Like, Repository, TypeORMError } from 'typeorm'
+import { DataSource, In, Like, Repository, SelectQueryBuilder, TypeORMError } from 'typeorm'
 import { BaseDataSourceOptions } from 'typeorm/data-source/BaseDataSourceOptions'
 import { CatHairEntity } from './__tests__/cat-hair.entity'
 import { CatHomePillowBrandEntity } from './__tests__/cat-home-pillow-brand.entity'
@@ -3363,21 +3363,23 @@ describe('paginate', () => {
                 relations: ['toys'],
                 sortableColumns: ['id', 'toys.id'],
                 filterableColumns: {
-                    'toys.id': [FilterOperator.NULL]
-                }
+                    'toys.id': [FilterOperator.NULL],
+                },
             }
             const query: PaginateQuery = {
                 filter: {
                     // Null-filtering a relationship's PK should check
                     // for absence of the relationship
-                    'toys.id': '$null'
+                    'toys.id': '$null',
                 },
                 path: '',
             }
 
-            const result = await paginate<CatEntity>(query, catRepo, config);
+            const result = await paginate<CatEntity>(query, catRepo, config)
             // Should find only cats without toys.
-            expect(result.data.every(cat => cat.toys.length === 0)).toBe(true);
+            expect(result.data.every((cat) => cat.toys.length === 0)).toBe(true)
+            // Should find 5 cats without toys.
+            expect(result.data.length).toBe(5)
         })
     })
 
@@ -4971,6 +4973,194 @@ describe('paginate', () => {
             expect(result.data[0].toys[0]).toHaveProperty('id')
             expect(result.data[0].toys[0]).not.toHaveProperty('name')
             expect(result.data[0].toys[0]).not.toHaveProperty('createdAt')
+        })
+    })
+
+    describe('Filtering across to-many relationship boundaries', () => {
+        let existsSpy
+
+        beforeAll(() => {
+            existsSpy = jest.spyOn(SelectQueryBuilder.prototype, 'andWhereExists')
+        })
+
+        beforeEach(() => {
+            existsSpy.mockClear()
+        })
+
+        afterAll(() => {
+            existsSpy.mockRestore()
+        })
+
+        describe('Filtering records whose related entities match filter criteria', () => {
+            it('should find all cats that have one or more toys that are not toy 0', async () => {
+                // This test tests a direct toMany relationship (.toys) with a single direct filter on it (.toys.id)
+                const config: PaginateConfig<CatEntity> = {
+                    relations: ['toys'],
+                    sortableColumns: ['id', 'toys.id'],
+                    filterableColumns: {
+                        'toys.id': [FilterOperator.EQ, FilterSuffix.NOT],
+                        'toys.(size.height)': [FilterOperator.GT],
+                        'home.name': [FilterOperator.EQ],
+                    },
+                }
+                const query: PaginateQuery = {
+                    filter: {
+                        // Filtering on toMany means "include cats with toys that match the filter",
+                        // in this case "include cats with toys that are not toys with the id of toy 0"
+                        'toys.id': `$not:$eq:${catToys[0].id}`,
+                    },
+                    path: '',
+                }
+
+                const result = await paginate<CatEntity>(query, catRepo, config)
+                // Cat 0 has toys 0, 1, 2  --> is included because it has toy 1 and 2 which are not toy 0
+                // Cat 1 has toys 3        --> is included
+                // Other cats have no toys --> are not included
+                expect(result.data.length).toBe(2)
+                expect(result.data[0].id).toBe(cats[0].id)
+                expect(result.data[1].id).toBe(cats[1].id)
+
+                // When filtering on toMany relations, the related entities themselves should not be filtered.
+                expect(result.data[0].toys.length).toBe(catToys.filter((t) => t.cat.id === cats[0].id).length)
+            })
+
+            it('should find all cats with one or more toys height 5 that is also not toy 0', async () => {
+                // This test tests a direct toMany relationship (.toys) with multiple filters on it.
+                // It tests that all filters are applied so that only toys match that meet all filters (rather than
+                // all the toys that meet one or more filter criteria), and
+                // it asserts that only a single optimized EXISTS clause is generated.
+                const config: PaginateConfig<CatEntity> = {
+                    relations: ['toys'],
+                    sortableColumns: ['id', 'toys.id'],
+                    filterableColumns: {
+                        'toys.id': [FilterOperator.EQ, FilterSuffix.NOT],
+                        'toys.(size.height)': [FilterOperator.EQ],
+                    },
+                }
+                const query: PaginateQuery = {
+                    filter: {
+                        'toys.id': `$not:$eq:${catToys[0].id}`,
+                        'toys.(size.height)': '$eq:5',
+                    },
+                    path: '',
+                }
+
+                const result = await paginate<CatEntity>(query, catRepo, config)
+                // Both cat 0 and cat 1 have a toy that is not toy 0, but only cat 0 has a toy with height == 5
+                expect(result.data.length).toBe(1)
+                expect(result.data[0].id).toBe(cats[0].id)
+
+                // When filtering on toMany relations, the related entities themselves should not be filtered.
+                expect(result.data[0].toys.length).toBe(catToys.filter((t) => t.cat.id === cats[0].id).length)
+
+                // Only a single EXISTS clause should be generated
+                expect(existsSpy).toHaveBeenCalledTimes(1)
+            })
+
+            it('should find cats with toys, even when that relationship is not loaded', async () => {
+                // This test tests a regression where filtering by a relationship that did not occur in the `relations`
+                // config would cause the query to fail. e.g. filter on `toys.id` without `toys` in `relations`
+                const config: PaginateConfig<CatEntity> = {
+                    sortableColumns: ['id'],
+                    filterableColumns: {
+                        'toys.(size.height)': [FilterOperator.EQ],
+                    },
+                }
+                const query: PaginateQuery = {
+                    filter: {
+                        'toys.(size.height)': '$eq:5',
+                    },
+                    path: '',
+                }
+
+                const result = await paginate<CatEntity>(query, catRepo, config)
+                // Only cat 0 has a toy with height == 5
+                expect(result.data.length).toBe(1)
+                expect(result.data[0].id).toBe(cats[0].id)
+                // Filtering by a relationship should not include it in the result
+                expect(result.data[0].toys).toBeUndefined()
+            })
+
+            it('should find all cats with one or more red or teal pillows in their home', async () => {
+                // This test tests toMany relationships that are part of a deeper chain such as cat.home.pillows
+                const config: PaginateConfig<CatEntity> = {
+                    sortableColumns: ['id'],
+                    relations: ['home.pillows'],
+                    filterableColumns: {
+                        'home.pillows.color': [FilterOperator.EQ],
+                    },
+                }
+                const query: PaginateQuery = {
+                    filter: {
+                        'home.pillows.color': [`$or:$eq:red`, `$or:$eq:teal`],
+                    },
+                    path: '',
+                }
+
+                const result = await paginate<CatEntity>(query, catRepo, config)
+                // Cat 0 has a red pillow in their home, and cat 1 has a teal pillow in their home
+                expect(result.data.length).toBe(2)
+                expect(result.data[0].id).toBe(cats[0].id)
+                expect(result.data[1].id).toBe(cats[1].id)
+
+                // When filtering on toMany relations, the related entities themselves should not be filtered.
+                expect(result.data[0].home.pillows.length).toBe(3)
+
+                // Only a single EXISTS clause should be generated
+                expect(existsSpy).toHaveBeenCalledTimes(1)
+            })
+
+            it('should find all cats with a toy from the shop on main street', async () => {
+                // This test tests that the exists clauses can still correctly deal with nested relations
+                // e.g. toys.shop.address.address
+                //      ^ the toMany relationship with a tail of nested relations
+                const config: PaginateConfig<CatEntity> = {
+                    sortableColumns: ['id'],
+                    filterableColumns: {
+                        'toys.shop.address.address': [FilterOperator.ILIKE],
+                    },
+                }
+                const query: PaginateQuery = {
+                    filter: {
+                        'toys.shop.address.address': [`$ilike:main`],
+                    },
+                    path: '',
+                }
+
+                const result = await paginate<CatEntity>(query, catRepo, config)
+                // Cat 1 has a toy from the shop on main street
+                expect(result.data.length).toBe(1)
+                expect(result.data[0].id).toBe(cats[0].id)
+
+                // Only a single EXISTS clause should be generated
+                expect(existsSpy).toHaveBeenCalledTimes(1)
+            })
+
+            it('should find all cats with a tall toy and a red pillow in their home', async () => {
+                // This test tests filtering on multiple toMany relationships and asserts the number of EXISTS clauses
+                const config: PaginateConfig<CatEntity> = {
+                    sortableColumns: ['id'],
+                    filterableColumns: {
+                        'home.pillows.color': [FilterOperator.EQ],
+                        'toys.(size.height)': [FilterOperator.GT],
+                    },
+                }
+                const query: PaginateQuery = {
+                    filter: {
+                        'home.pillows.color': [`$eq:red`],
+                        'toys.(size.height)': '$gt:5',
+                    },
+                    path: '',
+                }
+
+                const result = await paginate<CatEntity>(query, catRepo, config)
+                // Cat 0 has a red pillow in their home, and cat 1 has a teal pillow in their home
+                expect(result.data.length).toBe(1)
+                expect(result.data[0].id).toBe(cats[0].id)
+
+                // 2 EXISTS clauses should be generated, one for each toMany relationship used in the filters
+                expect(existsSpy).toHaveBeenCalledTimes(2)
+            })
         })
     })
 })

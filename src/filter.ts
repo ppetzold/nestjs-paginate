@@ -3,6 +3,7 @@ import {
     ArrayContains,
     Between,
     Brackets,
+    EntityMetadata,
     Equal,
     FindOperator,
     ILike,
@@ -22,16 +23,19 @@ import {
     checkIsArray,
     checkIsEmbedded,
     checkIsJsonb,
-    checkIsNestedRelation,
-    checkIsOneOfNestedPrimaryColumns,
     checkIsRelation,
+    createRelationSchema,
     extractVirtualProperty,
     fixColumnAlias,
     getPropertiesByColumnName,
     isDateColumnType,
     isISODate,
     JoinMethod,
+    mergeRelationSchema,
 } from './helper'
+import { EmbeddedMetadata } from 'typeorm/metadata/EmbeddedMetadata'
+import { RelationMetadata } from 'typeorm/metadata/RelationMetadata'
+import { addRelationsFromSchema } from './paginate'
 
 export enum FilterOperator {
     EQ = '$eq',
@@ -52,6 +56,7 @@ export function isOperator(value: unknown): value is FilterOperator {
 }
 
 export enum FilterSuffix {
+    // Used to negate a filter
     NOT = '$not',
 }
 
@@ -192,10 +197,12 @@ export function addWhereCondition<T>(qb: SelectQueryBuilder<T>, column: string, 
         ) {
             condition.parameters[0] = `cardinality(${condition.parameters[0]})`
         }
+        const expression = qb['createWhereConditionExpression'](condition)
         if (columnFilter.comparator === FilterComparator.OR) {
-            qb.orWhere(qb['createWhereConditionExpression'](condition), parameters)
+            qb.orWhere(expression, parameters)
         } else {
-            qb.andWhere(qb['createWhereConditionExpression'](condition), parameters)
+            console.log('expression', expression, parameters)
+            qb.andWhere(expression, parameters)
         }
     })
 }
@@ -366,16 +373,100 @@ export function parseFilter<T>(
     return filter
 }
 
+class RelationPathError extends Error {}
+
+/**
+ * Retrieves the relation path for a given column name within the provided metadata.
+ *
+ * This method analyzes the column name's segments to identify corresponding relations or embedded entities
+ * within the hierarchy described by the given metadata and returns a structured path.
+ *
+ * @param {string} columnName - The dot-delimited name of the column whose relation path is to be determined.
+ * @param {EntityMetadata | EmbeddedMetadata} metadata - The metadata of the entity or embedded component
+ * which holds the relations or embedded items.
+ * @return {[string, RelationMetadata | EmbeddedMetadata][]} The ordered array describing the path,
+ * where each element contains a field name and its corresponding relation or embedded metadata.
+ * Throws an error if no matching relation or embedded metadata is found.
+ */
+export function getRelationPath(
+    columnName: string,
+    metadata: EntityMetadata | EmbeddedMetadata
+): [string, RelationMetadata | EmbeddedMetadata][] {
+    const relationSegments = columnName.split('.')
+    const deeper = relationSegments.slice(1).join('.')
+    const fieldName = relationSegments[0].replace(/[()]/g, '')
+
+    try {
+        // Check if there's a relation with this property name
+        const relation = metadata.relations.find((r) => r.propertyName === fieldName)
+        if (relation) {
+            return [
+                [fieldName, relation] as const,
+                ...(relationSegments.length > 1 ? getRelationPath(deeper, relation.inverseEntityMetadata) : []),
+            ]
+        }
+
+        // Check if there's something embedded with this property name
+        const embedded = metadata.embeddeds.find((embedded) => embedded.propertyName === fieldName)
+        if (embedded) {
+            return [
+                [fieldName, embedded] as const,
+                ...(relationSegments.length > 1 ? getRelationPath(deeper, embedded) : []),
+            ]
+        }
+    } catch (e) {
+        if (e instanceof RelationPathError) {
+            throw new RelationPathError(`No relation or embedded found for property path ${columnName}`)
+        }
+        throw e
+    }
+    if (relationSegments.length > 1)
+        throw new RelationPathError(`No relation or embedded found for property path ${columnName}`)
+    return []
+}
+
+/**
+ * Finds the first 'to-many' relationship in a given entity metadata or embedded metadata
+ * given a column name. A 'to-many' relationship can be either a one-to-many or a
+ * many-to-many relationship.
+ *
+ * @param {string} columnName - The column name to traverse through its segments and find relationships.
+ * @param {EntityMetadata | EmbeddedMetadata} metadata - The metadata of the entity or
+ * embedded object in which relationships are defined.
+ * @return {{ path: string[]; relation: RelationMetadata } | undefined} An object containing
+ * the path to the 'to-many' relationship and the relationship metadata, or undefined if no
+ * 'to-many' relationships are found.
+ */
+function findFirstToManyRelationship(
+    columnName: string,
+    metadata: EntityMetadata | EmbeddedMetadata
+): { path: string[]; relation: RelationMetadata } | undefined {
+    const relationPath = getRelationPath(columnName, metadata)
+    const relationSegments = columnName.split('.')
+    const firstToMany = relationPath.findIndex(
+        ([, relation]) => 'isOneToMany' in relation && (relation.isOneToMany || relation.isManyToMany)
+    )
+    if (firstToMany > -1)
+        return {
+            path: relationSegments.slice(0, firstToMany + 1),
+            relation: relationPath[firstToMany][1] as RelationMetadata,
+        }
+}
+
 export function addFilter<T>(
     qb: SelectQueryBuilder<T>,
     query: PaginateQuery,
-    filterableColumns?: { [column: string]: (FilterOperator | FilterSuffix)[] | true }
-): ColumnJoinMethods {
+    filterableColumns?: { [column: string]: (FilterOperator | FilterSuffix | FilterQuantifier)[] | true }
+) {
+    const mainMetadata = qb.expressionMap.mainAlias.metadata
     const filter = parseFilter(query, filterableColumns, qb)
 
     const filterEntries = Object.entries(filter)
-    const orFilters = filterEntries.filter(([_, value]) => value[0].comparator === '$or')
-    const andFilters = filterEntries.filter(([_, value]) => value[0].comparator === '$and')
+
+    // Looks for filters that don't have a toMany relationship on their path: will be translated to WHERE clauses on this query.
+    const whereFilters = filterEntries.filter(([key]) => !findFirstToManyRelationship(key, mainMetadata))
+    const orFilters = whereFilters.filter(([, value]) => value[0].comparator === '$or')
+    const andFilters = whereFilters.filter(([, value]) => value[0].comparator === '$and')
 
     qb.andWhere(
         new Brackets((qb: SelectQueryBuilder<T>) => {
@@ -393,30 +484,153 @@ export function addFilter<T>(
         )
     }
 
-    const columnJoinMethods: ColumnJoinMethods = {}
-    const nullFilteredRelations = []
-    for (const [key, columnFilters] of filterEntries) {
-        const properties = getPropertiesByColumnName(key)
-        const relationPath = properties.column.split('.')
-        for (let i = 0; i < relationPath.length - 1; i++) {
-            const subRelation = relationPath.slice(0, i + 1).join('.')
-            if (!checkIsNestedRelation(qb, subRelation)) continue
-            columnJoinMethods[subRelation] = 'innerJoinAndSelect'
+    // Looks filters that have a toMany relationship on their path: will be translated to EXISTS subqueries.
+    const existsFilters = filterEntries.map(([key]) => findFirstToManyRelationship(key, mainMetadata)).filter(Boolean)
+    // Find all the different toMany starting paths
+    const toManyPaths = [...new Set(existsFilters.map((f) => f.path.join('.')))]
+    const toManyRelations = toManyPaths.map(
+        (path) => [path, existsFilters.find((f) => f.path.join('.') === path).relation] as const
+    )
+
+    for (const [path, relation] of toManyRelations) {
+        const mainQueryAlias = qb.alias
+        const relationPath = getRelationPath(path, mainMetadata)
+        const toManyAlias = `_rel_${relationPath[relationPath.length - 1][0]}_${relationPath.length - 1}`
+
+        // 1. Create the EXISTS subquery, starting from the toMany entity
+        const existsQb = qb.connection.createQueryBuilder(relation.inverseEntityMetadata.target as any, toManyAlias)
+
+        // 2. Add the subfilters to the EXISTS subquery
+        const { subQuery, subFilterableColumns } = createSubFilter(query, filterableColumns, path)
+        const subJoins = addFilter(existsQb, subQuery, subFilterableColumns)
+
+        // 3. Add the sub relationship joins to the EXISTS subquery
+        const relationsSchema = mergeRelationSchema(createRelationSchema(Object.keys(subJoins)))
+        // Only inner join, no need to select anything
+        addRelationsFromSchema(existsQb, relationsSchema, {}, 'innerJoin')
+
+        // 4. Build the chain of joins that backtracks our toMany relationship to the root.
+
+        // We iterate from the second-to-last item (the immediate parent) back to the first item (root's child)
+        for (let i = relationPath.length - 1; i >= 0; i--) {
+            const [, meta] = relationPath[i]
+
+            // --- A: Skip Embedded Entities ---
+            if (meta.type === 'embedded') {
+                // Embedded entities exist within the current table (currentChildAlias).
+                // They do not require a JOIN, so we simply continue to the next item in the path.
+                continue
+            }
+
+            // --- B: Handle Table Relation (RelationMetadata) ---
+            // If we reach this point, 'meta' is a RelationMetadata object.
+            const parentMeta = meta as RelationMetadata
+
+            // Check if this is an intermediate or top-level relationship
+            if (i !== 0) {
+                // --- Intermediate Join (Joining two non-root tables within the subquery) ---
+
+                const parentAlias = `_rel_${relationPath[i - 1][0]}_${i - 1}`
+                const childAlias = `_rel_${relationPath[i][0]}_${i}`
+                const childRelationMetadata = parentMeta.inverseRelation
+
+                // Get the join columns from the inverse relation of the current metadata (e.g., inverse of 'pillows')
+                const joinCols = childRelationMetadata.joinColumns
+
+                // Construct the ON condition (handles composite keys)
+                const onConditions = joinCols
+                    .map((jc) => {
+                        const fk = jc.databaseName
+                        const pk = jc.referencedColumn.databaseName
+                        return `"${childAlias}"."${fk}" = "${parentAlias}"."${pk}"`
+                    })
+                    .join(' AND ')
+
+                // Add the INNER JOIN to the subquery
+                existsQb.innerJoin(
+                    childRelationMetadata.inverseRelation.entityMetadata.target,
+                    parentAlias,
+                    onConditions
+                )
+            } else {
+                // Perform the final correlation WHERE clause to the main query alias
+                const joinMeta = parentMeta.isOwning ? parentMeta : parentMeta.inverseRelation
+                for (const joinColumn of joinMeta.joinColumns) {
+                    // 1. Get the raw column names from the owning metadata:
+                    const fkColumn = joinColumn.databaseName
+                    const pkColumn = joinColumn.referencedColumn.databaseName
+
+                    // 2. Get the table aliases
+                    let fkAlias: string
+                    let pkAlias: string
+                    if (parentMeta.isOwning) {
+                        pkAlias = `_rel_${relationPath[0][0]}_0`
+                        fkAlias = mainQueryAlias
+                    } else {
+                        fkAlias = `_rel_${relationPath[0][0]}_0`
+                        pkAlias = mainQueryAlias
+                    }
+
+                    // Correlation
+                    existsQb.andWhere(`"${fkAlias}"."${fkColumn}" = "${pkAlias}"."${pkColumn}"`)
+                }
+            }
         }
 
-        // When a $null filter is set on a primary key of a relationship,
-        // the filter acts as an absence filter (i.e., filters on results
-        // that do not have the child relationship). We mark these columns
-        // to be left joined later so that `rel.pk IS NULL` works.
-        if (
-            checkIsOneOfNestedPrimaryColumns(qb, properties.column) &&
-            columnFilters.some((filter) => filter.findOperator.type === 'isNull')
-        ) {
-            nullFilteredRelations.push(relationPath.slice(0, -1).join('.'))
+        // 5. Add the EXISTS subquery to the main query
+        qb.andWhereExists(existsQb)
+    }
+
+    const columnJoinMethods: ColumnJoinMethods = {}
+    for (const [key] of filterEntries) {
+        const relationPath = getRelationPath(key, mainMetadata)
+        for (let i = 0; i < relationPath.length; i++) {
+            const [, subRelation] = relationPath[i]
+            const column = relationPath
+                .slice(0, i + 1)
+                .map((p) => p[0])
+                .join('.')
+            // Join the toMany
+            if ('isOneToMany' in subRelation) {
+                if (subRelation.isOneToOne || subRelation.isManyToOne) {
+                    columnJoinMethods[column] = 'innerJoinAndSelect'
+                } else {
+                    // Stop traversing at toMany boundaries, since those will be handled by EXISTS subqueries
+                    break
+                }
+            }
         }
     }
-    for (const column of nullFilteredRelations) {
-        columnJoinMethods[column] = 'leftJoinAndSelect'
-    }
+
     return columnJoinMethods
+}
+
+export function createSubFilter(
+    query: PaginateQuery,
+    filterableColumns: { [column: string]: (FilterOperator | FilterSuffix | FilterQuantifier)[] | true },
+    column: string
+) {
+    const subQuery = { filter: {} } as PaginateQuery
+    for (const [subColumn, filter] of Object.entries(query.filter)) {
+        if (subColumn.startsWith(column + '.')) {
+            subQuery.filter[getSubColumn(column, subColumn)] = filter
+        }
+    }
+    const subFilterableColumns: { [column: string]: (FilterOperator | FilterSuffix | FilterQuantifier)[] | true } = {}
+    for (const [subColumn, filter] of Object.entries(filterableColumns)) {
+        if (subColumn.startsWith(column + '.')) {
+            subFilterableColumns[getSubColumn(column, subColumn)] = filter
+        }
+    }
+    return { subQuery, subFilterableColumns }
+}
+
+function getSubColumn(column: string, subColumn: string) {
+    const sliced = subColumn.slice(column.length + 1)
+    if (sliced.startsWith('(') && sliced.endsWith(')')) {
+        // Embedded relationships need to be unpacked from subColumn.(embedded.property) to
+        // embedded.property
+        return sliced.slice(1, -1)
+    }
+    return sliced
 }
