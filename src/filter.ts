@@ -20,6 +20,8 @@ import {
 import { WherePredicateOperator } from 'typeorm/query-builder/WhereClause'
 import { PaginateQuery } from './decorator'
 import {
+    andWhereAllExist,
+    andWhereNoneExist,
     checkIsArray,
     checkIsEmbedded,
     checkIsJsonb,
@@ -64,6 +66,16 @@ export function isSuffix(value: unknown): value is FilterSuffix {
     return values(FilterSuffix).includes(value as any)
 }
 
+export enum FilterQuantifier {
+    ALL = '$all',
+    ANY = '$any',
+    NONE = '$none',
+}
+
+export function isQuantifier(value: unknown): value is FilterQuantifier {
+    return values(FilterQuantifier).includes(value as any)
+}
+
 export enum FilterComparator {
     AND = '$and',
     OR = '$or',
@@ -91,11 +103,12 @@ export const OperatorSymbolToFunction = new Map<
     [FilterOperator.CONTAINS, ArrayContains],
 ])
 
-type Filter = { comparator: FilterComparator; findOperator: FindOperator<string> }
+type Filter = { quantifier: FilterQuantifier; comparator: FilterComparator; findOperator: FindOperator<string> }
 type ColumnFilters = { [columnName: string]: Filter[] }
 type ColumnJoinMethods = { [columnName: string]: JoinMethod }
 
 export interface FilterToken {
+    quantifier: FilterQuantifier
     comparator: FilterComparator
     suffix?: FilterSuffix
     operator: FilterOperator
@@ -201,7 +214,6 @@ export function addWhereCondition<T>(qb: SelectQueryBuilder<T>, column: string, 
         if (columnFilter.comparator === FilterComparator.OR) {
             qb.orWhere(expression, parameters)
         } else {
-            console.log('expression', expression, parameters)
             qb.andWhere(expression, parameters)
         }
     })
@@ -213,22 +225,25 @@ export function parseFilterToken(raw?: string): FilterToken | null {
     }
 
     const token: FilterToken = {
+        quantifier: FilterQuantifier.ANY,
         comparator: FilterComparator.AND,
         suffix: undefined,
         operator: FilterOperator.EQ,
         value: raw,
     }
 
-    const MAX_OPERTATOR = 4 // max 4 operator es: $and:$not:$eq:$null
+    const MAX_OPERATOR = 5 // max 5 operator: $none:$and:$not:$eq:$null
     const OPERAND_SEPARATOR = ':'
 
     const matches = raw.split(OPERAND_SEPARATOR)
-    const maxOperandCount = matches.length > MAX_OPERTATOR ? MAX_OPERTATOR : matches.length
-    const notValue: (FilterOperator | FilterSuffix | FilterComparator)[] = []
+    const maxOperandCount = matches.length > MAX_OPERATOR ? MAX_OPERATOR : matches.length
+    const notValue: (FilterOperator | FilterSuffix | FilterComparator | FilterQuantifier)[] = []
 
     for (let i = 0; i < maxOperandCount; i++) {
         const match = matches[i]
-        if (isComparator(match)) {
+        if (isQuantifier(match)) {
+            token.quantifier = match
+        } else if (isComparator(match)) {
             token.comparator = match
         } else if (isSuffix(match)) {
             token.suffix = match
@@ -241,10 +256,11 @@ export function parseFilterToken(raw?: string): FilterToken | null {
     }
 
     if (notValue.length) {
-        token.value =
-            token.operator === FilterOperator.NULL
-                ? undefined
-                : raw.replace(`${notValue.join(OPERAND_SEPARATOR)}${OPERAND_SEPARATOR}`, '')
+        token.value = !raw.includes(OPERAND_SEPARATOR)
+            ? // things like `$null`, `$none`, and `$any`, have no token value
+              undefined
+            : // otherwise, remove the operators and separators from the raw string to obtain the token value
+              raw.replace(`${notValue.join(OPERAND_SEPARATOR)}${OPERAND_SEPARATOR}`, '')
     }
 
     return token
@@ -270,7 +286,7 @@ function fixColumnFilterValue<T>(column: string, qb: SelectQueryBuilder<T>, isJs
 
 export function parseFilter<T>(
     query: PaginateQuery,
-    filterableColumns?: { [column: string]: (FilterOperator | FilterSuffix)[] | true },
+    filterableColumns?: { [column: string]: (FilterOperator | FilterSuffix | FilterQuantifier)[] | true },
     qb?: SelectQueryBuilder<T>
 ): ColumnFilters {
     const filter: ColumnFilters = {}
@@ -307,9 +323,13 @@ export function parseFilter<T>(
                 if (token.suffix && !allowedOperators.includes(token.suffix)) {
                     continue
                 }
+                if (token.quantifier !== FilterQuantifier.ANY && !allowedOperators.includes(token.quantifier)) {
+                    continue
+                }
             }
 
             const params: (typeof filter)[0][0] = {
+                quantifier: token.quantifier,
                 comparator: token.comparator,
                 findOperator: undefined,
             }
@@ -347,6 +367,7 @@ export function parseFilter<T>(
                 const jsonFixValue = fixColumnFilterValue(column, qb, true)
 
                 const jsonParams = {
+                    quantifier: params.quantifier,
                     comparator: params.comparator,
                     findOperator: JsonContains({
                         [jsonColumnName]: jsonFixValue(token.value),
@@ -461,10 +482,44 @@ export function addFilter<T>(
     const mainMetadata = qb.expressionMap.mainAlias.metadata
     const filter = parseFilter(query, filterableColumns, qb)
 
-    const filterEntries = Object.entries(filter)
+    addDirectFilters(qb, filter)
+    addToManySubFilters(qb, filter, query, filterableColumns)
 
-    // Looks for filters that don't have a toMany relationship on their path: will be translated to WHERE clauses on this query.
-    const whereFilters = filterEntries.filter(([key]) => !findFirstToManyRelationship(key, mainMetadata))
+    // Direct filters require to be joined, so pass the join information back up to the main pagination builder
+    // (or the parent filter query in case of subfilters)
+    const columnJoinMethods: ColumnJoinMethods = {}
+    for (const [key] of Object.entries(filter)) {
+        const relationPath = getRelationPath(key, mainMetadata)
+        // Skip filters that don't result in WHERE clauses and so don't need to be joined..
+        if (
+            relationPath.find(
+                ([, relation]) => 'isOneToMany' in relation && (relation.isOneToMany || relation.isManyToMany)
+            )
+        ) {
+            continue
+        }
+
+        for (let i = 0; i < relationPath.length; i++) {
+            const column = relationPath
+                .slice(0, i + 1)
+                .map((p) => p[0])
+                .join('.')
+            // Skip joins on embedded entities
+            if ('inverseRelation' in relationPath[i][1]) {
+                columnJoinMethods[column] = 'leftJoinAndSelect'
+            }
+        }
+    }
+
+    return columnJoinMethods
+}
+
+export function addDirectFilters<T>(qb: SelectQueryBuilder<T>, filter: ColumnFilters) {
+    const filterEntries = Object.entries(filter)
+    const metadata = qb.expressionMap.mainAlias.metadata
+
+    // Direct filters are those without toMany relationships on their path, and can be expressed as simple JOINs + WHERE clauses
+    const whereFilters = filterEntries.filter(([key]) => !findFirstToManyRelationship(key, metadata))
     const orFilters = whereFilters.filter(([, value]) => value[0].comparator === '$or')
     const andFilters = whereFilters.filter(([, value]) => value[0].comparator === '$and')
 
@@ -483,8 +538,18 @@ export function addFilter<T>(
             })
         )
     }
+}
 
-    // Looks filters that have a toMany relationship on their path: will be translated to EXISTS subqueries.
+export function addToManySubFilters<T>(
+    qb: SelectQueryBuilder<T>,
+    filter: ColumnFilters,
+    query: PaginateQuery,
+    filterableColumns?: { [column: string]: (FilterOperator | FilterSuffix | FilterQuantifier)[] | true }
+) {
+    const mainMetadata = qb.expressionMap.mainAlias.metadata
+    const filterEntries = Object.entries(filter)
+
+    // Filters with toMany relationships on their path need to be expressed as EXISTS subqueries.
     const existsFilters = filterEntries.map(([key]) => findFirstToManyRelationship(key, mainMetadata)).filter(Boolean)
     // Find all the different toMany starting paths
     const toManyPaths = [...new Set(existsFilters.map((f) => f.path.join('.')))]
@@ -498,7 +563,12 @@ export function addFilter<T>(
         const toManyAlias = `_rel_${relationPath[relationPath.length - 1][0]}_${relationPath.length - 1}`
 
         // 1. Create the EXISTS subquery, starting from the toMany entity
-        const existsQb = qb.connection.createQueryBuilder(relation.inverseEntityMetadata.target as any, toManyAlias)
+        const existsMetadata = relation.inverseEntityMetadata
+        const existsQb = qb.connection.createQueryBuilder(existsMetadata.target as any, toManyAlias)
+
+        if (existsMetadata.deleteDateColumn) {
+            //existsQb.andWhere(`"${toManyAlias}"."${existsMetadata.deleteDateColumn.databaseName}" IS NULL`)
+        }
 
         // 2. Add the subfilters to the EXISTS subquery
         const { subQuery, subFilterableColumns } = createSubFilter(query, filterableColumns, path)
@@ -577,32 +647,29 @@ export function addFilter<T>(
             }
         }
 
-        // 5. Add the EXISTS subquery to the main query
-        qb.andWhereExists(existsQb)
-    }
+        const quantifiers = Object.entries(filter)
+            .filter(([key]) => key.startsWith(path))
+            .flatMap(([, multiFilter]) => multiFilter.map((f) => f.quantifier))
 
-    const columnJoinMethods: ColumnJoinMethods = {}
-    for (const [key] of filterEntries) {
-        const relationPath = getRelationPath(key, mainMetadata)
-        for (let i = 0; i < relationPath.length; i++) {
-            const [, subRelation] = relationPath[i]
-            const column = relationPath
-                .slice(0, i + 1)
-                .map((p) => p[0])
-                .join('.')
-            // Join the toMany
-            if ('isOneToMany' in subRelation) {
-                if (subRelation.isOneToOne || subRelation.isManyToOne) {
-                    columnJoinMethods[column] = 'innerJoinAndSelect'
-                } else {
-                    // Stop traversing at toMany boundaries, since those will be handled by EXISTS subqueries
-                    break
+        let quantifier = FilterQuantifier.ANY
+        for (const q of quantifiers) {
+            if (q !== FilterQuantifier.ANY) {
+                if (quantifier !== FilterQuantifier.ANY && quantifier !== q) {
+                    throw new Error(`Quantifier ${quantifier} and ${q} are not compatible for the same column ${path}`)
                 }
+                quantifier = q
             }
         }
-    }
 
-    return columnJoinMethods
+        // 5. Add the EXISTS subquery to the main query
+        if (quantifier === FilterQuantifier.ANY) {
+            qb.andWhereExists(existsQb)
+        } else if (quantifier === FilterQuantifier.NONE) {
+            andWhereNoneExist(qb, existsQb)
+        } else if (quantifier === FilterQuantifier.ALL) {
+            andWhereAllExist(qb, existsQb)
+        }
+    }
 }
 
 export function createSubFilter(

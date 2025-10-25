@@ -15,6 +15,7 @@ import { PaginateQuery } from './decorator'
 import {
     FilterComparator,
     FilterOperator,
+    FilterQuantifier,
     FilterSuffix,
     isOperator,
     isSuffix,
@@ -61,7 +62,7 @@ describe('paginate', () => {
         const dbOptions: Omit<Partial<BaseDataSourceOptions>, 'poolSize'> = {
             dropSchema: true,
             synchronize: true,
-            logging: ['error'],
+            logging: ['error', 'query'],
             entities: [
                 CatEntity,
                 CatToyEntity,
@@ -5160,6 +5161,135 @@ describe('paginate', () => {
 
                 // 2 EXISTS clauses should be generated, one for each toMany relationship used in the filters
                 expect(existsSpy).toHaveBeenCalledTimes(2)
+            })
+        })
+
+        describe('Filtering records without related entities matching filter criteria', () => {
+            // To be clear: "without" also means any record that simply does not have any related entities at all.
+
+            it('should find all cats without any pillows in their home', async () => {
+                // This test tests absence filtering. Also asserts that the loaded relation is empty.
+                const config: PaginateConfig<CatEntity> = {
+                    sortableColumns: ['id'],
+                    relations: ['home.pillows'],
+                    filterableColumns: {
+                        'home.pillows': [FilterQuantifier.NONE],
+                    },
+                }
+                const query: PaginateQuery = {
+                    filter: {
+                        'home.pillows': [`$none`],
+                    },
+                    path: '',
+                }
+
+                const result = await paginate<CatEntity>(query, catRepo, config)
+                // Only cat 0 and 1 have pillows
+                expect(result.data.length).toBe(5)
+                // Cat 2 has a home with no pillows
+                expect(result.data[0].id).toBe(cats[2].id)
+                expect(result.data[0].home.pillows).toHaveLength(0)
+                // The rest of the cats have no homes
+                expect(result.data[1].id).toBe(cats[3].id)
+                expect(result.data[1].home).toBeNull()
+                expect(result.data[2].id).toBe(cats[4].id)
+                expect(result.data[2].home).toBeNull()
+                expect(result.data[3].id).toBe(cats[5].id)
+                expect(result.data[3].home).toBeNull()
+                expect(result.data[4].id).toBe(cats[6].id)
+                expect(result.data[4].home).toBeNull()
+            })
+
+            it('should find all cats without red pillows in their home', async () => {
+                // This test tests absence filtering with a single criterium.
+                const config: PaginateConfig<CatEntity> = {
+                    sortableColumns: ['id'],
+                    filterableColumns: {
+                        'home.pillows.color': [FilterQuantifier.NONE],
+                    },
+                }
+                const query: PaginateQuery = {
+                    filter: {
+                        'home.pillows.color': [`$none:red`],
+                    },
+                    path: '',
+                }
+
+                const result = await paginate<CatEntity>(query, catRepo, config)
+                // Only cat 0 has a red pillow
+                expect(result.data.length).toBe(6)
+                expect(result.data[0].id).toBe(cats[1].id)
+                expect(result.data[1].id).toBe(cats[2].id)
+                expect(result.data[2].id).toBe(cats[3].id)
+                expect(result.data[3].id).toBe(cats[4].id)
+                expect(result.data[4].id).toBe(cats[5].id)
+                expect(result.data[5].id).toBe(cats[6].id)
+            })
+
+            it('should find all cats without red or teal pillows in their home', async () => {
+                // This test tests absence filtering with multiple criteria.
+                const config: PaginateConfig<CatEntity> = {
+                    sortableColumns: ['id'],
+                    filterableColumns: {
+                        'home.pillows.color': [FilterQuantifier.NONE],
+                    },
+                }
+                const query: PaginateQuery = {
+                    filter: {
+                        'home.pillows.color': [`$none:red`, '$or:teal'],
+                    },
+                    path: '',
+                }
+
+                const result = await paginate<CatEntity>(query, catRepo, config)
+                // Cat 0 has a red pillow, and cat 1 has a teal pillow.
+                expect(result.data.length).toBe(5)
+                expect(result.data[0].id).toBe(cats[2].id)
+                expect(result.data[1].id).toBe(cats[3].id)
+                expect(result.data[2].id).toBe(cats[4].id)
+                expect(result.data[3].id).toBe(cats[5].id)
+                expect(result.data[4].id).toBe(cats[6].id)
+            })
+
+            describe('Advanced quantifier combinatorics', () => {
+                // None of these have been implemented yet, feel free to PR :innocent:
+
+                it('should error with multiple different quantifiers on the same column', async () => {
+                    // This test tests absence filtering with multiple criteria.
+                    const config: PaginateConfig<CatEntity> = {
+                        sortableColumns: ['id'],
+                        filterableColumns: {
+                            'home.pillows.color': [FilterQuantifier.NONE, FilterQuantifier.ALL],
+                        },
+                    }
+                    const query: PaginateQuery = {
+                        filter: {
+                            'home.pillows.color': [`$none:red`, `$all:blue`],
+                        },
+                        path: '',
+                    }
+                    await expect(paginate<CatEntity>(query, catRepo, config)).rejects.toBeDefined()
+                })
+
+                it('should error with multiple different quantifiers on the same relationship', async () => {
+                    // This test tests absence filtering with a multiple criterium.
+                    const config: PaginateConfig<CatEntity> = {
+                        sortableColumns: ['id'],
+                        filterableColumns: {
+                            'home.pillows.color': [FilterQuantifier.NONE],
+                            'home.pillows.brand.name': [FilterQuantifier.ALL, FilterOperator.ILIKE],
+                        },
+                    }
+                    const query: PaginateQuery = {
+                        filter: {
+                            'home.pillows.color': [`$none:red`],
+                            'home.pillows.brand.name': [`$all:$ilike:purr`],
+                        },
+                        path: '',
+                    }
+
+                    await expect(paginate<CatEntity>(query, catRepo, config)).rejects.toBeDefined()
+                })
             })
         })
     })

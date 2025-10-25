@@ -216,7 +216,7 @@ export function checkIsOneOfNestedPrimaryColumns(qb: SelectQueryBuilder<unknown>
         }
         metadata = relation.inverseEntityMetadata
     }
-    return !!metadata.primaryColumns.find(col => col.propertyName === deepestProperty)
+    return !!metadata.primaryColumns.find((col) => col.propertyName === deepestProperty)
 }
 
 export function checkIsEmbedded(qb: SelectQueryBuilder<unknown>, propertyPath: string): boolean {
@@ -371,4 +371,40 @@ export function isNil(v: unknown): boolean {
 
 export function isNotNil(v: unknown): boolean {
     return !isNil(v)
+}
+
+export function andWhereNoneExist(
+    qb: SelectQueryBuilder<any>,
+    existsQb: SelectQueryBuilder<any>
+): SelectQueryBuilder<any> {
+    const [query, params] = qb['getExistsCondition'](existsQb)
+    return qb.andWhere(`NOT ${query}`, params)
+}
+
+/**
+ * Adds a condition to the query builder that ensures all related entities match the given filter criteria.
+ *
+ * This method combines two conditions:
+ * 1. EXISTS(X) - There must be at least one related entity matching the criteria
+ * 2. NOT EXISTS(NOT X) - There must not be any related entities that don't match the criteria
+ *
+ * Together, these conditions ensure that all related entities match the filter criteria X.
+ * For example, when filtering pillows in a cat home, this could find homes where ALL pillows are red.
+ *
+ * If you need to include cases where there are either 0 or all entities match, use $none:$not:X instead.
+ *
+ * @param {SelectQueryBuilder<any>} qb The main query builder instance to add the condition to.
+ * @param {SelectQueryBuilder<any>} existsQb The subquery builder containing the filter criteria.
+ * @return {SelectQueryBuilder<any>} The modified query builder with the combined EXISTS conditions.
+ */
+export function andWhereAllExist(
+    qb: SelectQueryBuilder<any>,
+    existsQb: SelectQueryBuilder<any>
+): SelectQueryBuilder<any> {
+    qb = qb.andWhereExists(existsQb)
+    const [query, params] = qb['getExistsCondition'](existsQb)
+    // The getExistsCondition clears anything that comes after WHERE, and our joining logic does not contain WHERE,
+    // so it should be safe to replace the first WHERE with WHERE NOT (...) and get a correct query.
+    const existsWhereNot = query.replace('WHERE', 'WHERE NOT (') + ')'
+    return qb.andWhere(`NOT ${existsWhereNot}`, params)
 }

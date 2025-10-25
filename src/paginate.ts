@@ -12,7 +12,7 @@ import {
 } from 'typeorm'
 import { WherePredicateOperator } from 'typeorm/query-builder/WhereClause'
 import { PaginateQuery } from './decorator'
-import { addFilter, FilterOperator, FilterSuffix } from './filter'
+import { addFilter, FilterOperator, FilterQuantifier, FilterSuffix } from './filter'
 import {
     checkIsEmbedded,
     checkIsRelation,
@@ -91,7 +91,7 @@ export interface PaginateConfig<T> {
     defaultSortBy?: SortBy<T>
     defaultLimit?: number
     where?: FindOptionsWhere<T> | FindOptionsWhere<T>[]
-    filterableColumns?: Partial<MappedColumns<T, (FilterOperator | FilterSuffix)[] | true>>
+    filterableColumns?: Partial<MappedColumns<T, (FilterOperator | FilterSuffix | FilterQuantifier)[] | true>>
     loadEagerRelations?: boolean
     withDeleted?: boolean
     allowWithDeletedInQuery?: boolean
@@ -1024,7 +1024,7 @@ export function addRelationsFromSchema<T>(
     queryBuilder: SelectQueryBuilder<T>,
     schema: RelationSchema<T>,
     joinMethods: Partial<MappedColumns<T, JoinMethod>>,
-    defaultJoinMethod: 'leftJoin' | 'innerJoin' | 'leftJoinAndSelect' | 'innerJoinAndSelect' = 'leftJoinAndSelect',
+    defaultJoinMethod: 'leftJoin' | 'innerJoin' | 'leftJoinAndSelect' | 'innerJoinAndSelect' = 'leftJoinAndSelect'
 ): void {
     const createQueryBuilderRelations = (
         prefix: string,
