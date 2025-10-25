@@ -1,4 +1,4 @@
-import { Column, CreateDateColumn, Entity, ManyToOne, PrimaryGeneratedColumn } from 'typeorm'
+import { Column, CreateDateColumn, DeleteDateColumn, Entity, ManyToOne, PrimaryGeneratedColumn } from 'typeorm'
 import { CatHomePillowBrandEntity } from './cat-home-pillow-brand.entity'
 import { CatHomeEntity } from './cat-home.entity'
 import { DateColumnNotNull } from './column-option'
@@ -19,4 +19,7 @@ export class CatHomePillowEntity {
 
     @CreateDateColumn(DateColumnNotNull)
     createdAt: string
+
+    @DeleteDateColumn(DateColumnNotNull)
+    deletedAt: string
 }
