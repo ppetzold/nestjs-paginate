@@ -256,11 +256,12 @@ export function parseFilterToken(raw?: string): FilterToken | null {
     }
 
     if (notValue.length) {
-        token.value = !raw.includes(OPERAND_SEPARATOR)
-            ? // things like `$null`, `$none`, and `$any`, have no token value
-              undefined
-            : // otherwise, remove the operators and separators from the raw string to obtain the token value
-              raw.replace(`${notValue.join(OPERAND_SEPARATOR)}${OPERAND_SEPARATOR}`, '')
+        token.value =
+            !raw.includes(OPERAND_SEPARATOR) || token.operator === FilterOperator.NULL
+                ? // things like `$null`, `$none`, and `$any`, have no token value
+                  undefined
+                : // otherwise, remove the operators and separators from the raw string to obtain the token value
+                  raw.replace(`${notValue.join(OPERAND_SEPARATOR)}${OPERAND_SEPARATOR}`, '')
     }
 
     return token
@@ -506,7 +507,7 @@ export function addFilter<T>(
                 .join('.')
             // Skip joins on embedded entities
             if ('inverseRelation' in relationPath[i][1]) {
-                columnJoinMethods[column] = 'leftJoinAndSelect'
+                columnJoinMethods[column] = 'innerJoinAndSelect'
             }
         }
     }

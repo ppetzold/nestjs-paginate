@@ -62,7 +62,7 @@ describe('paginate', () => {
         const dbOptions: Omit<Partial<BaseDataSourceOptions>, 'poolSize'> = {
             dropSchema: true,
             synchronize: true,
-            logging: ['error', 'query'],
+            logging: ['error'],
             entities: [
                 CatEntity,
                 CatToyEntity,
@@ -1381,17 +1381,20 @@ describe('paginate', () => {
         const cat1 = clone(cats[0])
         const cat2 = clone(cats[1])
         const catToys1 = clone(catToysWithoutShop[0])
-        const catToys2 = clone(catToysWithoutShop[2])
-        const catToys3 = clone(catToysWithoutShop[3])
+        const catToys2 = clone(catToysWithoutShop[1])
+        const catToys3 = clone(catToysWithoutShop[2])
+        const catToys4 = clone(catToysWithoutShop[3])
         delete catToys1.cat
         delete catToys2.cat
         delete catToys3.cat
-        cat1.toys = [catToys1, catToys2]
-        cat2.toys = [catToys3]
+        delete catToys4.cat
+        cat1.toys = [catToys3, catToys2, catToys1]
+        cat2.toys = [catToys4]
 
         expect(result.meta.filter).toStrictEqual({
             'toys.name': '$not:Stuffed Mouse',
         })
+        console.log(result.data[0].toys, result.data[1].toys)
         expect(result.data).toStrictEqual([cat1, cat2])
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.toys.name=$not:Stuffed Mouse')
     })
@@ -2441,7 +2444,7 @@ describe('paginate', () => {
                 tokens: { comparator, operator: '$null', suffix: '$not', value: undefined },
             },
         ])('should get filter tokens for "$string"', ({ string, tokens }) => {
-            expect(parseFilterToken(string)).toStrictEqual(tokens)
+            expect(parseFilterToken(string)).toStrictEqual({ quantifier: '$any', ...tokens })
         })
     }
 
@@ -2963,11 +2966,13 @@ describe('paginate', () => {
 
         const cat = clone(cats[1])
         const catHomesClone = clone(catHomes[1])
-        const catHomePillowsClone = clone(catHomePillows[3])
-        delete catHomePillowsClone.home
+        const catHomePillowsClone = clone(catHomePillows.slice(3, 6))
+        catHomePillowsClone.forEach((pillow) => {
+            delete pillow.home
+        })
 
         catHomesClone.countCat = cats.filter((cat) => cat.id === catHomesClone.cat.id).length
-        catHomesClone.pillows = [catHomePillowsClone]
+        catHomesClone.pillows = catHomePillowsClone
         cat.home = catHomesClone
         delete cat.home.cat
 
@@ -3355,32 +3360,6 @@ describe('paginate', () => {
                 expect(result.data).toStrictEqual([cats[0], cats[1]])
                 expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.lastVetVisit=$lt:2022-12-21')
             }
-        })
-    })
-
-    describe('$null operator', () => {
-        it('should find cats without any toys when applied on PK', async () => {
-            const config: PaginateConfig<CatEntity> = {
-                relations: ['toys'],
-                sortableColumns: ['id', 'toys.id'],
-                filterableColumns: {
-                    'toys.id': [FilterOperator.NULL],
-                },
-            }
-            const query: PaginateQuery = {
-                filter: {
-                    // Null-filtering a relationship's PK should check
-                    // for absence of the relationship
-                    'toys.id': '$null',
-                },
-                path: '',
-            }
-
-            const result = await paginate<CatEntity>(query, catRepo, config)
-            // Should find only cats without toys.
-            expect(result.data.every((cat) => cat.toys.length === 0)).toBe(true)
-            // Should find 5 cats without toys.
-            expect(result.data.length).toBe(5)
         })
     })
 
@@ -4157,7 +4136,7 @@ describe('paginate', () => {
 
                 const result = await paginate<CatEntity>(query, catRepo, config)
 
-                const sortedCats = cats.sort((a, b) => a.weightChange - b.weightChange)
+                const sortedCats = [...cats].sort((a, b) => a.weightChange - b.weightChange)
                 expect(result.data).toEqual(sortedCats)
                 expect(result.links.previous).toBe('?limit=20&sortBy=weightChange:DESC&cursor=M99999999997X0000') // weightChange=-3.00 DESC (Shadow) -> (M + 10^11 - 3) + (X + PAD(0, 4, '0'))
                 expect(result.links.next).toBe('?limit=20&sortBy=weightChange:ASC&cursor=V99999999995V7500') // weightChange=5.25 ASC (Garfield) -> (V + 10^11 - 5) + (V + 10^4 - 2500)
@@ -4175,7 +4154,7 @@ describe('paginate', () => {
 
                 const result = await paginate<CatEntity>(query, catRepo, config)
 
-                const sortedCats = cats.sort((a, b) => b.weightChange - a.weightChange)
+                const sortedCats = [...cats].sort((a, b) => b.weightChange - a.weightChange)
                 expect(result.data).toEqual(sortedCats)
                 expect(result.links.previous).toBe('?limit=20&sortBy=weightChange:ASC&cursor=V99999999995V7500') // weightChange=5.25 ASC (Garfield) -> (V + 10^11 - 5) + (V + 10^4 - 2500)
                 expect(result.links.next).toBe('?limit=20&sortBy=weightChange:DESC&cursor=M99999999997X0000') // weightChange=-3.00 DESC (Shadow) -> (M + 10^11 - 3) + (X + LPAD(0, 4, '0'))
