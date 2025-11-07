@@ -34,6 +34,7 @@ import {
     isISODate,
     JoinMethod,
     mergeRelationSchema,
+    quoteColumn,
 } from './helper'
 import { EmbeddedMetadata } from 'typeorm/metadata/EmbeddedMetadata'
 import { RelationMetadata } from 'typeorm/metadata/RelationMetadata'
@@ -547,6 +548,8 @@ export function addToManySubFilters<T>(
     query: PaginateQuery,
     filterableColumns?: { [column: string]: (FilterOperator | FilterSuffix | FilterQuantifier)[] | true }
 ) {
+    const dbType = qb.connection.options.type
+    const quote = (column: string) => quoteColumn(column, ['mysql', 'mariadb'].includes(dbType))
     const mainMetadata = qb.expressionMap.mainAlias.metadata
     const filterEntries = Object.entries(filter)
 
@@ -613,7 +616,7 @@ export function addToManySubFilters<T>(
                     .map((jc) => {
                         const fk = jc.databaseName
                         const pk = jc.referencedColumn.databaseName
-                        return `"${childAlias}"."${fk}" = "${parentAlias}"."${pk}"`
+                        return `${quote(childAlias)}.${quote(fk)} = ${quote(parentAlias)}.${quote(pk)}`
                     })
                     .join(' AND ')
 
@@ -643,7 +646,7 @@ export function addToManySubFilters<T>(
                     }
 
                     // Correlation
-                    existsQb.andWhere(`"${fkAlias}"."${fkColumn}" = "${pkAlias}"."${pkColumn}"`)
+                    existsQb.andWhere(`${quote(fkAlias)}.${quote(fkColumn)} = ${quote(pkAlias)}.${quote(pkColumn)}`)
                 }
             }
         }

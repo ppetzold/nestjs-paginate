@@ -36,7 +36,7 @@ import {
     mergeRelationSchema,
     Order,
     positiveNumberOrDefault,
-    quoteVirtualColumn,
+    quoteColumn,
     RelationSchema,
     RelationSchemaInput,
     SortBy,
@@ -692,7 +692,7 @@ export async function paginate<T extends ObjectLiteral>(
             let alias = fixColumnAlias(columnProperties, queryBuilder.alias, isRelation, isVirtualProperty, isEmbedded)
 
             if (isVirtualProperty) {
-                alias = quoteVirtualColumn(alias, isMySqlOrMariaDb)
+                alias = quoteColumn(alias, isMySqlOrMariaDb)
             }
 
             if (isMySqlOrMariaDb) {

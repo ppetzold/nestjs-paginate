@@ -361,7 +361,7 @@ export function isDateColumnType(type: any): boolean {
     return dateTypes.includes(type)
 }
 
-export function quoteVirtualColumn(columnName: string, isMySqlOrMariaDb: boolean): string {
+export function quoteColumn(columnName: string, isMySqlOrMariaDb: boolean): string {
     return isMySqlOrMariaDb ? `\`${columnName}\`` : `"${columnName}"`
 }
 
