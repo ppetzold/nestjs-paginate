@@ -12,7 +12,7 @@ import {
 } from 'typeorm'
 import { WherePredicateOperator } from 'typeorm/query-builder/WhereClause'
 import { PaginateQuery } from './decorator'
-import { addFilter, FilterOperator, FilterSuffix } from './filter'
+import { addFilter, FilterOperator, FilterQuantifier, FilterSuffix } from './filter'
 import {
     checkIsEmbedded,
     checkIsRelation,
@@ -36,7 +36,7 @@ import {
     mergeRelationSchema,
     Order,
     positiveNumberOrDefault,
-    quoteVirtualColumn,
+    quoteColumn,
     RelationSchema,
     RelationSchemaInput,
     SortBy,
@@ -91,7 +91,7 @@ export interface PaginateConfig<T> {
     defaultSortBy?: SortBy<T>
     defaultLimit?: number
     where?: FindOptionsWhere<T> | FindOptionsWhere<T>[]
-    filterableColumns?: Partial<MappedColumns<T, (FilterOperator | FilterSuffix)[] | true>>
+    filterableColumns?: Partial<MappedColumns<T, (FilterOperator | FilterSuffix | FilterQuantifier)[] | true>>
     loadEagerRelations?: boolean
     withDeleted?: boolean
     allowWithDeletedInQuery?: boolean
@@ -671,7 +671,7 @@ export async function paginate<T extends ObjectLiteral>(
             createRelationSchema(config.relations),
             createRelationSchema(Object.keys(joinMethods))
         )
-        addRelationsFromSchema(queryBuilder, relationsSchema, config, joinMethods)
+        addRelationsFromSchema(queryBuilder, relationsSchema, joinMethods, config.defaultJoinMethod)
     }
 
     if (config.paginationType !== PaginationType.CURSOR) {
@@ -692,7 +692,7 @@ export async function paginate<T extends ObjectLiteral>(
             let alias = fixColumnAlias(columnProperties, queryBuilder.alias, isRelation, isVirtualProperty, isEmbedded)
 
             if (isVirtualProperty) {
-                alias = quoteVirtualColumn(alias, isMySqlOrMariaDb)
+                alias = quoteColumn(alias, isMySqlOrMariaDb)
             }
 
             if (isMySqlOrMariaDb) {
@@ -1023,11 +1023,9 @@ export async function paginate<T extends ObjectLiteral>(
 export function addRelationsFromSchema<T>(
     queryBuilder: SelectQueryBuilder<T>,
     schema: RelationSchema<T>,
-    config: PaginateConfig<T>,
-    joinMethods: Partial<MappedColumns<T, JoinMethod>>
+    joinMethods: Partial<MappedColumns<T, JoinMethod>>,
+    defaultJoinMethod: 'leftJoin' | 'innerJoin' | 'leftJoinAndSelect' | 'innerJoinAndSelect' = 'leftJoinAndSelect'
 ): void {
-    const defaultJoinMethod = config.defaultJoinMethod ?? 'leftJoinAndSelect'
-
     const createQueryBuilderRelations = (
         prefix: string,
         relations: RelationSchema,

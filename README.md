@@ -516,6 +516,48 @@ const config: PaginateConfig<CatEntity> = {
 const result = await paginate<CatEntity>(query, catRepo, config)
 ```
 
+## Usage with to-many relationships
+
+You can filter parents by conditions on their to-many relations (one-to-many or many-to-many) using quantifiers.
+Quantifiers define how many related rows must satisfy the condition:
+
+- `$any` (default): at least one related row matches the condition
+- `$all`: all related rows match the condition
+- `$none`: no related rows match the condition
+
+### Examples
+Assume `CatEntity` has a one‑to‑many relation `toys: CatToyEntity[]` where `CatToyEntity` has a string column `name`.
+
+- At least one toy named exactly "Ball":
+
+  ```url
+  GET /cats?filter.toys.name=$any:$eq:Ball
+  ```
+
+- At least one toy whose name contains "red" (case-insensitive):
+
+  ```url
+  GET /cats?filter.toys.name=$any:$ilike:red
+  ```
+
+- All toys must have names that start with "Chew":
+
+  ```url
+  GET /cats?filter.toys.name=$all:$sw:Chew
+  ```
+
+- No toys named "Squeaky", including cats without any toys:
+
+  ```url
+  GET /cats?filter.toys.name=$none:$eq:Squeaky
+  ```
+
+- One or more toys not named "Squeaky":
+
+  ```url
+  GET /cats?filter.toys.name=$any:$not:$eq:Squeaky
+  ```
+
 ## Usage with Eager Loading
 
 Eager loading should work with TypeORM's eager property out of the box:
