@@ -3549,7 +3549,7 @@ describe('paginate', () => {
                     fetchRaw: true,
                     buildCountQuery: (qb) => {
                         qb.orderBy().limit().offset().take().skip()
-                        qb.select('sale.itemName').groupBy('sale.itemName')
+                        qb.select('sale.itemName').distinct(true)
                         return qb
                     },
                 }
