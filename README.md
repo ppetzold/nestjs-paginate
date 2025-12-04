@@ -435,6 +435,21 @@ const paginateConfig: PaginateConfig<CatEntity> {
    * ```
    */
   buildCountQuery: (qb: SelectQueryBuilder<T>) => SelectQueryBuilder<any>,
+
+  /**
+   * Required: false
+   * Type: boolean
+   * Default: false
+   * Description: When true, paginate() will use QueryBuilder.getRawMany() instead
+   * of getMany() to retrieve items.
+   *
+   * Useful when:
+   * - You need raw SQL output such as computed or aggregated fields.
+   *
+   * Notes:
+   * - Column names in the response will follow SQL aliases.
+   */
+  fetchRaw: false,
 }
 ````
 

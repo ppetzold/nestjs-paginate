@@ -11,6 +11,7 @@ import { CatToyEntity } from './__tests__/cat-toy.entity'
 import { CatEntity, CutenessLevel } from './__tests__/cat.entity'
 import { ToyShopAddressEntity } from './__tests__/toy-shop-address.entity'
 import { ToyShopEntity } from './__tests__/toy-shop.entity'
+import { SaleEntity } from './__tests__/sale.entity'
 import { PaginateQuery } from './decorator'
 import {
     FilterComparator,
@@ -45,6 +46,7 @@ describe('paginate', () => {
     let catHomeRepo: Repository<CatHomeEntity>
     let catHomePillowRepo: Repository<CatHomePillowEntity>
     let catHomePillowBrandRepo: Repository<CatHomePillowBrandEntity>
+    let saleRepo: Repository<SaleEntity>
     let cats: CatEntity[]
     let catToys: CatToyEntity[]
     let catToysWithoutShop: CatToyEntity[]
@@ -70,6 +72,7 @@ describe('paginate', () => {
                 CatHomePillowEntity,
                 CatHomePillowBrandEntity,
                 ToyShopEntity,
+                SaleEntity,
                 process.env.DB === 'postgres' ? CatHairEntity : undefined,
             ],
         }
@@ -115,6 +118,7 @@ describe('paginate', () => {
         catHomePillowBrandRepo = dataSource.getRepository(CatHomePillowBrandEntity)
         toyShopRepo = dataSource.getRepository(ToyShopEntity)
         toyShopAddressRepository = dataSource.getRepository(ToyShopAddressEntity)
+        saleRepo = dataSource.getRepository(SaleEntity)
 
         cats = await catRepo.save([
             catRepo.create({
@@ -259,6 +263,99 @@ describe('paginate', () => {
                 catHairRepo.create({ name: 'none' }),
             ])
         }
+
+        await saleRepo.save([
+            saleRepo.create({
+                itemName: 'Laptop',
+                quantity: 1,
+                unitPrice: 1200.0,
+                totalPrice: 1200.0,
+            }),
+            saleRepo.create({
+                itemName: 'Smartphone',
+                quantity: 2,
+                unitPrice: 600.0,
+                totalPrice: 1200.0,
+            }),
+            saleRepo.create({
+                itemName: 'Headphones',
+                quantity: 1,
+                unitPrice: 150.0,
+                totalPrice: 150.0,
+            }),
+            saleRepo.create({
+                itemName: 'Laptop',
+                quantity: 1,
+                unitPrice: 1200.0,
+                totalPrice: 1200.0,
+            }),
+            saleRepo.create({
+                itemName: 'Mouse',
+                quantity: 3,
+                unitPrice: 20.0,
+                totalPrice: 60.0,
+            }),
+            saleRepo.create({
+                itemName: 'Keyboard',
+                quantity: 2,
+                unitPrice: 80.0,
+                totalPrice: 160.0,
+            }),
+            saleRepo.create({
+                itemName: 'Monitor',
+                quantity: 1,
+                unitPrice: 300.0,
+                totalPrice: 300.0,
+            }),
+            saleRepo.create({
+                itemName: 'Laptop',
+                quantity: 1,
+                unitPrice: 1200.0,
+                totalPrice: 1200.0,
+            }),
+            saleRepo.create({
+                itemName: 'Printer',
+                quantity: 1,
+                unitPrice: 250.0,
+                totalPrice: 250.0,
+            }),
+            saleRepo.create({
+                itemName: 'Smartphone',
+                quantity: 1,
+                unitPrice: 600.0,
+                totalPrice: 600.0,
+            }),
+            saleRepo.create({
+                itemName: 'Monitor',
+                quantity: 2,
+                unitPrice: 300.0,
+                totalPrice: 600.0,
+            }),
+            saleRepo.create({
+                itemName: 'Headphones',
+                quantity: 1,
+                unitPrice: 150.0,
+                totalPrice: 150.0,
+            }),
+            saleRepo.create({
+                itemName: 'Keyboard',
+                quantity: 1,
+                unitPrice: 80.0,
+                totalPrice: 80.0,
+            }),
+            saleRepo.create({
+                itemName: 'Laptop Stand',
+                quantity: 2,
+                unitPrice: 50.0,
+                totalPrice: 100.0,
+            }),
+            saleRepo.create({
+                itemName: 'Smartphone',
+                quantity: 1,
+                unitPrice: 600.0,
+                totalPrice: 600.0,
+            }),
+        ])
     })
 
     if (process.env.DB === 'postgres') {
@@ -3435,6 +3532,54 @@ describe('paginate', () => {
                 expect(result.meta.search).toStrictEqual('brown')
                 expect(result.data).toStrictEqual([catHairs[0], catHairs[1]])
                 expect(result.links.current).toBe(`?page=1&limit=20&sortBy=id:ASC&search=brown`)
+            })
+
+            it('should return correct amount of data with complete correct columns in each data item when data queried using manual sql aggregates functions', async () => {
+                const salesQuery = saleRepo
+                    .createQueryBuilder('sale')
+                    .select([
+                        'sale.itemName as itemName',
+                        'SUM(sale.totalPrice) as totalSales',
+                        'COUNT(*) as numberOfSales',
+                    ])
+                    .groupBy('sale.itemName')
+
+                const config: PaginateConfig<SaleEntity> = {
+                    sortableColumns: ['itemName'],
+                    fetchRaw: true,
+                    buildCountQuery: (qb) => {
+                        qb.orderBy().limit().offset().take().skip()
+                        qb.select('sale.itemName').groupBy('sale.itemName')
+                        return qb
+                    },
+                }
+
+                const query: PaginateQuery = {
+                    path: '',
+                    limit: 3,
+                    page: 1,
+                }
+
+                const result = await paginate<SaleEntity>(query, salesQuery, config)
+
+                type MyRow = {
+                    itemname: string
+                    totalsales: number
+                    numberofsales: number
+                }
+
+                result.data.forEach((data) => {
+                    const sale = data as unknown as MyRow
+                    expect(sale.itemname).toBeDefined()
+                    expect(sale.totalsales).toBeDefined()
+                    expect(sale.numberofsales).toBeDefined()
+                })
+
+                expect(result.meta.totalItems).toEqual(8)
+                expect(result.meta.totalPages).toEqual(3)
+                expect(result.data.length).toEqual(3)
+                expect(result.meta.currentPage).toEqual(1)
+                expect(result.meta.itemsPerPage).toEqual(3)
             })
         })
     }

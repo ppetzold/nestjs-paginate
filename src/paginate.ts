@@ -104,6 +104,7 @@ export interface PaginateConfig<T> {
     defaultJoinMethod?: JoinMethod
     joinMethods?: Partial<MappedColumns<T, JoinMethod>>
     buildCountQuery?: (qb: SelectQueryBuilder<T>) => SelectQueryBuilder<any>
+    fetchRaw?: boolean
 }
 
 export enum PaginationLimit {
@@ -913,14 +914,28 @@ export async function paginate<T extends ObjectLiteral>(
     if (query.limit === PaginationLimit.COUNTER_ONLY) {
         totalItems = await queryBuilder.getCount()
     } else if (isPaginated && config.paginationType !== PaginationType.CURSOR) {
-        if (config.buildCountQuery) {
-            items = await queryBuilder.getMany()
-            totalItems = await config.buildCountQuery(queryBuilder.clone()).getCount()
+        if (config.fetchRaw) {
+            items = await queryBuilder.getRawMany();
+
+            if (config.buildCountQuery) {
+                totalItems = await config.buildCountQuery(queryBuilder.clone()).getCount();
+            } else {
+                totalItems = await queryBuilder.getCount();
+            }
         } else {
-            ;[items, totalItems] = await queryBuilder.getManyAndCount()
+            if (config.buildCountQuery) {
+                items = await queryBuilder.getMany()
+                totalItems = await config.buildCountQuery(queryBuilder.clone()).getCount()
+            } else {
+                ;[items, totalItems] = await queryBuilder.getManyAndCount()
+            }
         }
     } else {
-        items = await queryBuilder.getMany()
+        if (config.fetchRaw) {
+            items = await queryBuilder.getRawMany()
+        } else {
+            items = await queryBuilder.getMany()
+        }
     }
 
     const sortByQuery = sortBy.map((order) => `&sortBy=${order.join(':')}`).join('')
