@@ -915,12 +915,12 @@ export async function paginate<T extends ObjectLiteral>(
         totalItems = await queryBuilder.getCount()
     } else if (isPaginated && config.paginationType !== PaginationType.CURSOR) {
         if (config.fetchRaw) {
-            items = await queryBuilder.getRawMany();
+            items = await queryBuilder.getRawMany()
 
             if (config.buildCountQuery) {
-                totalItems = await config.buildCountQuery(queryBuilder.clone()).getCount();
+                totalItems = await config.buildCountQuery(queryBuilder.clone()).getCount()
             } else {
-                totalItems = await queryBuilder.getCount();
+                totalItems = await queryBuilder.getCount()
             }
         } else {
             if (config.buildCountQuery) {
