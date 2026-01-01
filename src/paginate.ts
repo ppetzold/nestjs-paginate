@@ -170,9 +170,9 @@ function flattenWhereAndTransform<T>(
                         pathSplit.length === 1
                             ? ''
                             : `_${pathSplit
-                                  .slice(0, -1)
-                                  .map((p) => p + '_rel')
-                                  .join('_')}`
+                                .slice(0, -1)
+                                .map((p) => p + '_rel')
+                                .join('_')}`
                     const tableName = pathSplit[pathSplit.length - 1]
                     const tableAliasWithProperty = `${queryBuilder.alias}${fullPath}.${tableName}`
                     const joinTableAlias = `${queryBuilder.alias}${fullPath}_${tableName}_rel`
@@ -222,12 +222,12 @@ export async function paginate<T extends ObjectLiteral>(
         query.limit === PaginationLimit.COUNTER_ONLY
             ? PaginationLimit.COUNTER_ONLY
             : isPaginated === true
-              ? maxLimit === PaginationLimit.NO_PAGINATION
-                  ? (query.limit ?? defaultLimit)
-                  : query.limit === PaginationLimit.NO_PAGINATION
-                    ? defaultLimit
-                    : Math.min(query.limit ?? defaultLimit, maxLimit)
-              : defaultLimit
+                ? maxLimit === PaginationLimit.NO_PAGINATION
+                    ? (query.limit ?? defaultLimit)
+                    : query.limit === PaginationLimit.NO_PAGINATION
+                        ? defaultLimit
+                        : Math.min(query.limit ?? defaultLimit, maxLimit)
+                : defaultLimit
 
     const generateNullCursor = (): string => {
         return 'A' + '0'.repeat(15) // null values ​​should be looked up last, so use the smallest prefix
@@ -539,45 +539,45 @@ export async function paginate<T extends ObjectLiteral>(
                         WHEN ${columnExpr} < 0 THEN ${concat(["'Y'", paddedIntExpr, "'V'", paddedDecExpr])}
                         WHEN ${columnExpr} = 0 THEN ${concat(["'X'", zeroPaddedIntExpr, "'X'", zeroPaddedDecExpr])}
                         WHEN ${columnExpr} > 0 AND ${intExpr} = 0 AND ${decExpr} > 0 THEN ${concat([
-                            "'X'",
-                            zeroPaddedIntExpr,
-                            "'V'",
-                            reversedDecPaddedExpr,
-                        ])}
+                        "'X'",
+                        zeroPaddedIntExpr,
+                        "'V'",
+                        reversedDecPaddedExpr,
+                    ])}
                         WHEN ${columnExpr} > 0 AND ${intExpr} > 0 AND ${decExpr} = 0 THEN ${concat([
-                            "'V'",
-                            reversedIntPaddedExpr,
-                            "'X'",
-                            zeroPaddedDecExpr,
-                        ])}
+                        "'V'",
+                        reversedIntPaddedExpr,
+                        "'X'",
+                        zeroPaddedDecExpr,
+                    ])}
                         WHEN ${columnExpr} > 0 AND ${intExpr} > 0 AND ${decExpr} > 0 THEN ${concat([
-                            "'V'",
-                            reversedIntPaddedExpr,
-                            "'V'",
-                            reversedDecPaddedExpr,
-                        ])}
+                        "'V'",
+                        reversedIntPaddedExpr,
+                        "'V'",
+                        reversedDecPaddedExpr,
+                    ])}
                     END`
                 } else {
                     return `CASE
                         WHEN ${columnExpr} IS NULL THEN ${generateNullCursorExpr()}
                         WHEN ${columnExpr} < 0 AND ${intExpr} > 0 AND ${decExpr} > 0 THEN ${concat([
-                            "'M'",
-                            reversedIntPaddedExpr,
-                            "'V'",
-                            reversedDecPaddedExpr,
-                        ])}
+                        "'M'",
+                        reversedIntPaddedExpr,
+                        "'V'",
+                        reversedDecPaddedExpr,
+                    ])}
                         WHEN ${columnExpr} < 0 AND ${intExpr} > 0 AND ${decExpr} = 0 THEN ${concat([
-                            "'M'",
-                            reversedIntPaddedExpr,
-                            "'X'",
-                            zeroPaddedDecExpr,
-                        ])}
+                        "'M'",
+                        reversedIntPaddedExpr,
+                        "'X'",
+                        zeroPaddedDecExpr,
+                    ])}
                         WHEN ${columnExpr} < 0 AND ${intExpr} = 0 AND ${decExpr} > 0 THEN ${concat([
-                            "'N'",
-                            zeroPaddedIntExpr,
-                            "'V'",
-                            reversedDecPaddedExpr,
-                        ])}
+                        "'N'",
+                        zeroPaddedIntExpr,
+                        "'V'",
+                        reversedDecPaddedExpr,
+                    ])}
                         WHEN ${columnExpr} = 0 THEN ${concat(["'N'", zeroPaddedIntExpr, "'X'", zeroPaddedDecExpr])}
                         WHEN ${columnExpr} > 0 THEN ${concat(["'V'", paddedIntExpr, "'V'", paddedDecExpr])}
                     END`
@@ -937,12 +937,12 @@ export async function paginate<T extends ObjectLiteral>(
 
     const filterQuery = query.filter
         ? '&' +
-          stringify(
-              mapKeys(query.filter, (_param, name) => 'filter.' + name),
-              '&',
-              '=',
-              { encodeURIComponent: (str) => str }
-          )
+        stringify(
+            mapKeys(query.filter, (_param, name) => 'filter.' + name),
+            '&',
+            '=',
+            { encodeURIComponent: (str) => str }
+        )
         : ''
 
     const options = `&limit=${limit}${sortByQuery}${searchQuery}${searchByQuery}${selectQuery}${filterQuery}`
@@ -1000,21 +1000,21 @@ export async function paginate<T extends ObjectLiteral>(
             path !== null
                 ? config.paginationType === PaginationType.CURSOR
                     ? {
-                          previous: items.length
-                              ? buildLinkForCursor(generateCursor(items[0], reversedSortBy, 'previous'), true)
-                              : undefined,
-                          current: buildLinkForCursor(query.cursor),
-                          next: items.length
-                              ? buildLinkForCursor(generateCursor(items[items.length - 1], sortBy))
-                              : undefined,
-                      }
+                        previous: items.length
+                            ? buildLinkForCursor(generateCursor(items[0], reversedSortBy, 'previous'), true)
+                            : undefined,
+                        current: buildLinkForCursor(query.cursor),
+                        next: items.length
+                            ? buildLinkForCursor(generateCursor(items[items.length - 1], sortBy))
+                            : undefined,
+                    }
                     : {
-                          first: page == 1 ? undefined : buildLink(1),
-                          previous: page - 1 < 1 ? undefined : buildLink(page - 1),
-                          current: buildLink(currentPage),
-                          next: page + 1 > totalPages ? undefined : buildLink(page + 1),
-                          last: page == totalPages || !totalItems ? undefined : buildLink(totalPages),
-                      }
+                        first: currentPage == 1 ? undefined : buildLink(1),
+                        previous: currentPage - 1 < 1 ? undefined : buildLink(currentPage - 1),
+                        current: buildLink(currentPage),
+                        next: currentPage + 1 > totalPages ? undefined : buildLink(currentPage + 1),
+                        last: currentPage == totalPages || !totalItems ? undefined : buildLink(totalPages),
+                    }
                 : ({} as Paginated<T>['links']),
     }
 
