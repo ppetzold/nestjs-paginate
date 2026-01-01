@@ -222,12 +222,12 @@ export async function paginate<T extends ObjectLiteral>(
         query.limit === PaginationLimit.COUNTER_ONLY
             ? PaginationLimit.COUNTER_ONLY
             : isPaginated === true
-            ? maxLimit === PaginationLimit.NO_PAGINATION
-                ? query.limit ?? defaultLimit
-                : query.limit === PaginationLimit.NO_PAGINATION
-                ? defaultLimit
-                : Math.min(query.limit ?? defaultLimit, maxLimit)
-            : defaultLimit
+              ? maxLimit === PaginationLimit.NO_PAGINATION
+                  ? (query.limit ?? defaultLimit)
+                  : query.limit === PaginationLimit.NO_PAGINATION
+                    ? defaultLimit
+                    : Math.min(query.limit ?? defaultLimit, maxLimit)
+              : defaultLimit
 
     const generateNullCursor = (): string => {
         return 'A' + '0'.repeat(15) // null values ​​should be looked up last, so use the smallest prefix
@@ -979,13 +979,14 @@ export async function paginate<T extends ObjectLiteral>(
     const itemsPerPage = limit === PaginationLimit.COUNTER_ONLY ? totalItems : isPaginated ? limit : items.length
     const totalItemsForMeta = limit === PaginationLimit.COUNTER_ONLY || isPaginated ? totalItems : items.length
     const totalPages = isPaginated ? Math.ceil(totalItems / limit) : 1
+    const currentPage = Math.max(1, Math.min(page, totalPages))
 
     const results: Paginated<T> = {
         data: items,
         meta: {
             itemsPerPage: config.paginationType === PaginationType.CURSOR ? items.length : itemsPerPage,
             totalItems: config.paginationType === PaginationType.CURSOR ? undefined : totalItemsForMeta,
-            currentPage: config.paginationType === PaginationType.CURSOR ? undefined : page,
+            currentPage: config.paginationType === PaginationType.CURSOR ? undefined : currentPage,
             totalPages: config.paginationType === PaginationType.CURSOR ? undefined : totalPages,
             sortBy,
             search: query.search,
@@ -1010,7 +1011,7 @@ export async function paginate<T extends ObjectLiteral>(
                     : {
                           first: page == 1 ? undefined : buildLink(1),
                           previous: page - 1 < 1 ? undefined : buildLink(page - 1),
-                          current: buildLink(page),
+                          current: buildLink(currentPage),
                           next: page + 1 > totalPages ? undefined : buildLink(page + 1),
                           last: page == totalPages || !totalItems ? undefined : buildLink(totalPages),
                       }

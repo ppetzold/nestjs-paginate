@@ -3135,6 +3135,37 @@ describe('paginate', () => {
         expect(page.meta.totalItems).toBe(42)
     })
 
+    it('should fix currentPage when page is out of bounds', async () => {
+        const config: PaginateConfig<ToyShopEntity> = {
+            sortableColumns: ['id'],
+            maxLimit: 10,
+        }
+        const query: PaginateQuery = {
+            path: '',
+            page: 200,
+        }
+
+        const result = await paginate<ToyShopEntity>(query, toyShopRepo, config)
+
+        expect(result.meta.currentPage).toBe(1)
+        expect(result.meta.totalPages).toEqual(result.meta.currentPage)
+    })
+
+    it('should fix links when page is out of bounds', async () => {
+        const config: PaginateConfig<ToyShopEntity> = {
+            sortableColumns: ['id'],
+            maxLimit: 10,
+        }
+        const query: PaginateQuery = {
+            path: '/toys',
+            page: 200,
+        }
+
+        const result = await paginate<ToyShopEntity>(query, toyShopRepo, config)
+
+        expect(result.links.current).toBe('/toys?page=1&limit=10&sortBy=id:ASC')
+    })
+
     describe('should return result based on date column filter', () => {
         it('with $not and $null operators', async () => {
             const config: PaginateConfig<CatEntity> = {
@@ -3606,6 +3637,8 @@ describe('paginate', () => {
                 })
 
                 expect(result.data).toStrictEqual(expectedResult)
+                expect(result.links.last).toBeUndefined()
+                expect(result.links.next).toBeUndefined()
                 expect(result.links.current).toBe('?page=1&limit=20&sortBy=home.countCat:ASC')
             })
         })
