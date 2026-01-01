@@ -222,12 +222,12 @@ export async function paginate<T extends ObjectLiteral>(
         query.limit === PaginationLimit.COUNTER_ONLY
             ? PaginationLimit.COUNTER_ONLY
             : isPaginated === true
-              ? maxLimit === PaginationLimit.NO_PAGINATION
-                  ? (query.limit ?? defaultLimit)
-                  : query.limit === PaginationLimit.NO_PAGINATION
-                    ? defaultLimit
-                    : Math.min(query.limit ?? defaultLimit, maxLimit)
-              : defaultLimit
+            ? maxLimit === PaginationLimit.NO_PAGINATION
+                ? query.limit ?? defaultLimit
+                : query.limit === PaginationLimit.NO_PAGINATION
+                ? defaultLimit
+                : Math.min(query.limit ?? defaultLimit, maxLimit)
+            : defaultLimit
 
     const generateNullCursor = (): string => {
         return 'A' + '0'.repeat(15) // null values ​​should be looked up last, so use the smallest prefix
