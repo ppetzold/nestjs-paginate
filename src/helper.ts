@@ -48,35 +48,35 @@ export type Column<T, D extends number = 2> = [D] extends [never]
     ? // yes, stop recursing
       never
     : // Are we extending something with keys?
-    T extends Record<string, any>
-    ? {
-          // For every keyof T, find all possible properties as a string union
-          [K in keyof T]-?: K extends string
-              ? // Is it string or number (includes enums)?
-                T[K] extends string | number
-                  ? // yes, add just the key
-                    `${K}`
-                  : // Is it a Date?
-                  T[K] extends Date
-                  ? // yes, add just the key
-                    `${K}`
-                  : // no, is it an array?
-                  T[K] extends Array<infer U>
-                  ? // yes, unwrap it, and recurse deeper
-                    `${K}` | Join<K, Column<UnwrapArray<U>, Prev[D]>>
-                  : // no, is it a promise?
-                  T[K] extends Promise<infer U>
-                  ? // yes, try to infer its return type and recurse
-                    U extends Array<infer V>
-                      ? `${K}` | Join<K, Column<UnwrapArray<V>, Prev[D]>>
-                      : `${K}` | Join<K, Column<UnwrapPromise<U>, Prev[D]>>
-                  : // no, we have no more special cases, so treat it as an
-                    // object and recurse deeper on its keys
-                    `${K}` | Join<K, Column<T[K], Prev[D]>>
-              : never
-          // Join all the string unions of each keyof T into a single string union
-      }[keyof T]
-    : ''
+      T extends Record<string, any>
+      ? {
+            // For every keyof T, find all possible properties as a string union
+            [K in keyof T]-?: K extends string
+                ? // Is it string or number (includes enums)?
+                  T[K] extends string | number
+                    ? // yes, add just the key
+                      `${K}`
+                    : // Is it a Date?
+                      T[K] extends Date
+                      ? // yes, add just the key
+                        `${K}`
+                      : // no, is it an array?
+                        T[K] extends Array<infer U>
+                        ? // yes, unwrap it, and recurse deeper
+                              `${K}` | Join<K, Column<UnwrapArray<U>, Prev[D]>>
+                        : // no, is it a promise?
+                          T[K] extends Promise<infer U>
+                          ? // yes, try to infer its return type and recurse
+                            U extends Array<infer V>
+                              ? `${K}` | Join<K, Column<UnwrapArray<V>, Prev[D]>>
+                              : `${K}` | Join<K, Column<UnwrapPromise<U>, Prev[D]>>
+                          : // no, we have no more special cases, so treat it as an
+                                // object and recurse deeper on its keys
+                                `${K}` | Join<K, Column<T[K], Prev[D]>>
+                : never
+            // Join all the string unions of each keyof T into a single string union
+        }[keyof T]
+      : ''
 
 export type RelationColumn<T> = Extract<
     Column<T>,
