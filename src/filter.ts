@@ -21,7 +21,6 @@ import { PaginateQuery } from './decorator'
 import {
     checkIsArray,
     checkIsEmbedded,
-    checkIsJsonb,
     checkIsNestedRelation,
     checkIsRelation,
     extractVirtualProperty,
@@ -30,6 +29,7 @@ import {
     isDateColumnType,
     isISODate,
     JoinMethod,
+    resolveJsonbPath,
 } from './helper'
 
 export enum FilterOperator {
@@ -252,7 +252,7 @@ function fixColumnFilterValue<T>(column: string, qb: SelectQueryBuilder<T>, isJs
             return new Date(value)
         }
 
-        if ((columnType === Number || columnType === 'number' || isJsonb) && !Number.isNaN(value)) {
+        if ((columnType === Number || columnType === 'number' || isJsonb) && !isNaN(Number(value))) {
             return Number(value)
         }
 
@@ -309,7 +309,7 @@ export function parseFilter<T>(
             const fixValue = fixColumnFilterValue(column, qb)
 
             const columnProperties = getPropertiesByColumnName(column)
-            const isJsonb = checkIsJsonb(qb, columnProperties.column)
+            const jsonbResolution = resolveJsonbPath(qb, columnProperties.column)
 
             switch (token.operator) {
                 case FilterOperator.BTW:
@@ -331,34 +331,79 @@ export function parseFilter<T>(
                     params.findOperator = OperatorSymbolToFunction.get(token.operator)(fixValue(token.value))
             }
 
-            if (isJsonb) {
-                const parts = column.split('.')
-                const dbColumnName = parts[parts.length - 2]
-                const jsonColumnName = parts[parts.length - 1]
-
+            if (jsonbResolution.isJsonb) {
                 const jsonFixValue = fixColumnFilterValue(column, qb, true)
 
-                const jsonParams = {
-                    comparator: params.comparator,
-                    findOperator: JsonContains({
-                        [jsonColumnName]: jsonFixValue(token.value),
-                        //! Below seems to not be possible from my understanding, https://github.com/typeorm/typeorm/pull/9665
-                        //! This limits the functionaltiy to $eq only for json columns, which is a bit of a shame.
-                        //! If this is fixed or changed, we can use the commented line below instead.
-                        //[jsonColumnName]: params.findOperator,
-                    }),
+                // Use a stable filter key that preserves the relation path so that
+                // addWhereCondition can later resolve the correct JOIN alias.
+                // e.g. 'detail.referrer.source.platform' → filterKey = 'detail.referrer'
+                //      'metadata.length'                 → filterKey = 'metadata'
+                //      'underCoat.metadata.length'       → filterKey = 'underCoat.metadata'
+                const filterKey = [...jsonbResolution.relationPath, jsonbResolution.jsonbColumn].join('.')
+
+                // Build a JsonContains containment object for a single leaf value.
+                // e.g. jsonPath=['source','platform'], value='web' → { source: { platform: 'web' } }
+                //      jsonPath=['length'],            value=5     → { length: 5 }
+                const buildContainment = (rawValue: string) => {
+                    const leafValue = jsonFixValue(rawValue)
+                    return jsonbResolution.jsonPath.reduceRight<Record<string, unknown>>(
+                        (acc, key) => ({ [key]: acc }),
+                        leafValue as unknown as Record<string, unknown>
+                    )
                 }
 
-                filter[dbColumnName] = [...(filter[column] || []), jsonParams]
+                if (token.operator === FilterOperator.IN) {
+                    // $in expands each comma-separated value to its own JsonContains condition.
+                    // Conditions after the first are OR'd together, producing:
+                    //   AND (col @> '{a}' OR col @> '{b}' OR col @> '{c}')
+                    // which is semantically equivalent to col->>'key' IN ('a', 'b', 'c').
+                    //
+                    //! JsonContains uses @> which only supports equality, not range operators.
+                    //! See: https://github.com/typeorm/typeorm/pull/9665
+                    token.value.split(',').forEach((val, i) => {
+                        filter[filterKey] = [
+                            ...(filter[filterKey] || []),
+                            {
+                                comparator: i === 0 ? params.comparator : FilterComparator.OR,
+                                findOperator: JsonContains(buildContainment(val.trim())),
+                            },
+                        ]
+                    })
+                } else {
+                    filter[filterKey] = [
+                        ...(filter[filterKey] || []),
+                        {
+                            comparator: params.comparator,
+                            findOperator: JsonContains(buildContainment(token.value)),
+                            //! JsonContains uses @> operator which only supports $eq semantics.
+                            //! See: https://github.com/typeorm/typeorm/pull/9665
+                        },
+                    ]
+                }
             } else {
                 filter[column] = [...(filter[column] || []), params]
             }
 
+            // suffix ($not) is applied on the filter key used above.
+            // For JSONB $in, $not must be applied to every expanded entry so that
+            // NOT (col @> '{a}') AND NOT (col @> '{b}') is produced (NOT IN semantics).
             if (token.suffix) {
-                const lastFilterElement = filter[column].length - 1
-                filter[column][lastFilterElement].findOperator = OperatorSymbolToFunction.get(token.suffix)(
-                    filter[column][lastFilterElement].findOperator
-                )
+                const filterKey = jsonbResolution.isJsonb
+                    ? [...jsonbResolution.relationPath, jsonbResolution.jsonbColumn].join('.')
+                    : column
+                const isJsonbIn = jsonbResolution.isJsonb && token.operator === FilterOperator.IN
+                const applyFrom = isJsonbIn
+                    ? filter[filterKey].length - token.value.split(',').length
+                    : filter[filterKey].length - 1
+                for (let i = applyFrom; i < filter[filterKey].length; i++) {
+                    filter[filterKey][i].findOperator = OperatorSymbolToFunction.get(token.suffix)(
+                        filter[filterKey][i].findOperator
+                    )
+                    // $not:$in means NOT IN — all expanded values are AND'd with NOT
+                    if (isJsonbIn && i > applyFrom) {
+                        filter[filterKey][i].comparator = FilterComparator.AND
+                    }
+                }
             }
         }
     }

@@ -219,9 +219,27 @@ describe('paginate', () => {
         pillowBrand = await catHomePillowBrandRepo.save({ name: 'Purrfection', quality: null })
         naptimePillow = await catHomePillowRepo.save({ color: 'black', brand: pillowBrand })
         catHomes = await catHomeRepo.save([
-            catHomeRepo.create({ name: 'Box', cat: cats[0], street: null, naptimePillow: null }),
-            catHomeRepo.create({ name: 'House', cat: cats[1], street: 'Mainstreet', naptimePillow: null }),
-            catHomeRepo.create({ name: 'Mansion', cat: cats[2], street: 'Boulevard Avenue', naptimePillow }),
+            catHomeRepo.create({
+                name: 'Box',
+                cat: cats[0],
+                street: null,
+                naptimePillow: null,
+                config: { theme: 'dark', fontSize: 14 },
+            }),
+            catHomeRepo.create({
+                name: 'House',
+                cat: cats[1],
+                street: 'Mainstreet',
+                naptimePillow: null,
+                config: { theme: 'light', fontSize: 12 },
+            }),
+            catHomeRepo.create({
+                name: 'Mansion',
+                cat: cats[2],
+                street: 'Boulevard Avenue',
+                naptimePillow,
+                config: { theme: 'dark', fontSize: 16, nested: { level: 2, tag: 'vip' } },
+            }),
         ])
         catHomePillows = await catHomePillowRepo.save([
             catHomePillowRepo.create({ color: 'red', home: catHomes[0] }),
@@ -3503,7 +3521,7 @@ describe('paginate', () => {
                 )
             })
 
-            it('should filter on a nested property through a relation', async () => {
+            it('should filter on a nested property through a relation (self-referencing entity)', async () => {
                 const config: PaginateConfig<CatHairEntity> = {
                     sortableColumns: ['id'],
                     filterableColumns: {
@@ -3514,19 +3532,149 @@ describe('paginate', () => {
                 const query: PaginateQuery = {
                     path: '',
                     filter: {
-                        'underCoat.metadata.length': '$eq:50',
+                        'underCoat.metadata.length': '$eq:5',
                     },
                 }
 
                 const result = await paginate<CatHairEntity>(query, catHairRepo, config)
 
                 expect(result.meta.filter).toStrictEqual({
-                    'underCoat.metadata.length': '$eq:50',
+                    'underCoat.metadata.length': '$eq:5',
                 })
                 expect(result.data).toStrictEqual([underCoats[0]])
                 expect(result.links.current).toBe(
-                    '?page=1&limit=20&sortBy=id:ASC&filter.underCoat.metadata.length=$eq:50'
+                    '?page=1&limit=20&sortBy=id:ASC&filter.underCoat.metadata.length=$eq:5'
                 )
+            })
+
+            it('should filter on a JSONB column through a different entity relation ($eq)', async () => {
+                const config: PaginateConfig<CatEntity> = {
+                    sortableColumns: ['id'],
+                    filterableColumns: {
+                        'home.config.theme': [FilterOperator.EQ],
+                    },
+                    relations: ['home'],
+                }
+                const query: PaginateQuery = {
+                    path: '',
+                    filter: {
+                        'home.config.theme': '$eq:dark',
+                    },
+                }
+
+                const result = await paginate<CatEntity>(query, catRepo, config)
+
+                expect(result.meta.filter).toStrictEqual({
+                    'home.config.theme': '$eq:dark',
+                })
+                // cats[0]=Milo (Box, dark) and cats[2]=Shadow (Mansion, dark)
+                expect(result.data).toHaveLength(2)
+                expect(result.data.map((c) => c.name)).toEqual(expect.arrayContaining(['Milo', 'Shadow']))
+                expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.home.config.theme=$eq:dark')
+            })
+
+            it('should filter on a 2-level deep JSONB path through a relation', async () => {
+                const config: PaginateConfig<CatEntity> = {
+                    sortableColumns: ['id'],
+                    filterableColumns: {
+                        'home.config.nested.tag': [FilterOperator.EQ],
+                    },
+                    relations: ['home'],
+                }
+                const query: PaginateQuery = {
+                    path: '',
+                    filter: {
+                        'home.config.nested.tag': '$eq:vip',
+                    },
+                }
+
+                const result = await paginate<CatEntity>(query, catRepo, config)
+
+                expect(result.meta.filter).toStrictEqual({
+                    'home.config.nested.tag': '$eq:vip',
+                })
+                // only cats[2]=Shadow (Mansion) has nested.tag = 'vip'
+                expect(result.data).toHaveLength(1)
+                expect(result.data[0].name).toBe('Shadow')
+                expect(result.links.current).toBe(
+                    '?page=1&limit=20&sortBy=id:ASC&filter.home.config.nested.tag=$eq:vip'
+                )
+            })
+
+            it('should filter on a direct JSONB column with a 2-level deep path', async () => {
+                const config: PaginateConfig<CatHairEntity> = {
+                    sortableColumns: ['id'],
+                    filterableColumns: {
+                        'metadata.length': true,
+                    },
+                }
+                const query: PaginateQuery = {
+                    path: '',
+                    filter: {
+                        'metadata.length': '$eq:5',
+                    },
+                }
+
+                const result = await paginate<CatHairEntity>(query, catHairRepo, config)
+
+                expect(result.meta.filter).toStrictEqual({
+                    'metadata.length': '$eq:5',
+                })
+                expect(result.data).toStrictEqual([catHairs[0]])
+                expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.metadata.length=$eq:5')
+            })
+
+            it('should filter on a JSONB column through a relation using $in', async () => {
+                const config: PaginateConfig<CatEntity> = {
+                    sortableColumns: ['id'],
+                    filterableColumns: {
+                        'home.config.theme': [FilterOperator.EQ, FilterOperator.IN],
+                    },
+                    relations: ['home'],
+                }
+                const query: PaginateQuery = {
+                    path: '',
+                    filter: {
+                        'home.config.theme': '$in:dark,light',
+                    },
+                }
+
+                const result = await paginate<CatEntity>(query, catRepo, config)
+
+                expect(result.meta.filter).toStrictEqual({
+                    'home.config.theme': '$in:dark,light',
+                })
+                // Milo (dark), Garfield (light), Shadow (dark) all have homes
+                expect(result.data).toHaveLength(3)
+                expect(result.data.map((c) => c.name)).toEqual(expect.arrayContaining(['Milo', 'Garfield', 'Shadow']))
+                expect(result.links.current).toBe(
+                    '?page=1&limit=20&sortBy=id:ASC&filter.home.config.theme=$in:dark,light'
+                )
+            })
+
+            it('should filter on a direct JSONB column using $in', async () => {
+                const config: PaginateConfig<CatHairEntity> = {
+                    sortableColumns: ['id'],
+                    filterableColumns: {
+                        'metadata.length': [FilterOperator.EQ, FilterOperator.IN],
+                    },
+                }
+                const query: PaginateQuery = {
+                    path: '',
+                    filter: {
+                        // catHairs[0].length=5, catHairs[1].length=20
+                        'metadata.length': '$in:5,20',
+                    },
+                }
+
+                const result = await paginate<CatHairEntity>(query, catHairRepo, config)
+
+                expect(result.meta.filter).toStrictEqual({
+                    'metadata.length': '$in:5,20',
+                })
+                expect(result.data).toHaveLength(2)
+                expect(result.data).toEqual(expect.arrayContaining([catHairs[0], catHairs[1]]))
+                expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.metadata.length=$in:5,20')
             })
         })
     }
