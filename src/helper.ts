@@ -225,14 +225,90 @@ export function checkIsJsonb(qb: SelectQueryBuilder<unknown>, propertyName: stri
         return false
     }
 
-    if (propertyName.includes('.')) {
-        const parts = propertyName.split('.')
-        const dbColumnName = parts[parts.length - 2]
+    const resolution = resolveJsonbPath(qb, propertyName)
+    return resolution.isJsonb
+}
 
-        return qb?.expressionMap?.mainAlias?.metadata.findColumnWithPropertyName(dbColumnName)?.type === 'jsonb'
+/**
+ * Describes how a dot-separated filter path maps to a JSONB column.
+ *
+ * Given a path like `detail.referrer.source.platform`:
+ *   - relationPath: ['detail']           — segments that are TypeORM relations (require JOIN)
+ *   - jsonbColumn:  'referrer'           — the JSONB column on the final relation entity
+ *   - jsonPath:     ['source', 'platform'] — the key path inside the JSON value
+ */
+export interface JsonbPathResolution {
+    isJsonb: boolean
+    /** Relation segments leading up to the entity that owns the JSONB column */
+    relationPath: string[]
+    /** Name of the JSONB column on that entity */
+    jsonbColumn: string
+    /** Key path inside the JSON value (may be empty for a top-level JSONB filter) */
+    jsonPath: string[]
+}
+
+/**
+ * Walks the dot-separated `column` path through TypeORM entity metadata to determine
+ * whether the path terminates in a JSONB column and, if so, where the relation chain
+ * ends and the JSON key path begins.
+ *
+ * Algorithm:
+ *   For each segment, check whether the current entity metadata has a relation
+ *   with that name.  If yes, follow the relation and continue.  If no, check
+ *   whether it is a JSONB column on the current entity.  If yes, all remaining
+ *   segments are JSON key path.  Otherwise, the path is not JSONB.
+ */
+export function resolveJsonbPath(qb: SelectQueryBuilder<unknown>, column: string): JsonbPathResolution {
+    const notJsonb: JsonbPathResolution = { isJsonb: false, relationPath: [], jsonbColumn: '', jsonPath: [] }
+
+    if (!qb || !column) {
+        return notJsonb
     }
 
-    return qb?.expressionMap?.mainAlias?.metadata.findColumnWithPropertyName(propertyName)?.type === 'jsonb'
+    const parts = column.split('.')
+    // A plain column name without dots is not a JSONB path — callers use checkIsJsonb directly.
+    if (parts.length < 2) {
+        return notJsonb
+    }
+
+    let metadata = qb?.expressionMap?.mainAlias?.metadata
+    const relationPath: string[] = []
+
+    for (let i = 0; i < parts.length - 1; i++) {
+        const segment = parts[i]
+        const relation = metadata?.relations?.find((r) => r.propertyPath === segment)
+
+        if (relation) {
+            relationPath.push(segment)
+            metadata = relation.inverseEntityMetadata
+        } else {
+            // Not a relation — check whether it is a JSONB column
+            const isJsonbColumn = metadata?.findColumnWithPropertyName(segment)?.type === 'jsonb'
+            if (!isJsonbColumn) {
+                return notJsonb
+            }
+            return {
+                isJsonb: true,
+                relationPath,
+                jsonbColumn: segment,
+                jsonPath: parts.slice(i + 1),
+            }
+        }
+    }
+
+    // All segments except the last were relations; the last segment must be a JSONB column.
+    const lastSegment = parts[parts.length - 1]
+    const isJsonbColumn = metadata?.findColumnWithPropertyName(lastSegment)?.type === 'jsonb'
+    if (isJsonbColumn) {
+        return {
+            isJsonb: true,
+            relationPath,
+            jsonbColumn: lastSegment,
+            jsonPath: [],
+        }
+    }
+
+    return notJsonb
 }
 
 // This function is used to fix the column alias when using relation, embedded or virtual properties
