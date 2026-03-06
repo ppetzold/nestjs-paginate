@@ -979,13 +979,14 @@ export async function paginate<T extends ObjectLiteral>(
     const itemsPerPage = limit === PaginationLimit.COUNTER_ONLY ? totalItems : isPaginated ? limit : items.length
     const totalItemsForMeta = limit === PaginationLimit.COUNTER_ONLY || isPaginated ? totalItems : items.length
     const totalPages = isPaginated ? Math.ceil(totalItems / limit) : 1
+    const currentPage = Math.max(1, Math.min(page, totalPages))
 
     const results: Paginated<T> = {
         data: items,
         meta: {
             itemsPerPage: config.paginationType === PaginationType.CURSOR ? items.length : itemsPerPage,
             totalItems: config.paginationType === PaginationType.CURSOR ? undefined : totalItemsForMeta,
-            currentPage: config.paginationType === PaginationType.CURSOR ? undefined : page,
+            currentPage: config.paginationType === PaginationType.CURSOR ? undefined : currentPage,
             totalPages: config.paginationType === PaginationType.CURSOR ? undefined : totalPages,
             sortBy,
             search: query.search,
@@ -1008,11 +1009,11 @@ export async function paginate<T extends ObjectLiteral>(
                               : undefined,
                       }
                     : {
-                          first: page == 1 ? undefined : buildLink(1),
-                          previous: page - 1 < 1 ? undefined : buildLink(page - 1),
-                          current: buildLink(page),
-                          next: page + 1 > totalPages ? undefined : buildLink(page + 1),
-                          last: page == totalPages || !totalItems ? undefined : buildLink(totalPages),
+                          first: currentPage == 1 ? undefined : buildLink(1),
+                          previous: currentPage - 1 < 1 ? undefined : buildLink(currentPage - 1),
+                          current: buildLink(currentPage),
+                          next: currentPage + 1 > totalPages ? undefined : buildLink(currentPage + 1),
+                          last: currentPage == totalPages || !totalItems ? undefined : buildLink(totalPages),
                       }
                 : ({} as Paginated<T>['links']),
     }
