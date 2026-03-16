@@ -40,6 +40,13 @@ async function getSwaggerDefinitionForEndpoint<T>(entityType: Type<T>, config: P
         }
 
         @ApiPaginationQuery(config)
+        @PaginatedSwaggerDocs('TestDto', config)
+        @Get('/test-referenced')
+        public testReferenced(): void {
+            //
+        }
+
+        @ApiPaginationQuery(config)
         @ApiOkPaginatedResponse(entityType, config)
         @Post('/test')
         public testPost(): void {
@@ -58,262 +65,269 @@ async function getSwaggerDefinitionForEndpoint<T>(entityType: Type<T>, config: P
 describe('PaginatedEndpoint decorator', () => {
     it('post and get definition should be the same', async () => {
         const openApiDefinition = await getSwaggerDefinitionForEndpoint(TestDto, BASE_PAGINATION_CONFIG)
+        const testGetParams = openApiDefinition.paths['/test'].get.parameters
 
-        expect(openApiDefinition.paths['/test'].get.parameters).toStrictEqual(
-            openApiDefinition.paths['/test'].post.parameters
-        )
+        expect(openApiDefinition.paths['/test-referenced'].get.parameters).toStrictEqual(testGetParams)
+
+        expect(openApiDefinition.paths['/test'].post.parameters).toStrictEqual(testGetParams)
     })
 
-    it('should annotate endpoint with OpenApi documentation with limited config', async () => {
-        const openApiDefinition = await getSwaggerDefinitionForEndpoint(TestDto, BASE_PAGINATION_CONFIG)
+    it.each(['/test', '/test-referenced'])(
+        'should annotate endpoint with OpenApi documentation with limited config',
+        async (endpoint) => {
+            const openApiDefinition = await getSwaggerDefinitionForEndpoint(TestDto, BASE_PAGINATION_CONFIG)
 
-        const params = openApiDefinition.paths['/test'].get.parameters
-        expect(params).toStrictEqual([
-            {
-                name: 'page',
-                required: false,
-                in: 'query',
-                description:
-                    'Page number to retrieve. If you provide invalid value the default page number will applied\n\n**Example:** 1\n\n\n**Default Value:** 1\n\n',
-                schema: {
-                    type: 'number',
-                },
-            },
-            {
-                name: 'limit',
-                required: false,
-                in: 'query',
-                description:
-                    'Number of records per page.\n\n\n**Example:** 20\n\n\n\n**Default Value:** 20\n\n\n\n**Max Value:** 100\n\n\nIf provided value is greater than max value, max value will be applied.\n',
-                schema: {
-                    type: 'number',
-                },
-            },
-            {
-                name: 'sortBy',
-                required: false,
-                in: 'query',
-                description:
-                    'Parameter to sort by.\nTo sort by multiple fields, just provide query param multiple types. The order in url defines an order of sorting\n\n**Format:** {fieldName}:{DIRECTION}\n\n\n**Example:** sortBy=id:DESC\n\n\n**Default Value:** No default sorting specified, the result order is not guaranteed if not provided\n\n**Available Fields**\n- id\n',
-                schema: {
-                    type: 'array',
-                    items: {
-                        type: 'string',
-                        enum: ['id:ASC', 'id:DESC'],
+            const params = openApiDefinition.paths[endpoint].get.parameters
+            expect(params).toStrictEqual([
+                {
+                    name: 'page',
+                    required: false,
+                    in: 'query',
+                    description:
+                        'Page number to retrieve. If you provide invalid value the default page number will applied\n\n**Example:** 1\n\n\n**Default Value:** 1\n\n',
+                    schema: {
+                        type: 'number',
                     },
                 },
-            },
-        ])
-        expect(openApiDefinition.paths['/test'].get.responses).toEqual({
-            '200': {
-                description: '',
-                content: {
-                    'application/json': {
-                        schema: {
-                            allOf: [
-                                {
-                                    $ref: '#/components/schemas/PaginatedDocumented',
-                                },
-                                {
-                                    properties: {
-                                        data: {
-                                            type: 'array',
-                                            items: {
-                                                $ref: '#/components/schemas/TestDto',
-                                            },
-                                        },
-                                        meta: {
-                                            properties: {
-                                                select: {
-                                                    type: 'array',
-                                                    items: {
-                                                        type: 'string',
-                                                    },
-                                                },
-                                                filter: {
-                                                    type: 'object',
-                                                    properties: {},
-                                                },
-                                            },
-                                        },
-                                    },
-                                },
-                            ],
+                {
+                    name: 'limit',
+                    required: false,
+                    in: 'query',
+                    description:
+                        'Number of records per page.\n\n\n**Example:** 20\n\n\n\n**Default Value:** 20\n\n\n\n**Max Value:** 100\n\n\nIf provided value is greater than max value, max value will be applied.\n',
+                    schema: {
+                        type: 'number',
+                    },
+                },
+                {
+                    name: 'sortBy',
+                    required: false,
+                    in: 'query',
+                    description:
+                        'Parameter to sort by.\nTo sort by multiple fields, just provide query param multiple types. The order in url defines an order of sorting\n\n**Format:** {fieldName}:{DIRECTION}\n\n\n**Example:** sortBy=id:DESC\n\n\n**Default Value:** No default sorting specified, the result order is not guaranteed if not provided\n\n**Available Fields**\n- id\n',
+                    schema: {
+                        type: 'array',
+                        items: {
+                            type: 'string',
+                            enum: ['id:ASC', 'id:DESC'],
                         },
                     },
                 },
-            },
-        })
-    })
-
-    it('should annotate endpoint with OpenApi documentation with full config', async () => {
-        const openApiDefinition = await getSwaggerDefinitionForEndpoint(TestDto, FULL_CONFIG)
-
-        const params = openApiDefinition.paths['/test'].get.parameters
-        expect(params).toStrictEqual([
-            {
-                name: 'page',
-                required: false,
-                in: 'query',
-                description:
-                    'Page number to retrieve. If you provide invalid value the default page number will applied\n\n**Example:** 1\n\n\n**Default Value:** 1\n\n',
-                schema: {
-                    type: 'number',
-                },
-            },
-            {
-                name: 'limit',
-                required: false,
-                in: 'query',
-                description:
-                    'Number of records per page.\n\n\n**Example:** 20\n\n\n\n**Default Value:** 20\n\n\n\n**Max Value:** 100\n\n\nIf provided value is greater than max value, max value will be applied.\n',
-                schema: {
-                    type: 'number',
-                },
-            },
-            {
-                name: 'filter.id',
-                required: false,
-                in: 'query',
-                description:
-                    'Filter by id query param.\n\n**Format:** filter.id={$not}:OPERATION:VALUE\n\n\n\n**Example:** filter.id=$btw:John Doe&filter.id=$contains:John Doe\n\n**Available Operations**\n- $eq\n\n- $gt\n\n- $gte\n\n- $in\n\n- $null\n\n- $lt\n\n- $lte\n\n- $btw\n\n- $ilike\n\n- $sw\n\n- $contains\n\n- $not\n\n- $and\n\n- $or',
-                schema: {
-                    type: 'array',
-                    items: {
-                        type: 'string',
-                    },
-                },
-            },
-            {
-                name: 'filter.name',
-                required: false,
-                in: 'query',
-                description:
-                    'Filter by name query param.\n\n**Format:** filter.name={$not}:OPERATION:VALUE\n\n\n\n**Example:** filter.name=$eq:John Doe\n\n**Available Operations**\n- $eq\n\n- $not\n\n- $and\n\n- $or',
-                schema: {
-                    type: 'array',
-                    items: {
-                        type: 'string',
-                    },
-                },
-            },
-            {
-                name: 'sortBy',
-                required: false,
-                in: 'query',
-                description:
-                    'Parameter to sort by.\nTo sort by multiple fields, just provide query param multiple types. The order in url defines an order of sorting\n\n**Format:** {fieldName}:{DIRECTION}\n\n\n**Example:** sortBy=id:DESC\n\n\n**Default Value:** id:DESC\n\n**Available Fields**\n- id\n',
-                schema: {
-                    type: 'array',
-                    items: {
-                        type: 'string',
-                        enum: ['id:ASC', 'id:DESC'],
-                    },
-                },
-            },
-            {
-                name: 'search',
-                required: false,
-                in: 'query',
-                description:
-                    'Search term to filter result values\n\n**Example:** John\n\n\n**Default Value:** No default value\n\n',
-                schema: {
-                    type: 'string',
-                },
-            },
-            {
-                name: 'searchBy',
-                required: false,
-                in: 'query',
-                description:
-                    'List of fields to search by term to filter result values\n\n**Example:** name\n\n\n**Default Value:** By default all fields mentioned below will be used to search by term\n\n**Available Fields**\n- name\n',
-                schema: {
-                    type: 'array',
-                    items: {
-                        type: 'string',
-                    },
-                },
-            },
-            {
-                name: 'select',
-                required: false,
-                in: 'query',
-                description:
-                    'List of fields to select.\n\n**Example:** id,name\n\n\n**Default Value:** By default all fields returns. If you want to select only some fields, provide them in query param\n\n',
-                schema: {
-                    type: 'string',
-                },
-            },
-        ])
-        expect(openApiDefinition.paths['/test'].get.responses).toEqual({
-            '200': {
-                description: '',
-                content: {
-                    'application/json': {
-                        schema: {
-                            allOf: [
-                                {
-                                    $ref: '#/components/schemas/PaginatedDocumented',
-                                },
-                                {
-                                    properties: {
-                                        data: {
-                                            type: 'array',
-                                            items: {
-                                                $ref: '#/components/schemas/TestDto',
-                                            },
-                                        },
-                                        meta: {
-                                            properties: {
-                                                select: {
-                                                    type: 'array',
-                                                    items: {
-                                                        type: 'string',
-                                                        enum: ['id', 'name'],
-                                                    },
+            ])
+            expect(openApiDefinition.paths[endpoint].get.responses).toEqual({
+                '200': {
+                    description: '',
+                    content: {
+                        'application/json': {
+                            schema: {
+                                allOf: [
+                                    {
+                                        $ref: '#/components/schemas/PaginatedDocumented',
+                                    },
+                                    {
+                                        properties: {
+                                            data: {
+                                                type: 'array',
+                                                items: {
+                                                    $ref: '#/components/schemas/TestDto',
                                                 },
-                                                filter: {
-                                                    type: 'object',
-                                                    properties: {
-                                                        id: {
-                                                            oneOf: [
-                                                                {
-                                                                    type: 'string',
-                                                                },
-                                                                {
-                                                                    type: 'array',
-                                                                    items: {
-                                                                        type: 'string',
-                                                                    },
-                                                                },
-                                                            ],
+                                            },
+                                            meta: {
+                                                properties: {
+                                                    select: {
+                                                        type: 'array',
+                                                        items: {
+                                                            type: 'string',
                                                         },
-                                                        name: {
-                                                            oneOf: [
-                                                                {
-                                                                    type: 'string',
-                                                                },
-                                                                {
-                                                                    type: 'array',
-                                                                    items: {
-                                                                        type: 'string',
-                                                                    },
-                                                                },
-                                                            ],
-                                                        },
+                                                    },
+                                                    filter: {
+                                                        type: 'object',
+                                                        properties: {},
                                                     },
                                                 },
                                             },
                                         },
                                     },
-                                },
-                            ],
+                                ],
+                            },
                         },
                     },
                 },
-            },
-        })
-    })
+            })
+        }
+    )
+
+    it.each(['/test', '/test-referenced'])(
+        'should annotate endpoint with OpenApi documentation with full config',
+        async (endpoint) => {
+            const openApiDefinition = await getSwaggerDefinitionForEndpoint(TestDto, FULL_CONFIG)
+
+            const params = openApiDefinition.paths[endpoint].get.parameters
+            expect(params).toStrictEqual([
+                {
+                    name: 'page',
+                    required: false,
+                    in: 'query',
+                    description:
+                        'Page number to retrieve. If you provide invalid value the default page number will applied\n\n**Example:** 1\n\n\n**Default Value:** 1\n\n',
+                    schema: {
+                        type: 'number',
+                    },
+                },
+                {
+                    name: 'limit',
+                    required: false,
+                    in: 'query',
+                    description:
+                        'Number of records per page.\n\n\n**Example:** 20\n\n\n\n**Default Value:** 20\n\n\n\n**Max Value:** 100\n\n\nIf provided value is greater than max value, max value will be applied.\n',
+                    schema: {
+                        type: 'number',
+                    },
+                },
+                {
+                    name: 'filter.id',
+                    required: false,
+                    in: 'query',
+                    description:
+                        'Filter by id query param.\n\n**Format:** filter.id={$not}:OPERATION:VALUE\n\n\n\n**Example:** filter.id=$btw:John Doe&filter.id=$contains:John Doe\n\n**Available Operations**\n- $eq\n\n- $gt\n\n- $gte\n\n- $in\n\n- $null\n\n- $lt\n\n- $lte\n\n- $btw\n\n- $ilike\n\n- $sw\n\n- $contains\n\n- $not\n\n- $and\n\n- $or',
+                    schema: {
+                        type: 'array',
+                        items: {
+                            type: 'string',
+                        },
+                    },
+                },
+                {
+                    name: 'filter.name',
+                    required: false,
+                    in: 'query',
+                    description:
+                        'Filter by name query param.\n\n**Format:** filter.name={$not}:OPERATION:VALUE\n\n\n\n**Example:** filter.name=$eq:John Doe\n\n**Available Operations**\n- $eq\n\n- $not\n\n- $and\n\n- $or',
+                    schema: {
+                        type: 'array',
+                        items: {
+                            type: 'string',
+                        },
+                    },
+                },
+                {
+                    name: 'sortBy',
+                    required: false,
+                    in: 'query',
+                    description:
+                        'Parameter to sort by.\nTo sort by multiple fields, just provide query param multiple types. The order in url defines an order of sorting\n\n**Format:** {fieldName}:{DIRECTION}\n\n\n**Example:** sortBy=id:DESC\n\n\n**Default Value:** id:DESC\n\n**Available Fields**\n- id\n',
+                    schema: {
+                        type: 'array',
+                        items: {
+                            type: 'string',
+                            enum: ['id:ASC', 'id:DESC'],
+                        },
+                    },
+                },
+                {
+                    name: 'search',
+                    required: false,
+                    in: 'query',
+                    description:
+                        'Search term to filter result values\n\n**Example:** John\n\n\n**Default Value:** No default value\n\n',
+                    schema: {
+                        type: 'string',
+                    },
+                },
+                {
+                    name: 'searchBy',
+                    required: false,
+                    in: 'query',
+                    description:
+                        'List of fields to search by term to filter result values\n\n**Example:** name\n\n\n**Default Value:** By default all fields mentioned below will be used to search by term\n\n**Available Fields**\n- name\n',
+                    schema: {
+                        type: 'array',
+                        items: {
+                            type: 'string',
+                        },
+                    },
+                },
+                {
+                    name: 'select',
+                    required: false,
+                    in: 'query',
+                    description:
+                        'List of fields to select.\n\n**Example:** id,name\n\n\n**Default Value:** By default all fields returns. If you want to select only some fields, provide them in query param\n\n',
+                    schema: {
+                        type: 'string',
+                    },
+                },
+            ])
+            expect(openApiDefinition.paths[endpoint].get.responses).toEqual({
+                '200': {
+                    description: '',
+                    content: {
+                        'application/json': {
+                            schema: {
+                                allOf: [
+                                    {
+                                        $ref: '#/components/schemas/PaginatedDocumented',
+                                    },
+                                    {
+                                        properties: {
+                                            data: {
+                                                type: 'array',
+                                                items: {
+                                                    $ref: '#/components/schemas/TestDto',
+                                                },
+                                            },
+                                            meta: {
+                                                properties: {
+                                                    select: {
+                                                        type: 'array',
+                                                        items: {
+                                                            type: 'string',
+                                                            enum: ['id', 'name'],
+                                                        },
+                                                    },
+                                                    filter: {
+                                                        type: 'object',
+                                                        properties: {
+                                                            id: {
+                                                                oneOf: [
+                                                                    {
+                                                                        type: 'string',
+                                                                    },
+                                                                    {
+                                                                        type: 'array',
+                                                                        items: {
+                                                                            type: 'string',
+                                                                        },
+                                                                    },
+                                                                ],
+                                                            },
+                                                            name: {
+                                                                oneOf: [
+                                                                    {
+                                                                        type: 'string',
+                                                                    },
+                                                                    {
+                                                                        type: 'array',
+                                                                        items: {
+                                                                            type: 'string',
+                                                                        },
+                                                                    },
+                                                                ],
+                                                            },
+                                                        },
+                                                    },
+                                                },
+                                            },
+                                        },
+                                    },
+                                ],
+                            },
+                        },
+                    },
+                },
+            })
+        }
+    )
 
     it('should match a base config, snapshot test for all config', async () => {
         const openApiDefinition = await getSwaggerDefinitionForEndpoint(TestDto, FULL_CONFIG)
