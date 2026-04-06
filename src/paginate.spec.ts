@@ -3710,8 +3710,7 @@ describe('paginate', () => {
         })
     }
 
-    if (process.env.DB !== 'postgres') {
-        describe('should return result based on virtual column', () => {
+    describe('should return result based on virtual column', () => {
             it('should return result sorted and filter by a virtual column in main entity', async () => {
                 const config: PaginateConfig<CatHomeEntity> = {
                     sortableColumns: ['countCat'],
@@ -3790,7 +3789,6 @@ describe('paginate', () => {
                 expect(result.links.current).toBe('?page=1&limit=20&sortBy=home.countCat:ASC')
             })
         })
-    }
 
     describe('cursor pagination', () => {
         describe('sortBy: id', () => {

@@ -686,12 +686,24 @@ export async function paginate<T extends ObjectLiteral>(
 
         for (const order of sortBy) {
             const columnProperties = getPropertiesByColumnName(order[0])
-            const { isVirtualProperty } = extractVirtualProperty(queryBuilder, columnProperties)
+            const { isVirtualProperty, query: virtualQuery } = extractVirtualProperty(queryBuilder, columnProperties)
             const isRelation = checkIsRelation(queryBuilder, columnProperties.propertyPath)
             const isEmbedded = checkIsEmbedded(queryBuilder, columnProperties.propertyPath)
             let alias = fixColumnAlias(columnProperties, queryBuilder.alias, isRelation, isVirtualProperty, isEmbedded)
 
-            if (isVirtualProperty) {
+            if (isVirtualProperty && virtualQuery) {
+                const subqueryExpr = fixColumnAlias(
+                    columnProperties,
+                    queryBuilder.alias,
+                    isRelation,
+                    isVirtualProperty,
+                    isEmbedded,
+                    virtualQuery
+                )
+                const vcSortAlias = `_vc_sort_${columnProperties.propertyPath ? columnProperties.propertyPath + '_' : ''}${columnProperties.propertyName}`.toLowerCase()
+                queryBuilder.addSelect(subqueryExpr, vcSortAlias)
+                alias = vcSortAlias
+            } else if (isVirtualProperty) {
                 alias = quoteVirtualColumn(alias, isMySqlOrMariaDb)
             }
 
