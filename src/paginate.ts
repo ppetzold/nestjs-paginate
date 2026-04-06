@@ -700,9 +700,7 @@ export async function paginate<T extends ObjectLiteral>(
                     isEmbedded,
                     virtualQuery
                 )
-                const vcSortAlias = `_vc_sort_${
-                    columnProperties.propertyPath ? columnProperties.propertyPath + '_' : ''
-                }${columnProperties.propertyName}`.toLowerCase()
+                const vcSortAlias = `${alias}_vc_sort`.toLowerCase()
                 queryBuilder.addSelect(subqueryExpr, vcSortAlias)
                 alias = vcSortAlias
             } else if (isVirtualProperty) {
