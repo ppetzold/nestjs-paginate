@@ -171,7 +171,15 @@ export function addWhereCondition<T>(qb: SelectQueryBuilder<T>, column: string, 
     const isEmbedded = checkIsEmbedded(qb, columnProperties.propertyPath)
     const isArray = checkIsArray(qb, columnProperties.propertyName)
 
-    const alias = fixColumnAlias(columnProperties, qb.alias, isRelation, isVirtualProperty, isEmbedded, virtualQuery, qb)
+    const alias = fixColumnAlias(
+        columnProperties,
+        qb.alias,
+        isRelation,
+        isVirtualProperty,
+        isEmbedded,
+        virtualQuery,
+        qb
+    )
     filter[column].forEach((columnFilter: Filter, index: number) => {
         const columnNamePerIteration = `${columnProperties.column}${index}`
         const condition = generatePredicateCondition(
