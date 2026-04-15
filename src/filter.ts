@@ -171,7 +171,7 @@ export function addWhereCondition<T>(qb: SelectQueryBuilder<T>, column: string, 
     const isEmbedded = checkIsEmbedded(qb, columnProperties.propertyPath)
     const isArray = checkIsArray(qb, columnProperties.propertyName)
 
-    const alias = fixColumnAlias(columnProperties, qb.alias, isRelation, isVirtualProperty, isEmbedded, virtualQuery)
+    const alias = fixColumnAlias(columnProperties, qb.alias, isRelation, isVirtualProperty, isEmbedded, virtualQuery, qb)
     filter[column].forEach((columnFilter: Filter, index: number) => {
         const columnNamePerIteration = `${columnProperties.column}${index}`
         const condition = generatePredicateCondition(
@@ -334,53 +334,52 @@ export function parseFilter<T>(
             }
 
             if (jsonbResolution.isJsonb) {
-                const jsonFixValue = fixColumnFilterValue(column, qb, true)
+                const supportJsonContains = [FilterOperator.EQ, FilterOperator.IN, FilterOperator.CONTAINS].includes(
+                    token.operator
+                )
 
-                // Use a stable filter key that preserves the relation path so that
-                // addWhereCondition can later resolve the correct JOIN alias.
-                // e.g. 'detail.referrer.source.platform' → filterKey = 'detail.referrer'
-                //      'metadata.length'                 → filterKey = 'metadata'
-                //      'underCoat.metadata.length'       → filterKey = 'underCoat.metadata'
-                const filterKey = [...jsonbResolution.relationPath, jsonbResolution.jsonbColumn].join('.')
+                if (supportJsonContains) {
+                    const jsonFixValue = fixColumnFilterValue(column, qb, true)
 
-                // Build a JsonContains containment object for a single leaf value.
-                // e.g. jsonPath=['source','platform'], value='web' → { source: { platform: 'web' } }
-                //      jsonPath=['length'],            value=5     → { length: 5 }
-                const buildContainment = (rawValue: string) => {
-                    const leafValue = jsonFixValue(rawValue)
-                    return jsonbResolution.jsonPath.reduceRight<Record<string, unknown>>(
-                        (acc, key) => ({ [key]: acc }),
-                        leafValue as unknown as Record<string, unknown>
-                    )
-                }
+                    // Use a stable filter key that preserves the relation path so that
+                    // addWhereCondition can later resolve the correct JOIN alias.
+                    // e.g. 'detail.referrer.source.platform' → filterKey = 'detail.referrer'
+                    //      'metadata.length'                 → filterKey = 'metadata'
+                    //      'underCoat.metadata.length'       → filterKey = 'underCoat.metadata'
+                    const filterKey = [...jsonbResolution.relationPath, jsonbResolution.jsonbColumn].join('.')
 
-                if (token.operator === FilterOperator.IN) {
-                    // $in expands each comma-separated value to its own JsonContains condition.
-                    // Conditions after the first are OR'd together, producing:
-                    //   AND (col @> '{a}' OR col @> '{b}' OR col @> '{c}')
-                    // which is semantically equivalent to col->>'key' IN ('a', 'b', 'c').
-                    //
-                    //! JsonContains uses @> which only supports equality, not range operators.
-                    //! See: https://github.com/typeorm/typeorm/pull/9665
-                    token.value.split(',').forEach((val, i) => {
+                    // Build a JsonContains containment object for a single leaf value.
+                    // e.g. jsonPath=['source','platform'], value='web' → { source: { platform: 'web' } }
+                    //      jsonPath=['length'],            value=5     → { length: 5 }
+                    const buildContainment = (rawValue: string) => {
+                        const leafValue = jsonFixValue(rawValue)
+                        return jsonbResolution.jsonPath.reduceRight<Record<string, unknown>>(
+                            (acc, key) => ({ [key]: acc }),
+                            leafValue as unknown as Record<string, unknown>
+                        )
+                    }
+
+                    if (token.operator === FilterOperator.IN) {
+                        token.value.split(',').forEach((val, i) => {
+                            filter[filterKey] = [
+                                ...(filter[filterKey] || []),
+                                {
+                                    comparator: i === 0 ? params.comparator : FilterComparator.OR,
+                                    findOperator: JsonContains(buildContainment(val.trim())),
+                                },
+                            ]
+                        })
+                    } else {
                         filter[filterKey] = [
                             ...(filter[filterKey] || []),
                             {
-                                comparator: i === 0 ? params.comparator : FilterComparator.OR,
-                                findOperator: JsonContains(buildContainment(val.trim())),
+                                comparator: params.comparator,
+                                findOperator: JsonContains(buildContainment(token.value)),
                             },
                         ]
-                    })
+                    }
                 } else {
-                    filter[filterKey] = [
-                        ...(filter[filterKey] || []),
-                        {
-                            comparator: params.comparator,
-                            findOperator: JsonContains(buildContainment(token.value)),
-                            //! JsonContains uses @> operator which only supports $eq semantics.
-                            //! See: https://github.com/typeorm/typeorm/pull/9665
-                        },
-                    ]
+                    filter[column] = [...(filter[column] || []), params]
                 }
             } else {
                 filter[column] = [...(filter[column] || []), params]
@@ -390,10 +389,14 @@ export function parseFilter<T>(
             // For JSONB $in, $not must be applied to every expanded entry so that
             // NOT (col @> '{a}') AND NOT (col @> '{b}') is produced (NOT IN semantics).
             if (token.suffix) {
-                const filterKey = jsonbResolution.isJsonb
+                const isJsonbAndSupportsJsonContains =
+                    jsonbResolution.isJsonb &&
+                    [FilterOperator.EQ, FilterOperator.IN, FilterOperator.CONTAINS].includes(token.operator)
+
+                const filterKey = isJsonbAndSupportsJsonContains
                     ? [...jsonbResolution.relationPath, jsonbResolution.jsonbColumn].join('.')
                     : column
-                const isJsonbIn = jsonbResolution.isJsonb && token.operator === FilterOperator.IN
+                const isJsonbIn = isJsonbAndSupportsJsonContains && token.operator === FilterOperator.IN
                 const applyFrom = isJsonbIn
                     ? filter[filterKey].length - token.value.split(',').length
                     : filter[filterKey].length - 1
