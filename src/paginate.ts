@@ -718,7 +718,10 @@ export async function paginate<T extends ObjectLiteral>(
                           queryBuilder
                       )
                 const vcSortAlias = isJsonbPath
-                    ? `${queryBuilder.alias}_jsonb_${columnProperties.column.replace(/[^a-zA-Z0-9]/g, '_')}_sort`.toLowerCase()
+                    ? `${queryBuilder.alias}_jsonb_${columnProperties.column.replace(
+                          /[^a-zA-Z0-9]/g,
+                          '_'
+                      )}_sort`.toLowerCase()
                     : `${alias}_vc_sort`.toLowerCase()
                 queryBuilder.addSelect(subqueryExpr, vcSortAlias)
                 alias = vcSortAlias
@@ -834,7 +837,9 @@ export async function paginate<T extends ObjectLiteral>(
         let cols: string[] = selectParams.reduce((cols, currentCol) => {
             const columnProperties = getPropertiesByColumnName(currentCol)
             const isRelation = checkIsRelation(queryBuilder, columnProperties.propertyPath)
-            cols.push(fixColumnAlias(columnProperties, queryBuilder.alias, isRelation, false, false, undefined, queryBuilder))
+            cols.push(
+                fixColumnAlias(columnProperties, queryBuilder.alias, isRelation, false, false, undefined, queryBuilder)
+            )
             return cols
         }, [])
 
