@@ -589,18 +589,27 @@ const config: PaginateConfig<CatEntity> = {
 
 `?filter.roles=$contains:moderator,admin` where column `roles` is an array and contains the values `moderator` and `admin`
 
-## JSONB Filters
+## JSONB Support
 
-You can filter on JSONB columns using dot notation to access nested fields.
+You can sort, search, and filter on JSONB columns using dot notation to access nested fields.
 
-### Supported operators
+### Database support matrix
+
+| Feature | PostgreSQL / CockroachDB | MySQL / MariaDB | SQLite |
+|---------|---|---|---|
+| **Sorting** (`sortableColumns`) | Yes (`#>>`) | Yes (`JSON_UNQUOTE(JSON_EXTRACT(...))`) | Yes (`json_extract`) |
+| **Searching** (`searchableColumns`) | Yes | Yes | Yes |
+| **Filtering** (`$eq`, `$in`, `$contains`) | Yes (`@>` containment) | No | No |
+
+> **Note:** Sorting and searching on JSONB paths is supported across all database engines — the library automatically uses the correct JSON extraction function for your DB. Filtering via `$eq`, `$in`, and `$contains` uses PostgreSQL's `@>` containment operator (via TypeORM's `JsonContains`) and is only supported on **PostgreSQL** and **CockroachDB**.
+
+### Filtering operators (PostgreSQL / CockroachDB only)
 
 | Operator | Description |
 |----------|-------------|
-| `$eq` | Exact match (`column @> '{"key":"value"}'`) |
-| `$in` | Match any of a comma-separated list of values |
-
-> **Note:** JSONB filtering is implemented using PostgreSQL's `@>` (containment) operator and is only supported by **PostgreSQL**.
+| `$eq`       | Exact match via containment (`col @> '{"key":"value"}'`) |
+| `$in`       | Match any of a comma-separated list of values |
+| `$contains` | Match if a JSON array contains the value |
 
 ### Direct JSONB column
 

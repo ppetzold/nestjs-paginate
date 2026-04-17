@@ -167,7 +167,7 @@ export function getMissingPrimaryKeyColumns(qb: SelectQueryBuilder<any>, transfo
 
     for (const pk of mainEntityPrimaryKeys) {
         const columnProperties = getPropertiesByColumnName(pk)
-        const pkAlias = fixColumnAlias(columnProperties, qb.alias, false)
+        const pkAlias = fixColumnAlias(columnProperties, qb.alias, false, false, false, undefined, qb)
 
         if (!transformedCols.includes(pkAlias)) {
             missingPrimaryKeys.push(pkAlias)
@@ -318,8 +318,44 @@ export function fixColumnAlias(
     isRelation = false,
     isVirtualProperty = false,
     isEmbedded = false,
-    query?: ColumnMetadata['query']
+    query?: ColumnMetadata['query'],
+    qb?: SelectQueryBuilder<unknown>
 ): string {
+    let jsonbResolution: JsonbPathResolution | undefined
+    if (qb) {
+        jsonbResolution = resolveJsonbPath(qb, properties.column)
+    }
+
+    if (jsonbResolution && jsonbResolution.isJsonb) {
+        const baseColumnProperties = getPropertiesByColumnName(
+            [...jsonbResolution.relationPath, jsonbResolution.jsonbColumn].join('.')
+        )
+        const baseAlias = fixColumnAlias(
+            baseColumnProperties,
+            alias,
+            jsonbResolution.relationPath.length > 0,
+            isVirtualProperty,
+            isEmbedded,
+            query
+        )
+
+        if (jsonbResolution.jsonPath.length === 0) {
+            return baseAlias
+        }
+
+        const dbType = qb.connection.options.type
+        if (dbType === 'postgres' || dbType === 'cockroachdb') {
+            const pathLiteral = jsonbResolution.jsonPath.join(',')
+            return `${baseAlias} #>> '{${pathLiteral}}'`
+        } else if (dbType === 'mysql' || dbType === 'mariadb') {
+            const mysqlPath = jsonbResolution.jsonPath.map((p) => `"${p}"`).join('.')
+            return `JSON_UNQUOTE(JSON_EXTRACT(${baseAlias}, '$.${mysqlPath}'))`
+        } else {
+            const sqlitePath = jsonbResolution.jsonPath.map((p) => `"${p}"`).join('.')
+            return `json_extract(${baseAlias}, '$.${sqlitePath}')`
+        }
+    }
+
     if (isRelation) {
         if (isVirtualProperty && query) {
             return `(${query(`${alias}_${properties.propertyPath}_rel`)})` // () is needed to avoid parameter conflict
