@@ -4,7 +4,7 @@ import { ReferenceObject, SchemaObject } from '@nestjs/swagger/dist/interfaces/o
 import { PaginateConfig } from '../paginate'
 import { PaginatedDocumented } from './paginated-swagger.type'
 
-export const ApiOkPaginatedResponse = <DTO extends Type<unknown>>(
+export const ApiOkPaginatedResponse = <DTO extends Type<unknown> | string>(
     dataDto: DTO,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     paginatedConfig: PaginateConfig<any>
@@ -12,7 +12,7 @@ export const ApiOkPaginatedResponse = <DTO extends Type<unknown>>(
     const cols = paginatedConfig?.filterableColumns || {}
 
     return applyDecorators(
-        ApiExtraModels(PaginatedDocumented, dataDto),
+        ...(typeof dataDto !== 'string' ? [ApiExtraModels(PaginatedDocumented, dataDto)] : []),
         ApiOkResponse({
             schema: {
                 allOf: [

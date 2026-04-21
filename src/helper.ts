@@ -167,7 +167,7 @@ export function getMissingPrimaryKeyColumns(qb: SelectQueryBuilder<any>, transfo
 
     for (const pk of mainEntityPrimaryKeys) {
         const columnProperties = getPropertiesByColumnName(pk)
-        const pkAlias = fixColumnAlias(columnProperties, qb.alias, false)
+        const pkAlias = fixColumnAlias(columnProperties, qb.alias, false, false, false, undefined, qb)
 
         if (!transformedCols.includes(pkAlias)) {
             missingPrimaryKeys.push(pkAlias)
@@ -238,14 +238,90 @@ export function checkIsJsonb(qb: SelectQueryBuilder<unknown>, propertyName: stri
         return false
     }
 
-    if (propertyName.includes('.')) {
-        const parts = propertyName.split('.')
-        const dbColumnName = parts[parts.length - 2]
+    const resolution = resolveJsonbPath(qb, propertyName)
+    return resolution.isJsonb
+}
 
-        return qb?.expressionMap?.mainAlias?.metadata.findColumnWithPropertyName(dbColumnName)?.type === 'jsonb'
+/**
+ * Describes how a dot-separated filter path maps to a JSONB column.
+ *
+ * Given a path like `detail.referrer.source.platform`:
+ *   - relationPath: ['detail']           — segments that are TypeORM relations (require JOIN)
+ *   - jsonbColumn:  'referrer'           — the JSONB column on the final relation entity
+ *   - jsonPath:     ['source', 'platform'] — the key path inside the JSON value
+ */
+export interface JsonbPathResolution {
+    isJsonb: boolean
+    /** Relation segments leading up to the entity that owns the JSONB column */
+    relationPath: string[]
+    /** Name of the JSONB column on that entity */
+    jsonbColumn: string
+    /** Key path inside the JSON value (may be empty for a top-level JSONB filter) */
+    jsonPath: string[]
+}
+
+/**
+ * Walks the dot-separated `column` path through TypeORM entity metadata to determine
+ * whether the path terminates in a JSONB column and, if so, where the relation chain
+ * ends and the JSON key path begins.
+ *
+ * Algorithm:
+ *   For each segment, check whether the current entity metadata has a relation
+ *   with that name.  If yes, follow the relation and continue.  If no, check
+ *   whether it is a JSONB column on the current entity.  If yes, all remaining
+ *   segments are JSON key path.  Otherwise, the path is not JSONB.
+ */
+export function resolveJsonbPath(qb: SelectQueryBuilder<unknown>, column: string): JsonbPathResolution {
+    const notJsonb: JsonbPathResolution = { isJsonb: false, relationPath: [], jsonbColumn: '', jsonPath: [] }
+
+    if (!qb || !column) {
+        return notJsonb
     }
 
-    return qb?.expressionMap?.mainAlias?.metadata.findColumnWithPropertyName(propertyName)?.type === 'jsonb'
+    const parts = column.split('.')
+    // A plain column name without dots is not a JSONB path — callers use checkIsJsonb directly.
+    if (parts.length < 2) {
+        return notJsonb
+    }
+
+    let metadata = qb?.expressionMap?.mainAlias?.metadata
+    const relationPath: string[] = []
+
+    for (let i = 0; i < parts.length - 1; i++) {
+        const segment = parts[i]
+        const relation = metadata?.relations?.find((r) => r.propertyPath === segment)
+
+        if (relation) {
+            relationPath.push(segment)
+            metadata = relation.inverseEntityMetadata
+        } else {
+            // Not a relation — check whether it is a JSONB column
+            const isJsonbColumn = metadata?.findColumnWithPropertyName(segment)?.type === 'jsonb'
+            if (!isJsonbColumn) {
+                return notJsonb
+            }
+            return {
+                isJsonb: true,
+                relationPath,
+                jsonbColumn: segment,
+                jsonPath: parts.slice(i + 1),
+            }
+        }
+    }
+
+    // All segments except the last were relations; the last segment must be a JSONB column.
+    const lastSegment = parts[parts.length - 1]
+    const isJsonbColumn = metadata?.findColumnWithPropertyName(lastSegment)?.type === 'jsonb'
+    if (isJsonbColumn) {
+        return {
+            isJsonb: true,
+            relationPath,
+            jsonbColumn: lastSegment,
+            jsonPath: [],
+        }
+    }
+
+    return notJsonb
 }
 
 // This function is used to fix the column alias when using relation, embedded or virtual properties
@@ -255,8 +331,44 @@ export function fixColumnAlias(
     isRelation = false,
     isVirtualProperty = false,
     isEmbedded = false,
-    query?: ColumnMetadata['query']
+    query?: ColumnMetadata['query'],
+    qb?: SelectQueryBuilder<unknown>
 ): string {
+    let jsonbResolution: JsonbPathResolution | undefined
+    if (qb) {
+        jsonbResolution = resolveJsonbPath(qb, properties.column)
+    }
+
+    if (jsonbResolution && jsonbResolution.isJsonb) {
+        const baseColumnProperties = getPropertiesByColumnName(
+            [...jsonbResolution.relationPath, jsonbResolution.jsonbColumn].join('.')
+        )
+        const baseAlias = fixColumnAlias(
+            baseColumnProperties,
+            alias,
+            jsonbResolution.relationPath.length > 0,
+            isVirtualProperty,
+            isEmbedded,
+            query
+        )
+
+        if (jsonbResolution.jsonPath.length === 0) {
+            return baseAlias
+        }
+
+        const dbType = qb.connection.options.type
+        if (dbType === 'postgres' || dbType === 'cockroachdb') {
+            const pathLiteral = jsonbResolution.jsonPath.join(',')
+            return `${baseAlias} #>> '{${pathLiteral}}'`
+        } else if (dbType === 'mysql' || dbType === 'mariadb') {
+            const mysqlPath = jsonbResolution.jsonPath.map((p) => `"${p}"`).join('.')
+            return `JSON_UNQUOTE(JSON_EXTRACT(${baseAlias}, '$.${mysqlPath}'))`
+        } else {
+            const sqlitePath = jsonbResolution.jsonPath.map((p) => `"${p}"`).join('.')
+            return `json_extract(${baseAlias}, '$.${sqlitePath}')`
+        }
+    }
+
     if (isRelation) {
         if (isVirtualProperty && query) {
             return `(${query(`${alias}_${properties.propertyPath}_rel`)})` // () is needed to avoid parameter conflict
@@ -300,7 +412,7 @@ export function getQueryUrlComponents(path: string): { queryOrigin: string; quer
 }
 
 const isoDateRegExp = new RegExp(
-    /(\d{4}-[01]\d-[0-3]\dT[0-2]\d:[0-5]\d:[0-5]\d\.\d+([+-][0-2]\d:[0-5]\d|Z))|(\d{4}-[01]\d-[0-3]\dT[0-2]\d:[0-5]\d:[0-5]\d([+-][0-2]\d:[0-5]\d|Z))|(\d{4}-[01]\d-[0-3]\dT[0-2]\d:[0-5]\d([+-][0-2]\d:[0-5]\d|Z))/
+    /^((\d{4}-[01]\d-[0-3]\dT[0-2]\d:[0-5]\d:[0-5]\d\.\d+([+-][0-2]\d:[0-5]\d|Z))|(\d{4}-[01]\d-[0-3]\dT[0-2]\d:[0-5]\d:[0-5]\d([+-][0-2]\d:[0-5]\d|Z))|(\d{4}-[01]\d-[0-3]\dT[0-2]\d:[0-5]\d([+-][0-2]\d:[0-5]\d|Z)))$/
 )
 
 export function isISODate(str: string): boolean {

@@ -631,11 +631,83 @@ const config: PaginateConfig<CatEntity> = {
 
 `?filter.roles=$contains:moderator,admin` where column `roles` is an array and contains the values `moderator` and `admin`
 
-## Jsonb Filters
+## JSONB Support
 
-You can filter on jsonb columns by using the dot notation. Json columns is limited to `$eq` operators only.
+You can sort, search, and filter on JSONB columns using dot notation to access nested fields.
 
-`?filter.metadata.enabled=$eq:true` where column `metadata` is jsonb and contains an object with the key `enabled`.
+### Database support matrix
+
+| Feature | PostgreSQL / CockroachDB | MySQL / MariaDB | SQLite |
+|---------|---|---|---|
+| **Sorting** (`sortableColumns`) | Yes (`#>>`) | Yes (`JSON_UNQUOTE(JSON_EXTRACT(...))`) | Yes (`json_extract`) |
+| **Searching** (`searchableColumns`) | Yes | Yes | Yes |
+| **Filtering** (`$eq`, `$in`, `$contains`) | Yes (`@>` containment) | No | No |
+
+> **Note:** Sorting and searching on JSONB paths is supported across all database engines — the library automatically uses the correct JSON extraction function for your DB. Filtering via `$eq`, `$in`, and `$contains` uses PostgreSQL's `@>` containment operator (via TypeORM's `JsonContains`) and is only supported on **PostgreSQL** and **CockroachDB**.
+
+### Filtering operators (PostgreSQL / CockroachDB only)
+
+| Operator | Description |
+|----------|-------------|
+| `$eq`       | Exact match via containment (`col @> '{"key":"value"}'`) |
+| `$in`       | Match any of a comma-separated list of values |
+| `$contains` | Match if a JSON array contains the value |
+
+### Direct JSONB column
+
+```
+?filter.metadata.enabled=$eq:true
+```
+
+where `metadata` is a JSONB column and the filter matches rows whose `metadata` object contains `{ "enabled": true }`.
+
+### JSONB column through a relation
+
+Use the same dot notation to traverse relations before accessing the JSONB field:
+
+```
+?filter.settings.theme=$eq:dark
+```
+
+where `settings` is a relation whose JSONB column `theme` is filtered.
+
+```typescript
+const config: PaginateConfig<UserEntity> = {
+  relations: ['settings'],
+  filterableColumns: {
+    'settings.theme': [FilterOperator.EQ, FilterOperator.IN],
+  },
+}
+```
+
+### Deeply nested JSONB paths
+
+Paths inside the JSON value itself can be arbitrarily deep:
+
+```
+?filter.settings.ui.sidebar.color=$eq:blue
+```
+
+Regardless of nesting depth, the library walks TypeORM entity metadata to determine where the relation chain ends and the JSON key path begins, then builds the correct `@>` containment expression automatically.
+
+### `$in` operator on JSONB
+
+```
+?filter.metadata.status=$in:active,pending
+?filter.settings.theme=$in:dark,light
+```
+
+Each value is expanded into its own `@>` condition joined with `OR`:
+
+```sql
+(col @> '{"status":"active"}' OR col @> '{"status":"pending"}')
+```
+
+`$not:$in` is also supported and produces `NOT` conditions joined with `AND`:
+
+```
+?filter.metadata.status=$not:$in:banned,suspended
+```
 
 ## Multi Filters
 

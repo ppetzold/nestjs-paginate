@@ -35,6 +35,9 @@ export class CatHomeEntity {
     @CreateDateColumn(DateColumnNotNull)
     createdAt: string
 
+    @Column({ type: process.env.DB === 'postgres' ? 'jsonb' : 'simple-json', nullable: true })
+    config: Record<string, any> | null
+
     @VirtualColumn({
         query: (alias) => {
             const tck = process.env.DB === 'mariadb' ? '`' : '"'
