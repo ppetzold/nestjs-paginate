@@ -296,7 +296,7 @@ function fixColumnFilterValue<T>(column: string, qb: SelectQueryBuilder<T>, isJs
 
 export function parseFilter<T>(
     query: PaginateQuery,
-    filterableColumns?: { [column: string]: (FilterOperator | FilterSuffix | FilterQuantifier)[] | true },
+    filterableColumns?: { [column: string]: (FilterOperator | FilterSuffix | FilterQuantifier | FilterComparator)[] | true },
     qb?: SelectQueryBuilder<T>
 ): ColumnFilters {
     const filter: ColumnFilters = {}
@@ -538,7 +538,7 @@ function findFirstToManyRelationship(
 export function addFilter<T>(
     qb: SelectQueryBuilder<T>,
     query: PaginateQuery,
-    filterableColumns?: { [column: string]: (FilterOperator | FilterSuffix | FilterQuantifier)[] | true }
+    filterableColumns?: { [column: string]: (FilterOperator | FilterSuffix | FilterQuantifier | FilterComparator)[] | true }
 ) {
     const mainMetadata = qb.expressionMap.mainAlias.metadata
     const filter = parseFilter(query, filterableColumns, qb)
@@ -605,7 +605,7 @@ export function addToManySubFilters<T>(
     qb: SelectQueryBuilder<T>,
     filter: ColumnFilters,
     query: PaginateQuery,
-    filterableColumns?: { [column: string]: (FilterOperator | FilterSuffix | FilterQuantifier)[] | true }
+    filterableColumns?: { [column: string]: (FilterOperator | FilterSuffix | FilterQuantifier | FilterComparator)[] | true }
 ) {
     const dbType = qb.connection.options.type
     const quote = (column: string) => quoteColumn(column, ['mysql', 'mariadb'].includes(dbType))
@@ -627,128 +627,186 @@ export function addToManySubFilters<T>(
 
         // 1. Create the EXISTS subquery, starting from the toMany entity
         const existsMetadata = relation.inverseEntityMetadata
-        const existsQb = qb.connection.createQueryBuilder(existsMetadata.target as any, toManyAlias)
 
         if (existsMetadata.deleteDateColumn) {
             //existsQb.andWhere(`"${toManyAlias}"."${existsMetadata.deleteDateColumn.databaseName}" IS NULL`)
         }
 
-        // 2. Add the subfilters to the EXISTS subquery
+        // 2. Extract sub-filters for this path.
+        // If any sub-filter entry uses the $and comparator, we must emit one correlated EXISTS
+        // subquery per value — because a single EXISTS with AND conditions on the same column
+        // (e.g. WHERE tag.id = A AND tag.id = B) is always false on a single row.
+        // We split $and values into individual sub-queries and AND them on the outer query.
         const { subQuery, subFilterableColumns } = createSubFilter(query, filterableColumns, path)
-        const subJoins = addFilter(existsQb, subQuery, subFilterableColumns)
 
-        // 3. Add the sub relationship joins to the EXISTS subquery
-        const relationsSchema = mergeRelationSchema(createRelationSchema(Object.keys(subJoins)))
-        // Only inner join, no need to select anything
-        addRelationsFromSchema(existsQb, relationsSchema, {}, 'innerJoin')
-
-        // 4. Build the chain of joins that backtracks our toMany relationship to the root.
-
-        // We iterate from the second-to-last item (the immediate parent) back to the first item (root's child)
-        for (let i = relationPath.length - 1; i >= 0; i--) {
-            const [, meta] = relationPath[i]
-
-            // --- A: Skip Embedded Entities ---
-            if (meta.type === 'embedded') {
-                // Embedded entities exist within the current table (currentChildAlias).
-                // They do not require a JOIN, so we simply continue to the next item in the path.
-                continue
-            }
-
-            // --- B: Handle Table Relation (RelationMetadata) ---
-            // If we reach this point, 'meta' is a RelationMetadata object.
-            const parentMeta = meta as RelationMetadata
-
-            // Check if this is an intermediate or top-level relationship
-            if (i !== 0) {
-                // --- Intermediate Join (Joining two non-root tables within the subquery) ---
-
-                const parentAlias = `_rel_${relationPath[i - 1][0]}_${i - 1}`
-                const childAlias = `_rel_${relationPath[i][0]}_${i}`
-                const childRelationMetadata = parentMeta.inverseRelation
-
-                // Get the join columns from the inverse relation of the current metadata (e.g., inverse of 'pillows')
-                const joinCols = childRelationMetadata.joinColumns
-
-                // Construct the ON condition (handles composite keys)
-                const onConditions = joinCols
-                    .map((jc) => {
-                        const fk = jc.databaseName
-                        const pk = jc.referencedColumn.databaseName
-                        return `${quote(childAlias)}.${quote(fk)} = ${quote(parentAlias)}.${quote(pk)}`
-                    })
-                    .join(' AND ')
-
-                // Add the INNER JOIN to the subquery
-                existsQb.innerJoin(
-                    childRelationMetadata.inverseRelation.entityMetadata.target,
-                    parentAlias,
-                    onConditions
-                )
-            } else {
-                // Perform the final correlation WHERE clause to the main query alias
-                const joinMeta = parentMeta.isOwning ? parentMeta : parentMeta.inverseRelation
-
-                if (parentMeta.isManyToMany) {
-                    // For ManyToMany, the FK columns live in the junction (join) table, not on the
-                    // related entity's table. We must JOIN the junction table into the EXISTS subquery
-                    // and correlate via it.
-                    const junctionMeta = joinMeta.junctionEntityMetadata
-                    const junctionAlias = `_junc_${relationPath[0][0]}_0`
-                    const relatedAlias = `_rel_${relationPath[0][0]}_0`
-
-                    // When accessed from the owning side:
-                    //   joinColumns        → junction → owning entity (mainQueryAlias)
-                    //   inverseJoinColumns → junction → inverse entity (relatedAlias)
-                    // When accessed from the inverse side, the roles are swapped.
-                    const toRelatedCols = parentMeta.isOwning ? joinMeta.inverseJoinColumns : joinMeta.joinColumns
-                    const toMainCols = parentMeta.isOwning ? joinMeta.joinColumns : joinMeta.inverseJoinColumns
-
-                    const junctionToRelatedConditions = toRelatedCols
-                        .map((jc) => {
-                            const junctionCol = jc.databaseName
-                            const relatedPk = jc.referencedColumn.databaseName
-                            return `${quote(junctionAlias)}.${quote(junctionCol)} = ${quote(relatedAlias)}.${quote(
-                                relatedPk
-                            )}`
-                        })
-                        .join(' AND ')
-
-                    const junctionTarget = junctionMeta.target ?? junctionMeta.tableName
-                    existsQb.innerJoin(junctionTarget, junctionAlias, junctionToRelatedConditions)
-
-                    // Correlate the junction table back to the main query entity.
-                    for (const joinColumn of toMainCols) {
-                        const junctionCol = joinColumn.databaseName
-                        const mainPk = joinColumn.referencedColumn.databaseName
-                        existsQb.andWhere(
-                            `${quote(junctionAlias)}.${quote(junctionCol)} = ${quote(mainQueryAlias)}.${quote(mainPk)}`
-                        )
-                    }
-                } else {
-                    for (const joinColumn of joinMeta.joinColumns) {
-                        // 1. Get the raw column names from the owning metadata:
-                        const fkColumn = joinColumn.databaseName
-                        const pkColumn = joinColumn.referencedColumn.databaseName
-
-                        // 2. Get the table aliases
-                        let fkAlias: string
-                        let pkAlias: string
-                        if (parentMeta.isOwning) {
-                            pkAlias = `_rel_${relationPath[0][0]}_0`
-                            fkAlias = mainQueryAlias
-                        } else {
-                            fkAlias = `_rel_${relationPath[0][0]}_0`
-                            pkAlias = mainQueryAlias
-                        }
-
-                        // Correlation
-                        existsQb.andWhere(`${quote(fkAlias)}.${quote(fkColumn)} = ${quote(pkAlias)}.${quote(pkColumn)}`)
-                    }
-                }
+        // Collect $and filter values per sub-column so we can split them out.
+        const andValuesBySubColumn: { [subCol: string]: string[] } = {}
+        for (const [subCol, rawValues] of Object.entries(subQuery.filter ?? {})) {
+            const values = Array.isArray(rawValues) ? rawValues : [rawValues]
+            const andValues = values.filter((v) => {
+                const token = parseFilterToken(v)
+                return token && token.comparator === FilterComparator.AND && token.quantifier === FilterQuantifier.ANY
+            })
+            if (andValues.length >= 1) {
+                andValuesBySubColumn[subCol] = andValues
             }
         }
 
+        // Determine how many EXISTS subqueries to emit for this path.
+        // If there are $and values on any sub-column, we need one EXISTS per value (for those columns).
+        // Other sub-columns (OR-mode) are included in every EXISTS subquery unchanged.
+        const andSubColumns = Object.keys(andValuesBySubColumn)
+
+        // Build a helper that constructs and correlates a single EXISTS subquery for this path.
+        // existsIndex must be unique per EXISTS emitted for this path to avoid alias collisions
+        // when multiple EXISTS subqueries are added to the same outer query (AND-mode).
+        const buildExistsQb = (extraSubQuery: PaginateQuery, existsIndex = 0) => {
+            const relAlias = (name: string, depth: number) => `_rel_${name}_${depth}_e${existsIndex}`
+            const juncAlias = (name: string, depth: number) => `_junc_${name}_${depth}_e${existsIndex}`
+            const leafAlias = relAlias(relationPath[relationPath.length - 1][0], relationPath.length - 1)
+            const existsQb = qb.connection.createQueryBuilder(existsMetadata.target as any, leafAlias)
+
+            const subJoins = addFilter(existsQb, extraSubQuery, subFilterableColumns)
+
+            // 3. Add the sub relationship joins to the EXISTS subquery
+            const relationsSchema = mergeRelationSchema(createRelationSchema(Object.keys(subJoins)))
+            addRelationsFromSchema(existsQb, relationsSchema, {}, 'innerJoin')
+
+            // 4. Build the chain of joins that backtracks our toMany relationship to the root.
+            for (let i = relationPath.length - 1; i >= 0; i--) {
+                const [, meta] = relationPath[i]
+
+                // --- A: Skip Embedded Entities ---
+                if (meta.type === 'embedded') {
+                    continue
+                }
+
+                // --- B: Handle Table Relation (RelationMetadata) ---
+                const parentMeta = meta as RelationMetadata
+
+                if (i !== 0) {
+                    // --- Intermediate Join ---
+                    const parentAlias = relAlias(relationPath[i - 1][0], i - 1)
+                    const childAlias = relAlias(relationPath[i][0], i)
+                    const childRelationMetadata = parentMeta.inverseRelation
+                    const joinCols = childRelationMetadata.joinColumns
+                    const onConditions = joinCols
+                        .map((jc) => {
+                            const fk = jc.databaseName
+                            const pk = jc.referencedColumn.databaseName
+                            return `${quote(childAlias)}.${quote(fk)} = ${quote(parentAlias)}.${quote(pk)}`
+                        })
+                        .join(' AND ')
+                    existsQb.innerJoin(
+                        childRelationMetadata.inverseRelation.entityMetadata.target,
+                        parentAlias,
+                        onConditions
+                    )
+                } else {
+                    // --- Root correlation ---
+                    const joinMeta = parentMeta.isOwning ? parentMeta : parentMeta.inverseRelation
+
+                    if (parentMeta.isManyToMany) {
+                        // For ManyToMany, the FK columns live in the junction (join) table, not on the
+                        // related entity's table. We must JOIN the junction table into the EXISTS subquery
+                        // and correlate via it.
+                        const junctionMeta = joinMeta.junctionEntityMetadata
+                        const junctionAlias = juncAlias(relationPath[0][0], 0)
+                        const relatedAlias = relAlias(relationPath[0][0], 0)
+
+                        // When accessed from the owning side:
+                        //   joinColumns        → junction → owning entity (mainQueryAlias)
+                        //   inverseJoinColumns → junction → inverse entity (relatedAlias)
+                        // When accessed from the inverse side, the roles are swapped.
+                        const toRelatedCols = parentMeta.isOwning ? joinMeta.inverseJoinColumns : joinMeta.joinColumns
+                        const toMainCols = parentMeta.isOwning ? joinMeta.joinColumns : joinMeta.inverseJoinColumns
+
+                        const junctionToRelatedConditions = toRelatedCols
+                            .map((jc) => {
+                                const junctionCol = jc.databaseName
+                                const relatedPk = jc.referencedColumn.databaseName
+                                return `${quote(junctionAlias)}.${quote(junctionCol)} = ${quote(relatedAlias)}.${quote(relatedPk)}`
+                            })
+                            .join(' AND ')
+
+                        const junctionTarget = junctionMeta.target ?? junctionMeta.tableName
+                        existsQb.innerJoin(junctionTarget, junctionAlias, junctionToRelatedConditions)
+
+                        for (const joinColumn of toMainCols) {
+                            const junctionCol = joinColumn.databaseName
+                            const mainPk = joinColumn.referencedColumn.databaseName
+                            existsQb.andWhere(
+                                `${quote(junctionAlias)}.${quote(junctionCol)} = ${quote(mainQueryAlias)}.${quote(mainPk)}`
+                            )
+                        }
+                    } else {
+                        for (const joinColumn of joinMeta.joinColumns) {
+                            const fkColumn = joinColumn.databaseName
+                            const pkColumn = joinColumn.referencedColumn.databaseName
+                            let fkAlias: string
+                            let pkAlias: string
+                            if (parentMeta.isOwning) {
+                                pkAlias = relAlias(relationPath[0][0], 0)
+                                fkAlias = mainQueryAlias
+                            } else {
+                                fkAlias = relAlias(relationPath[0][0], 0)
+                                pkAlias = mainQueryAlias
+                            }
+                            existsQb.andWhere(
+                                `${quote(fkAlias)}.${quote(fkColumn)} = ${quote(pkAlias)}.${quote(pkColumn)}`
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Rename all parameters in the EXISTS subquery to include the existsIndex suffix,
+            // preventing parameter name collisions when multiple EXISTS subqueries are added
+            // to the same outer query (AND-mode emits one EXISTS per $and value).
+            if (existsIndex > 0) {
+                const suffix = `_e${existsIndex}`
+                const oldParams = { ...existsQb.expressionMap.parameters }
+                existsQb.expressionMap.parameters = {}
+                for (const [key, value] of Object.entries(oldParams)) {
+                    existsQb.expressionMap.parameters[key + suffix] = value
+                }
+                const renameParamsInCondition = (condition: any, suffix: string): void => {
+                    if (typeof condition === 'string') {
+                        return // handled at the where level
+                    }
+                    if (Array.isArray(condition)) {
+                        for (const item of condition) {
+                            renameParamsInCondition(item, suffix)
+                        }
+                        return
+                    }
+                    if (condition && typeof condition === 'object') {
+                        if (typeof condition.condition === 'string') {
+                            condition.condition = condition.condition.replace(
+                                /:([a-zA-Z0-9_]+)\b/g,
+                                (_, name) => `:${name}${suffix}`
+                            )
+                        } else if (condition.condition) {
+                            renameParamsInCondition(condition.condition, suffix)
+                        }
+                    }
+                }
+                for (const where of existsQb.expressionMap.wheres) {
+                    if (typeof where.condition === 'string') {
+                        where.condition = where.condition.replace(
+                            /:([a-zA-Z0-9_]+)\b/g,
+                            (_, name) => `:${name}${suffix}`
+                        )
+                    } else {
+                        renameParamsInCondition(where.condition, suffix)
+                    }
+                }
+            }
+
+            return existsQb
+        }
+
+        // Determine the quantifier for this path (must be uniform across all sub-columns).
         const quantifiers = Object.entries(filter)
             .filter(([key]) => key.startsWith(path))
             .flatMap(([, multiFilter]) => multiFilter.map((f) => f.quantifier))
@@ -763,20 +821,68 @@ export function addToManySubFilters<T>(
             }
         }
 
-        // 5. Add the EXISTS subquery to the main query
-        if (quantifier === FilterQuantifier.ANY) {
-            qb.andWhereExists(existsQb)
-        } else if (quantifier === FilterQuantifier.NONE) {
-            andWhereNoneExist(qb, existsQb)
-        } else if (quantifier === FilterQuantifier.ALL) {
-            andWhereAllExist(qb, existsQb)
+        if (andSubColumns.length > 0) {
+            // AND-mode: emit one EXISTS per $and value on each sub-column, ANDed on the outer query.
+            // OR-mode values on other sub-columns are included in every EXISTS subquery unchanged.
+            //
+            // Example: filter[tag.id]=$and:tagA&filter[tag.id]=$and:tagB produces:
+            //   AND EXISTS (SELECT 1 FROM tag JOIN junction ON ... WHERE tag.id = 'tagA' AND ...)
+            //   AND EXISTS (SELECT 1 FROM tag JOIN junction ON ... WHERE tag.id = 'tagB' AND ...)
+            //
+            // This is the only correct way to express "entity has ALL of these related values" —
+            // a single EXISTS with AND conditions on the same column is always false on a single row.
+
+            // Build the base sub-query without the $and values (keeps OR-mode filters on other columns).
+            const baseSubQuery: PaginateQuery = {
+                ...subQuery,
+                filter: Object.fromEntries(
+                    Object.entries(subQuery.filter ?? {}).filter(([col]) => !andSubColumns.includes(col))
+                ),
+            }
+
+            // For each $and value on each sub-column, emit a separate EXISTS.
+            // When there are multiple $and sub-columns, we emit the cartesian product — but in
+            // practice this is almost always a single sub-column (e.g. tag.id).
+            const andValueCombinations = andSubColumns.reduce<{ [col: string]: string }[]>(
+                (combinations, subCol) => {
+                    const values = andValuesBySubColumn[subCol]
+                    return combinations.flatMap((combo) => values.map((v) => ({ ...combo, [subCol]: v })))
+                },
+                [{}]
+            )
+
+            for (const [comboIndex, combo] of andValueCombinations.entries()) {
+                const singleValueSubQuery: PaginateQuery = {
+                    ...baseSubQuery,
+                    filter: {
+                        ...baseSubQuery.filter,
+                        ...Object.fromEntries(Object.entries(combo).map(([col, v]) => [col, v])),
+                    },
+                }
+                const existsQb = buildExistsQb(singleValueSubQuery, comboIndex)
+                // AND-mode always uses andWhereExists — $none/$all quantifiers are incompatible
+                // with $and comparator (mixing them is a user error caught by the quantifier check above).
+                qb.andWhereExists(existsQb)
+            }
+        } else {
+            // OR-mode (default): one shared EXISTS subquery for all values on this path.
+            const existsQb = buildExistsQb(subQuery)
+
+            // 5. Add the EXISTS subquery to the main query
+            if (quantifier === FilterQuantifier.ANY) {
+                qb.andWhereExists(existsQb)
+            } else if (quantifier === FilterQuantifier.NONE) {
+                andWhereNoneExist(qb, existsQb)
+            } else if (quantifier === FilterQuantifier.ALL) {
+                andWhereAllExist(qb, existsQb)
+            }
         }
     }
 }
 
 export function createSubFilter(
     query: PaginateQuery,
-    filterableColumns: { [column: string]: (FilterOperator | FilterSuffix | FilterQuantifier)[] | true },
+    filterableColumns: { [column: string]: (FilterOperator | FilterSuffix | FilterQuantifier | FilterComparator)[] | true },
     column: string
 ) {
     const subQuery = { filter: {} } as PaginateQuery
@@ -785,7 +891,7 @@ export function createSubFilter(
             subQuery.filter[getSubColumn(column, subColumn)] = filter
         }
     }
-    const subFilterableColumns: { [column: string]: (FilterOperator | FilterSuffix | FilterQuantifier)[] | true } = {}
+    const subFilterableColumns: { [column: string]: (FilterOperator | FilterSuffix | FilterQuantifier | FilterComparator)[] | true } = {}
     for (const [subColumn, filter] of Object.entries(filterableColumns)) {
         if (subColumn.startsWith(column + '.')) {
             subFilterableColumns[getSubColumn(column, subColumn)] = filter

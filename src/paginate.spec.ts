@@ -5458,6 +5458,132 @@ describe('paginate', () => {
                 )
             })
 
+            describe('AND-mode filtering: entity must have ALL of the specified related values', () => {
+                // cats[0] (Milo) has toys: Ball, Mouse (created in beforeAll below)
+                // cats[1] has toy: String (from global setup)
+                // cats[2..6] have no toys
+                let andModeToys: CatToyEntity[]
+
+                beforeAll(async () => {
+                    andModeToys = await catToyRepo.save([
+                        catToyRepo.create({ name: 'Ball', cat: cats[0], size: { height: 5, width: 5, length: 5 } }),
+                        catToyRepo.create({ name: 'Mouse', cat: cats[0], size: { height: 3, width: 3, length: 8 } }),
+                    ])
+                })
+
+                afterAll(async () => {
+                    if (andModeToys?.length) {
+                        await catToyRepo.remove(andModeToys)
+                    }
+                })
+
+                it('should find cats that have a toy named Ball AND a toy named Mouse (OneToMany)', async () => {
+                    const config: PaginateConfig<CatEntity> = {
+                        sortableColumns: ['id'],
+                        filterableColumns: {
+                            'toys.name': [FilterOperator.EQ, FilterComparator.AND],
+                        },
+                    }
+                    const query: PaginateQuery = {
+                        filter: {
+                            'toys.name': [`$and:Ball`, `$and:Mouse`],
+                        },
+                        path: '',
+                    }
+
+                    const result = await paginate<CatEntity>(query, catRepo, config)
+                    // Only Milo (cats[0]) has both Ball and Mouse
+                    expect(result.data.length).toBe(1)
+                    expect(result.data[0].id).toBe(cats[0].id)
+                })
+
+                it('should return no cats when no cat has all specified toys (OneToMany)', async () => {
+                    const config: PaginateConfig<CatEntity> = {
+                        sortableColumns: ['id'],
+                        filterableColumns: {
+                            'toys.name': [FilterOperator.EQ, FilterComparator.AND],
+                        },
+                    }
+                    const query: PaginateQuery = {
+                        filter: {
+                            // Ball belongs to Milo, String belongs to cats[1] — no cat has both
+                            'toys.name': [`$and:Ball`, `$and:String`],
+                        },
+                        path: '',
+                    }
+
+                    const result = await paginate<CatEntity>(query, catRepo, config)
+                    expect(result.data.length).toBe(0)
+                })
+
+                it('should find cats that have friends named Garfield AND Milo (ManyToMany owning side)', async () => {
+                    // cats[0] (Milo) has friends: cats[1..6] (Garfield, Whiskers, ...)
+                    // We need a cat that has at least two specific friends.
+                    // Only Milo has multiple friends, so filter for two of them.
+                    const garfield = cats[1]
+                    const whiskers = cats[2]
+
+                    const config: PaginateConfig<CatEntity> = {
+                        sortableColumns: ['id'],
+                        filterableColumns: {
+                            'friends.name': [FilterOperator.EQ, FilterComparator.AND],
+                        },
+                    }
+                    const query: PaginateQuery = {
+                        filter: {
+                            'friends.name': [`$and:${garfield.name}`, `$and:${whiskers.name}`],
+                        },
+                        path: '',
+                    }
+
+                    const result = await paginate<CatEntity>(query, catRepo, config)
+                    // Only Milo has both Garfield and Whiskers as friends
+                    expect(result.data.length).toBe(1)
+                    expect(result.data[0].id).toBe(cats[0].id)
+                })
+
+                it('should return no cats when no cat has all specified friends (ManyToMany owning side)', async () => {
+                    // No cat has both Milo AND Garfield as friends simultaneously
+                    // (Milo's friends are cats[1..6], none of whom have friends themselves)
+                    const config: PaginateConfig<CatEntity> = {
+                        sortableColumns: ['id'],
+                        filterableColumns: {
+                            'friends.name': [FilterOperator.EQ, FilterComparator.AND],
+                        },
+                    }
+                    const query: PaginateQuery = {
+                        filter: {
+                            'friends.name': [`$and:${cats[0].name}`, `$and:${cats[1].name}`],
+                        },
+                        path: '',
+                    }
+
+                    const result = await paginate<CatEntity>(query, catRepo, config)
+                    expect(result.data.length).toBe(0)
+                })
+
+                it('should behave like OR-mode when only a single $and value is provided', async () => {
+                    // A single $and value should behave identically to $or (one EXISTS subquery, same result)
+                    const config: PaginateConfig<CatEntity> = {
+                        sortableColumns: ['id'],
+                        filterableColumns: {
+                            'toys.name': [FilterOperator.EQ, FilterComparator.AND],
+                        },
+                    }
+                    const query: PaginateQuery = {
+                        filter: {
+                            'toys.name': `$and:Ball`,
+                        },
+                        path: '',
+                    }
+
+                    const result = await paginate<CatEntity>(query, catRepo, config)
+                    // Only Milo has Ball
+                    expect(result.data.length).toBe(1)
+                    expect(result.data[0].id).toBe(cats[0].id)
+                })
+            })
+
             describe('Advanced quantifier combinatorics', () => {
                 // None of these have been implemented yet, feel free to PR :innocent:
 
