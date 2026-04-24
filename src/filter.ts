@@ -708,7 +708,9 @@ export function addToManySubFilters<T>(
                         .map((jc) => {
                             const junctionCol = jc.databaseName
                             const relatedPk = jc.referencedColumn.databaseName
-                            return `${quote(junctionAlias)}.${quote(junctionCol)} = ${quote(relatedAlias)}.${quote(relatedPk)}`
+                            return `${quote(junctionAlias)}.${quote(junctionCol)} = ${quote(relatedAlias)}.${quote(
+                                relatedPk
+                            )}`
                         })
                         .join(' AND ')
 
@@ -741,9 +743,7 @@ export function addToManySubFilters<T>(
                         }
 
                         // Correlation
-                        existsQb.andWhere(
-                            `${quote(fkAlias)}.${quote(fkColumn)} = ${quote(pkAlias)}.${quote(pkColumn)}`
-                        )
+                        existsQb.andWhere(`${quote(fkAlias)}.${quote(fkColumn)} = ${quote(pkAlias)}.${quote(pkColumn)}`)
                     }
                 }
             }

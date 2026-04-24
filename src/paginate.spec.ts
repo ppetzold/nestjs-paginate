@@ -5450,7 +5450,12 @@ describe('paginate', () => {
                 const result = await paginate<CatEntity>(query, catRepo, config)
                 // cats[1..6] are friends of Milo
                 expect(result.data.length).toBe(6)
-                expect(result.data.map((c) => c.id).sort()).toEqual(cats.slice(1).map((c) => c.id).sort())
+                expect(result.data.map((c) => c.id).sort()).toEqual(
+                    cats
+                        .slice(1)
+                        .map((c) => c.id)
+                        .sort()
+                )
             })
 
             describe('Advanced quantifier combinatorics', () => {
