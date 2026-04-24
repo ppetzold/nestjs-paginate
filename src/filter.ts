@@ -688,24 +688,63 @@ export function addToManySubFilters<T>(
             } else {
                 // Perform the final correlation WHERE clause to the main query alias
                 const joinMeta = parentMeta.isOwning ? parentMeta : parentMeta.inverseRelation
-                for (const joinColumn of joinMeta.joinColumns) {
-                    // 1. Get the raw column names from the owning metadata:
-                    const fkColumn = joinColumn.databaseName
-                    const pkColumn = joinColumn.referencedColumn.databaseName
 
-                    // 2. Get the table aliases
-                    let fkAlias: string
-                    let pkAlias: string
-                    if (parentMeta.isOwning) {
-                        pkAlias = `_rel_${relationPath[0][0]}_0`
-                        fkAlias = mainQueryAlias
-                    } else {
-                        fkAlias = `_rel_${relationPath[0][0]}_0`
-                        pkAlias = mainQueryAlias
+                if (parentMeta.isManyToMany) {
+                    // For ManyToMany, the FK columns live in the junction (join) table, not on the
+                    // related entity's table. We must JOIN the junction table into the EXISTS subquery
+                    // and correlate via it.
+                    const junctionMeta = joinMeta.junctionEntityMetadata
+                    const junctionAlias = `_junc_${relationPath[0][0]}_0`
+                    const relatedAlias = `_rel_${relationPath[0][0]}_0`
+
+                    // When accessed from the owning side:
+                    //   joinColumns        → junction → owning entity (mainQueryAlias)
+                    //   inverseJoinColumns → junction → inverse entity (relatedAlias)
+                    // When accessed from the inverse side, the roles are swapped.
+                    const toRelatedCols = parentMeta.isOwning ? joinMeta.inverseJoinColumns : joinMeta.joinColumns
+                    const toMainCols = parentMeta.isOwning ? joinMeta.joinColumns : joinMeta.inverseJoinColumns
+
+                    const junctionToRelatedConditions = toRelatedCols
+                        .map((jc) => {
+                            const junctionCol = jc.databaseName
+                            const relatedPk = jc.referencedColumn.databaseName
+                            return `${quote(junctionAlias)}.${quote(junctionCol)} = ${quote(relatedAlias)}.${quote(relatedPk)}`
+                        })
+                        .join(' AND ')
+
+                    const junctionTarget = junctionMeta.target ?? junctionMeta.tableName
+                    existsQb.innerJoin(junctionTarget, junctionAlias, junctionToRelatedConditions)
+
+                    // Correlate the junction table back to the main query entity.
+                    for (const joinColumn of toMainCols) {
+                        const junctionCol = joinColumn.databaseName
+                        const mainPk = joinColumn.referencedColumn.databaseName
+                        existsQb.andWhere(
+                            `${quote(junctionAlias)}.${quote(junctionCol)} = ${quote(mainQueryAlias)}.${quote(mainPk)}`
+                        )
                     }
+                } else {
+                    for (const joinColumn of joinMeta.joinColumns) {
+                        // 1. Get the raw column names from the owning metadata:
+                        const fkColumn = joinColumn.databaseName
+                        const pkColumn = joinColumn.referencedColumn.databaseName
 
-                    // Correlation
-                    existsQb.andWhere(`${quote(fkAlias)}.${quote(fkColumn)} = ${quote(pkAlias)}.${quote(pkColumn)}`)
+                        // 2. Get the table aliases
+                        let fkAlias: string
+                        let pkAlias: string
+                        if (parentMeta.isOwning) {
+                            pkAlias = `_rel_${relationPath[0][0]}_0`
+                            fkAlias = mainQueryAlias
+                        } else {
+                            fkAlias = `_rel_${relationPath[0][0]}_0`
+                            pkAlias = mainQueryAlias
+                        }
+
+                        // Correlation
+                        existsQb.andWhere(
+                            `${quote(fkAlias)}.${quote(fkColumn)} = ${quote(pkAlias)}.${quote(pkColumn)}`
+                        )
+                    }
                 }
             }
         }

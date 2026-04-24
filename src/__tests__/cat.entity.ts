@@ -60,9 +60,12 @@ export class CatEntity {
     @DeleteDateColumn(DateColumnNullable)
     deletedAt?: string
 
-    @ManyToMany(() => CatEntity)
+    @ManyToMany(() => CatEntity, (cat) => cat.friendOf)
     @JoinTable()
     friends: CatEntity[]
+
+    @ManyToMany(() => CatEntity, (cat) => cat.friends)
+    friendOf: CatEntity[]
 
     @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
     weightChange: number | null

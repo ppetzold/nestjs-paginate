@@ -5409,6 +5409,50 @@ describe('paginate', () => {
                 expect(result.data[4].id).toBe(cats[6].id)
             })
 
+            it('should find cats that have a friend named Garfield (ManyToMany owning side)', async () => {
+                // This test verifies that filtering on a ManyToMany relation generates valid SQL.
+                // cats[0] (Milo) has friends cats[1..6]; no other cat has friends.
+                const config: PaginateConfig<CatEntity> = {
+                    sortableColumns: ['id'],
+                    filterableColumns: {
+                        'friends.name': [FilterOperator.EQ],
+                    },
+                }
+                const query: PaginateQuery = {
+                    filter: {
+                        'friends.name': '$eq:Garfield',
+                    },
+                    path: '',
+                }
+
+                const result = await paginate<CatEntity>(query, catRepo, config)
+                // Only Milo (cats[0]) has Garfield as a friend
+                expect(result.data.length).toBe(1)
+                expect(result.data[0].id).toBe(cats[0].id)
+            })
+
+            it('should find cats that are a friend of Milo (ManyToMany inverse side)', async () => {
+                // cats[0] (Milo) has friends cats[1..6]; so cats[1..6] have Milo in their friendOf relation.
+                // Filtering on friendOf.name = 'Milo' should return cats[1..6].
+                const config: PaginateConfig<CatEntity> = {
+                    sortableColumns: ['id'],
+                    filterableColumns: {
+                        'friendOf.name': [FilterOperator.EQ],
+                    },
+                }
+                const query: PaginateQuery = {
+                    filter: {
+                        'friendOf.name': `$eq:${cats[0].name}`,
+                    },
+                    path: '',
+                }
+
+                const result = await paginate<CatEntity>(query, catRepo, config)
+                // cats[1..6] are friends of Milo
+                expect(result.data.length).toBe(6)
+                expect(result.data.map((c) => c.id).sort()).toEqual(cats.slice(1).map((c) => c.id).sort())
+            })
+
             describe('Advanced quantifier combinatorics', () => {
                 // None of these have been implemented yet, feel free to PR :innocent:
 
