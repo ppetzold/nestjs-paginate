@@ -5584,6 +5584,197 @@ describe('paginate', () => {
                 })
             })
 
+            describe('AND-mode: edge cases and error conditions', () => {
+                let andModeToys2: CatToyEntity[]
+
+                beforeAll(async () => {
+                    // cats[0] (Milo) gets Ball and Mouse toys for two-path collision tests.
+                    // cats[1] (Garfield) gets a String toy.
+                    andModeToys2 = await catToyRepo.save([
+                        catToyRepo.create({ name: 'Ball', cat: cats[0], size: { height: 5, width: 5, length: 5 } }),
+                        catToyRepo.create({ name: 'Mouse', cat: cats[0], size: { height: 3, width: 3, length: 8 } }),
+                        catToyRepo.create({ name: 'String', cat: cats[1], size: { height: 1, width: 1, length: 30 } }),
+                    ])
+                })
+
+                afterAll(async () => {
+                    if (andModeToys2?.length) {
+                        await catToyRepo.remove(andModeToys2)
+                    }
+                })
+
+                it('should throw when mixing $and and non-$and values on the same sub-column', async () => {
+                    const config: PaginateConfig<CatEntity> = {
+                        sortableColumns: ['id'],
+                        filterableColumns: {
+                            'toys.name': [FilterOperator.EQ, FilterComparator.AND],
+                        },
+                    }
+                    const query: PaginateQuery = {
+                        filter: {
+                            // $and:Ball mixed with plain $eq:Mouse on the same sub-column
+                            'toys.name': [`$and:Ball`, `$eq:Mouse`],
+                        },
+                        path: '',
+                    }
+                    await expect(paginate<CatEntity>(query, catRepo, config)).rejects.toThrow(
+                        /Cannot mix \$and values with non-\$and values/
+                    )
+                })
+
+                it('should throw when $and is used on a scalar (non-to-many) column', async () => {
+                    const config: PaginateConfig<CatEntity> = {
+                        sortableColumns: ['id'],
+                        filterableColumns: {
+                            name: [FilterOperator.EQ, FilterComparator.AND],
+                        },
+                    }
+                    const query: PaginateQuery = {
+                        filter: {
+                            name: [`$and:Milo`],
+                        },
+                        path: '',
+                    }
+                    await expect(paginate<CatEntity>(query, catRepo, config)).rejects.toThrow(
+                        /\$and comparator can only be used on to-many/
+                    )
+                })
+
+                it('should NOT throw when a literal value containing $and is used on a scalar column without $and allowed', async () => {
+                    // A user searching for the literal string "$and" as a value (not as a comparator)
+                    // should not trigger the scalar-column validation.
+                    const config: PaginateConfig<CatEntity> = {
+                        sortableColumns: ['id'],
+                        filterableColumns: {
+                            name: [FilterOperator.EQ],
+                        },
+                    }
+                    const query: PaginateQuery = {
+                        filter: {
+                            // $eq:$and — operator is $eq, value is the literal string "$and"
+                            name: [`$eq:$and`],
+                        },
+                        path: '',
+                    }
+                    // Should not throw — no cat has name "$and", so result is empty
+                    const result = await paginate<CatEntity>(query, catRepo, config)
+                    expect(result.data.length).toBe(0)
+                })
+
+                it('should filter across two independent to-many paths without alias/parameter collisions', async () => {
+                    // Filter on both toys.name (OneToMany) and friends.name (ManyToMany) simultaneously.
+                    // cats[0] (Milo) has toys [Ball, Mouse] and friends [cats[1..6]].
+                    // We filter: toys.name=$and:Ball AND friends.name=$and:Garfield
+                    // Only Milo satisfies both.
+                    const garfield = cats[1]
+                    const config: PaginateConfig<CatEntity> = {
+                        sortableColumns: ['id'],
+                        filterableColumns: {
+                            'toys.name': [FilterOperator.EQ, FilterComparator.AND],
+                            'friends.name': [FilterOperator.EQ, FilterComparator.AND],
+                        },
+                    }
+                    const query: PaginateQuery = {
+                        filter: {
+                            'toys.name': [`$and:Ball`],
+                            'friends.name': [`$and:${garfield.name}`],
+                        },
+                        path: '',
+                    }
+                    const result = await paginate<CatEntity>(query, catRepo, config)
+                    expect(result.data.length).toBe(1)
+                    expect(result.data[0].id).toBe(cats[0].id)
+                })
+
+                it('should filter across two independent to-many paths with multiple $and values each', async () => {
+                    // Milo has toys [Ball, Mouse] and friends [cats[1], cats[2], ...].
+                    // Filter: toys.name=$and:Ball&toys.name=$and:Mouse AND friends.name=$and:Garfield&friends.name=$and:Whiskers
+                    const garfield = cats[1]
+                    const whiskers = cats[2]
+                    const config: PaginateConfig<CatEntity> = {
+                        sortableColumns: ['id'],
+                        filterableColumns: {
+                            'toys.name': [FilterOperator.EQ, FilterComparator.AND],
+                            'friends.name': [FilterOperator.EQ, FilterComparator.AND],
+                        },
+                    }
+                    const query: PaginateQuery = {
+                        filter: {
+                            'toys.name': [`$and:Ball`, `$and:Mouse`],
+                            'friends.name': [`$and:${garfield.name}`, `$and:${whiskers.name}`],
+                        },
+                        path: '',
+                    }
+                    const result = await paginate<CatEntity>(query, catRepo, config)
+                    expect(result.data.length).toBe(1)
+                    expect(result.data[0].id).toBe(cats[0].id)
+                })
+
+                it('should return no results when two-path filter has no matching entity', async () => {
+                    // No cat has both a toy named "String" AND a friend named Garfield.
+                    // cats[1] (Garfield) has String toy but no friends.
+                    // cats[0] (Milo) has friends but no String toy.
+                    const garfield = cats[1]
+                    const config: PaginateConfig<CatEntity> = {
+                        sortableColumns: ['id'],
+                        filterableColumns: {
+                            'toys.name': [FilterOperator.EQ, FilterComparator.AND],
+                            'friends.name': [FilterOperator.EQ, FilterComparator.AND],
+                        },
+                    }
+                    const query: PaginateQuery = {
+                        filter: {
+                            'toys.name': [`$and:String`],
+                            'friends.name': [`$and:${garfield.name}`],
+                        },
+                        path: '',
+                    }
+                    const result = await paginate<CatEntity>(query, catRepo, config)
+                    expect(result.data.length).toBe(0)
+                })
+            })
+
+            describe('AND-mode: ManyToMany inverse-side filtering', () => {
+                it('should find cats that are a friend-of cats with specific names (inverse ManyToMany)', async () => {
+                    // cats[0] (Milo) has friends: cats[1..6].
+                    // From the inverse side: cats[1..6] are each "friendOf" Milo.
+                    // Filter friendOf.name=$and:Milo — should return cats[1..6] (all who have Milo as a friend).
+                    const config: PaginateConfig<CatEntity> = {
+                        sortableColumns: ['id'],
+                        filterableColumns: {
+                            'friendOf.name': [FilterOperator.EQ, FilterComparator.AND],
+                        },
+                    }
+                    const query: PaginateQuery = {
+                        filter: {
+                            'friendOf.name': [`$and:${cats[0].name}`],
+                        },
+                        path: '',
+                    }
+                    const result = await paginate<CatEntity>(query, catRepo, config)
+                    // cats[1..6] are all friends of Milo (cats[0])
+                    expect(result.data.length).toBe(6)
+                    expect(result.data.map((c) => c.id)).not.toContain(cats[0].id)
+                })
+
+                it('should return no cats when filtering inverse ManyToMany with a non-existent friend name', async () => {
+                    const config: PaginateConfig<CatEntity> = {
+                        sortableColumns: ['id'],
+                        filterableColumns: {
+                            'friendOf.name': [FilterOperator.EQ, FilterComparator.AND],
+                        },
+                    }
+                    const query: PaginateQuery = {
+                        filter: {
+                            'friendOf.name': [`$and:NonExistentCat`],
+                        },
+                        path: '',
+                    }
+                    const result = await paginate<CatEntity>(query, catRepo, config)
+                    expect(result.data.length).toBe(0)
+                })
+            })
+
             describe('Advanced quantifier combinatorics', () => {
                 // None of these have been implemented yet, feel free to PR :innocent:
 
@@ -5622,6 +5813,26 @@ describe('paginate', () => {
                     }
 
                     await expect(paginate<CatEntity>(query, catRepo, config)).rejects.toBeDefined()
+                })
+            })
+
+            describe('$and value validation', () => {
+                it('should throw when a bare $and (no value) is used', async () => {
+                    const config: PaginateConfig<CatEntity> = {
+                        sortableColumns: ['id'],
+                        filterableColumns: {
+                            'toys.name': [FilterOperator.EQ, FilterComparator.AND],
+                        },
+                    }
+                    const query: PaginateQuery = {
+                        filter: {
+                            'toys.name': [`$and`],
+                        },
+                        path: '',
+                    }
+                    await expect(paginate<CatEntity>(query, catRepo, config)).rejects.toThrow(
+                        /Invalid \$and filter value/
+                    )
                 })
             })
         })

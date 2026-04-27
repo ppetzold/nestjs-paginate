@@ -558,6 +558,48 @@ Assume `CatEntity` has a one‑to‑many relation `toys: CatToyEntity[]` where `
   GET /cats?filter.toys.name=$any:$not:$eq:Squeaky
   ```
 
+### AND-mode: entity must have ALL of the specified related values
+
+Use the `$and` comparator to require that a parent entity has **all** of the specified related values.
+Each `$and` value produces a separate correlated EXISTS subquery, ANDed on the outer query.
+
+Enable it in `filterableColumns`:
+
+```typescript
+filterableColumns: {
+  'toys.name': [FilterOperator.EQ, FilterComparator.AND],
+}
+```
+
+- Cat must have **both** a toy named "Ball" **and** a toy named "Mouse":
+
+  ```url
+  GET /cats?filter.toys.name=$and:Ball&filter.toys.name=$and:Mouse
+  ```
+
+- Cat must have a toy named "Ball" **and** be friends with a cat named "Garfield" (two independent to-many paths):
+
+  ```url
+  GET /cats?filter.toys.name=$and:Ball&filter.friends.name=$and:Garfield
+  ```
+
+**Restrictions and performance notes**:
+
+- `$and` may only be used on to-many relationship columns (one-to-many or many-to-many).
+- `$and` values may not be mixed with non-`$and` values on the same sub-column.
+- `$and` may not be combined with `$none` or `$all` quantifiers.
+- Each `$and` value adds one correlated EXISTS subquery. For N values and a relation path of depth D, this produces N × D joins. The default cap is 20 values per sub-column; override with `maxAndValues` in `PaginateConfig`.
+
+```typescript
+const config: PaginateConfig<CatEntity> = {
+  sortableColumns: ['id'],
+  filterableColumns: {
+    'toys.name': [FilterOperator.EQ, FilterComparator.AND],
+  },
+  maxAndValues: 10, // optional, default is 20
+}
+```
+
 ## Usage with Eager Loading
 
 Eager loading should work with TypeORM's eager property out of the box:

@@ -86,6 +86,29 @@ export function isComparator(value: unknown): value is FilterComparator {
     return values(FilterComparator).includes(value as any)
 }
 
+/**
+ * Returns true when the raw filter string explicitly carries the `$and` comparator token.
+ *
+ * This is distinct from the default AND comparator that every token carries implicitly —
+ * we only want to enter AND-mode when the user deliberately wrote `$and:` in the filter value.
+ * Using `parseFilterToken` (rather than a naive substring split) ensures that `$and` embedded
+ * inside a user value (e.g. `$eq:$and`) is not misidentified as the comparator.
+ *
+ * Must be called after `parseFilterToken` is defined (hoisting applies to function declarations).
+ */
+export function hasExplicitAndComparator(raw: string): boolean {
+    const token = parseFilterToken(raw)
+    if (!token) return false
+    if (token.comparator !== FilterComparator.AND) return false
+    // The default token comparator is AND, so we must confirm the user actually wrote `$and` as a
+    // colon-delimited token segment. We reconstruct the consumed prefix (everything before the value)
+    // and check whether `$and` appears in it as a discrete segment.
+    // This correctly rejects `$eq:$and` (value = `$and`, prefix = `$eq:`) and accepts `$and:Ball`.
+    const valueSuffix = token.value !== undefined ? `:${token.value}` : ''
+    const prefix = valueSuffix ? raw.slice(0, raw.length - valueSuffix.length) : raw
+    return prefix.split(':').some((seg) => seg === FilterComparator.AND)
+}
+
 export const OperatorSymbolToFunction = new Map<
     FilterOperator | FilterSuffix,
     (...args: any[]) => FindOperator<string>
@@ -107,6 +130,28 @@ export const OperatorSymbolToFunction = new Map<
 type Filter = { quantifier: FilterQuantifier; comparator: FilterComparator; findOperator: FindOperator<string> }
 type ColumnFilters = { [columnName: string]: Filter[] }
 type ColumnJoinMethods = { [columnName: string]: JoinMethod }
+
+/**
+ * Matches TypeORM named parameters (`:name` and `:...name` spread form) while skipping
+ * PostgreSQL cast syntax (`::type`).
+ *
+ * TypeORM parameter names may contain letters, digits, underscores, and dots (the latter
+ * for embedded-property paths, e.g. `size.height0`). The pattern captures the full name
+ * including any embedded-path dots.
+ *
+ * Capture groups:
+ *   1 — optional `...` spread prefix (present for IN parameters)
+ *   2 — parameter name (may contain dots for embedded paths)
+ *
+ * Examples:
+ *   `:name`          → matches, spread=undefined, name='name'
+ *   `:...vals`       → matches, spread='...', name='vals'
+ *   `:size.height0`  → matches, spread=undefined, name='size.height0'
+ *   `col::text`      → no match (lookbehind rejects `::`)
+ *   `:param::int`    → matches `:param`, skips `::int`
+ */
+/** @internal Exported for testing only. */
+export const TYPEORM_PARAM_REGEX = /(?<!:):(\.\.\.)?([a-zA-Z0-9_.]+)/g
 
 export interface FilterToken {
     quantifier: FilterQuantifier
@@ -336,6 +381,12 @@ export function parseFilter<T>(
                 if (token.quantifier !== FilterQuantifier.ANY && !allowedOperators.includes(token.quantifier)) {
                     continue
                 }
+                // Gate the $and comparator: only allow it if explicitly listed in filterableColumns.
+                // The default token comparator is AND (used for normal andWhere), so we must check
+                // whether $and was explicitly present in the raw filter string, not just the token default.
+                if (!allowedOperators.includes(FilterComparator.AND) && hasExplicitAndComparator(raw)) {
+                    continue
+                }
             }
 
             const params: (typeof filter)[0][0] = {
@@ -535,16 +586,33 @@ function findFirstToManyRelationship(
         }
 }
 
+export interface AddFilterOptions {
+    /**
+     * Maximum number of `$and` values allowed per sub-column in a single to-many filter.
+     * Each value produces a separate correlated EXISTS subquery, so large values have a
+     * linear performance cost. Defaults to 20.
+     */
+    maxAndValues?: number
+    /**
+     * When false, skips the validation that rejects `$and` on non-to-many columns.
+     * Set to false when calling `addFilter` recursively for EXISTS sub-queries, where the
+     * entity metadata is the leaf entity and the to-many check would incorrectly throw.
+     * @internal
+     */
+    validateAndComparator?: boolean
+}
+
 export function addFilter<T>(
     qb: SelectQueryBuilder<T>,
     query: PaginateQuery,
-    filterableColumns?: { [column: string]: (FilterOperator | FilterSuffix | FilterQuantifier | FilterComparator)[] | true }
+    filterableColumns?: { [column: string]: (FilterOperator | FilterSuffix | FilterQuantifier | FilterComparator)[] | true },
+    opts: AddFilterOptions = {}
 ) {
     const mainMetadata = qb.expressionMap.mainAlias.metadata
     const filter = parseFilter(query, filterableColumns, qb)
 
     addDirectFilters(qb, filter)
-    addToManySubFilters(qb, filter, query, filterableColumns)
+    addToManySubFilters(qb, filter, query, filterableColumns, opts)
 
     // Direct filters require to be joined, so pass the join information back up to the main pagination builder
     // (or the parent filter query in case of subfilters)
@@ -601,11 +669,32 @@ export function addDirectFilters<T>(qb: SelectQueryBuilder<T>, filter: ColumnFil
     }
 }
 
+/**
+ * Adds correlated EXISTS subqueries to `qb` for all to-many relationship filters in `filter`.
+ *
+ * **AND-mode (`$and` comparator)**
+ *
+ * When a sub-column filter uses the `$and` comparator (e.g. `filter[toys.name]=$and:Ball`),
+ * each distinct `$and` value produces a separate correlated EXISTS subquery, ANDed on the
+ * outer query. This is the only correct way to express "entity has ALL of these related values"
+ * — a single EXISTS with AND conditions on the same column is always false on a single row.
+ *
+ * **Performance note**: each `$and` value adds one correlated EXISTS with the full join chain
+ * for that relation path. For a relation path of depth D and N `$and` values, this produces
+ * N × D joins. The `maxAndValues` option (default 20) caps N to limit query complexity.
+ *
+ * **Restrictions**:
+ * - `$and` may only be used on to-many relationship columns.
+ * - `$and` values may not be mixed with non-`$and` values on the same sub-column.
+ * - `$and` may not be combined with `$none` or `$all` quantifiers.
+ * - `$and` may only be applied to a single sub-column per relation path at a time.
+ */
 export function addToManySubFilters<T>(
     qb: SelectQueryBuilder<T>,
     filter: ColumnFilters,
     query: PaginateQuery,
-    filterableColumns?: { [column: string]: (FilterOperator | FilterSuffix | FilterQuantifier | FilterComparator)[] | true }
+    filterableColumns?: { [column: string]: (FilterOperator | FilterSuffix | FilterQuantifier | FilterComparator)[] | true },
+    { maxAndValues = 20, validateAndComparator = true }: AddFilterOptions = {}
 ) {
     const dbType = qb.connection.options.type
     const quote = (column: string) => quoteColumn(column, ['mysql', 'mariadb'].includes(dbType))
@@ -616,6 +705,28 @@ export function addToManySubFilters<T>(
     const existsFilters = filterEntries.map(([key]) => findFirstToManyRelationship(key, mainMetadata)).filter(Boolean)
     // Find all the different toMany starting paths
     const toManyPaths = [...new Set(existsFilters.map((f) => f.path.join('.')))]
+
+    // Validate that $and is not used on scalar (non-to-many) columns — it has no meaningful
+    // semantics there and would produce always-false conditions (e.g. WHERE name = 'a' AND name = 'b').
+    // Skip this validation when called recursively for EXISTS subqueries (validateAndComparator = false),
+    // because the sub-filter keys are already stripped of the relation prefix and the entity metadata
+    // is the leaf entity, so the to-many check would incorrectly throw.
+    if (validateAndComparator) {
+        for (const [key, rawValues] of Object.entries(query.filter ?? {})) {
+            const isToMany = findFirstToManyRelationship(key, mainMetadata) != null
+            if (!isToMany) {
+                const values = Array.isArray(rawValues) ? rawValues : [rawValues]
+                const hasAndValue = values.some((v) => hasExplicitAndComparator(v))
+                if (hasAndValue) {
+                    throw new Error(
+                        `The $and comparator can only be used on to-many relationship columns. ` +
+                            `Column "${key}" is not a to-many relationship.`
+                    )
+                }
+            }
+        }
+    }
+
     const toManyRelations = toManyPaths.map(
         (path) => [path, existsFilters.find((f) => f.path.join('.') === path).relation] as const
     )
@@ -623,14 +734,14 @@ export function addToManySubFilters<T>(
     for (const [path, relation] of toManyRelations) {
         const mainQueryAlias = qb.alias
         const relationPath = getRelationPath(path, mainMetadata)
-        const toManyAlias = `_rel_${relationPath[relationPath.length - 1][0]}_${relationPath.length - 1}`
-
         // 1. Create the EXISTS subquery, starting from the toMany entity
         const existsMetadata = relation.inverseEntityMetadata
 
-        if (existsMetadata.deleteDateColumn) {
-            //existsQb.andWhere(`"${toManyAlias}"."${existsMetadata.deleteDateColumn.databaseName}" IS NULL`)
-        }
+        // Slug used in alias/parameter suffixes to scope them to this relation path.
+        // Using the path (e.g. "toys" → "toys", "cat.toys" → "cat_toys") ensures that two
+        // independent to-many paths in the same outer query never share alias or parameter names,
+        // even when both use existsIndex=0 (OR-mode) or overlapping sub-column names.
+        const pathSlug = path.replace(/\./g, '_')
 
         // 2. Extract sub-filters for this path.
         // If any sub-filter entry uses the $and comparator, we must emit one correlated EXISTS
@@ -643,10 +754,7 @@ export function addToManySubFilters<T>(
         const andValuesBySubColumn: { [subCol: string]: string[] } = {}
         for (const [subCol, rawValues] of Object.entries(subQuery.filter ?? {})) {
             const values = Array.isArray(rawValues) ? rawValues : [rawValues]
-            const andValues = values.filter((v) => {
-                const token = parseFilterToken(v)
-                return token && token.comparator === FilterComparator.AND && token.quantifier === FilterQuantifier.ANY
-            })
+            const andValues = values.filter((v) => hasExplicitAndComparator(v))
             if (andValues.length >= 1) {
                 andValuesBySubColumn[subCol] = andValues
             }
@@ -660,19 +768,41 @@ export function addToManySubFilters<T>(
         // Build a helper that constructs and correlates a single EXISTS subquery for this path.
         // existsIndex must be unique per EXISTS emitted for this path to avoid alias collisions
         // when multiple EXISTS subqueries are added to the same outer query (AND-mode).
+        // The pathSlug is included in all aliases and parameter names so that two independent
+        // to-many paths (e.g. "toys" and "friends") never collide even when both use existsIndex=0.
         const buildExistsQb = (extraSubQuery: PaginateQuery, existsIndex = 0) => {
-            const relAlias = (name: string, depth: number) => `_rel_${name}_${depth}_e${existsIndex}`
-            const juncAlias = (name: string, depth: number) => `_junc_${name}_${depth}_e${existsIndex}`
+            const relAlias = (name: string, depth: number) => `_rel_${name}_${depth}_${pathSlug}_e${existsIndex}`
+            const juncAlias = (name: string, depth: number) => `_junc_${name}_${depth}_${pathSlug}_e${existsIndex}`
             const leafAlias = relAlias(relationPath[relationPath.length - 1][0], relationPath.length - 1)
             const existsQb = qb.connection.createQueryBuilder(existsMetadata.target as any, leafAlias)
 
-            const subJoins = addFilter(existsQb, extraSubQuery, subFilterableColumns)
+            const subJoins = addFilter(existsQb, extraSubQuery, subFilterableColumns, { validateAndComparator: false })
 
-            // 3. Add the sub relationship joins to the EXISTS subquery
+            // Step 3: Add the sub relationship joins to the EXISTS subquery.
             const relationsSchema = mergeRelationSchema(createRelationSchema(Object.keys(subJoins)))
             addRelationsFromSchema(existsQb, relationsSchema, {}, 'innerJoin')
 
-            // 4. Build the chain of joins that backtracks our toMany relationship to the root.
+            // Step 4: Build the chain of joins that backtracks our toMany relationship to the root.
+            buildSubqueryJoinChain(existsQb, relAlias, juncAlias)
+
+            // Step 5: Rename all parameters to include a path+index suffix, preventing collisions
+            // when multiple EXISTS subqueries share the outer query's parameter namespace.
+            const suffix = `_${pathSlug}_e${existsIndex}`
+            renameSubqueryParameters(existsQb, suffix)
+
+            return existsQb
+        }
+
+        /**
+         * Adds the join chain that correlates the EXISTS subquery back to the root entity.
+         * Iterates from the deepest relation segment to the root, adding INNER JOINs for
+         * intermediate relations and a correlated WHERE clause for the root relation.
+         */
+        function buildSubqueryJoinChain(
+            existsQb: SelectQueryBuilder<any>,
+            relAlias: (name: string, depth: number) => string,
+            juncAlias: (name: string, depth: number) => string
+        ) {
             for (let i = relationPath.length - 1; i >= 0; i--) {
                 const [, meta] = relationPath[i]
 
@@ -703,107 +833,170 @@ export function addToManySubFilters<T>(
                         onConditions
                     )
                 } else {
-                    // --- Root correlation ---
-                    const joinMeta = parentMeta.isOwning ? parentMeta : parentMeta.inverseRelation
+                    correlateManyToManyOrFk(existsQb, parentMeta, relAlias, juncAlias)
+                }
+            }
+        }
 
-                    if (parentMeta.isManyToMany) {
-                        // For ManyToMany, the FK columns live in the junction (join) table, not on the
-                        // related entity's table. We must JOIN the junction table into the EXISTS subquery
-                        // and correlate via it.
-                        const junctionMeta = joinMeta.junctionEntityMetadata
-                        const junctionAlias = juncAlias(relationPath[0][0], 0)
-                        const relatedAlias = relAlias(relationPath[0][0], 0)
+        /**
+         * Adds the root correlation clause to the EXISTS subquery.
+         * For ManyToMany relations, JOINs the junction table and correlates via it.
+         * For OneToMany / ManyToOne relations, adds a direct FK = PK WHERE clause.
+         */
+        function correlateManyToManyOrFk(
+            existsQb: SelectQueryBuilder<any>,
+            parentMeta: RelationMetadata,
+            relAlias: (name: string, depth: number) => string,
+            juncAlias: (name: string, depth: number) => string
+        ) {
+            // --- Root correlation ---
+            //
+            // `joinMeta` is always the owning side of the relation, regardless of which side
+            // the filter is expressed from. This is because TypeORM stores join column metadata
+            // (including junction table metadata for ManyToMany) only on the owning side.
+            //
+            // Example (ManyToMany, inverse side):
+            //   Cat.friends (owning) ←→ Cat.friendOf (inverse)
+            //   Filtering on "friendOf.name": parentMeta = friendOf (inverse, !isOwning)
+            //   joinMeta = parentMeta.inverseRelation = friends (owning)
+            //   toRelatedCols = joinMeta.joinColumns  (junction → owning entity = friendOf side)
+            //   toMainCols    = joinMeta.inverseJoinColumns (junction → inverse entity = Cat being filtered)
+            if (!parentMeta.isOwning && !parentMeta.inverseRelation) {
+                throw new Error(
+                    `Cannot build EXISTS subquery for ManyToMany relation "${path}": ` +
+                        `the relation has no inverse side defined. ` +
+                        `Ensure the @ManyToMany decorator on the inverse entity references this relation.`
+                )
+            }
+            const joinMeta = parentMeta.isOwning ? parentMeta : parentMeta.inverseRelation
 
-                        // When accessed from the owning side:
-                        //   joinColumns        → junction → owning entity (mainQueryAlias)
-                        //   inverseJoinColumns → junction → inverse entity (relatedAlias)
-                        // When accessed from the inverse side, the roles are swapped.
-                        const toRelatedCols = parentMeta.isOwning ? joinMeta.inverseJoinColumns : joinMeta.joinColumns
-                        const toMainCols = parentMeta.isOwning ? joinMeta.joinColumns : joinMeta.inverseJoinColumns
+            if (parentMeta.isManyToMany) {
+                // For ManyToMany, the FK columns live in the junction (join) table, not on the
+                // related entity's table. We must JOIN the junction table into the EXISTS subquery
+                // and correlate via it.
+                const junctionMeta = joinMeta.junctionEntityMetadata
+                const junctionAlias = juncAlias(relationPath[0][0], 0)
+                const relatedAlias = relAlias(relationPath[0][0], 0)
 
-                        const junctionToRelatedConditions = toRelatedCols
-                            .map((jc) => {
-                                const junctionCol = jc.databaseName
-                                const relatedPk = jc.referencedColumn.databaseName
-                                return `${quote(junctionAlias)}.${quote(junctionCol)} = ${quote(relatedAlias)}.${quote(relatedPk)}`
-                            })
-                            .join(' AND ')
+                // Column role mapping (always relative to `joinMeta`, which is the owning side):
+                //   joinMeta.joinColumns        → junction columns pointing to the owning entity
+                //   joinMeta.inverseJoinColumns → junction columns pointing to the inverse entity
+                //
+                // When filtering from the owning side (parentMeta.isOwning):
+                //   toRelatedCols = inverseJoinColumns → junction → related entity (EXISTS root)
+                //   toMainCols    = joinColumns        → junction → main query entity
+                //
+                // When filtering from the inverse side (!parentMeta.isOwning):
+                //   joinMeta = parentMeta.inverseRelation (the owning side)
+                //   toRelatedCols = joinMeta.joinColumns        → junction → owning entity (EXISTS root)
+                //   toMainCols    = joinMeta.inverseJoinColumns → junction → main query entity
+                const toRelatedCols = parentMeta.isOwning ? joinMeta.inverseJoinColumns : joinMeta.joinColumns
+                const toMainCols = parentMeta.isOwning ? joinMeta.joinColumns : joinMeta.inverseJoinColumns
 
-                        const junctionTarget = junctionMeta.target ?? junctionMeta.tableName
-                        existsQb.innerJoin(junctionTarget, junctionAlias, junctionToRelatedConditions)
+                const junctionToRelatedConditions = toRelatedCols
+                    .map((jc) => {
+                        const junctionCol = jc.databaseName
+                        const relatedPk = jc.referencedColumn.databaseName
+                        return `${quote(junctionAlias)}.${quote(junctionCol)} = ${quote(relatedAlias)}.${quote(relatedPk)}`
+                    })
+                    .join(' AND ')
 
-                        for (const joinColumn of toMainCols) {
-                            const junctionCol = joinColumn.databaseName
-                            const mainPk = joinColumn.referencedColumn.databaseName
-                            existsQb.andWhere(
-                                `${quote(junctionAlias)}.${quote(junctionCol)} = ${quote(mainQueryAlias)}.${quote(mainPk)}`
-                            )
-                        }
+                const junctionTarget = junctionMeta.target ?? junctionMeta.tableName
+                existsQb.innerJoin(junctionTarget, junctionAlias, junctionToRelatedConditions)
+
+                for (const joinColumn of toMainCols) {
+                    const junctionCol = joinColumn.databaseName
+                    const mainPk = joinColumn.referencedColumn.databaseName
+                    existsQb.andWhere(
+                        `${quote(junctionAlias)}.${quote(junctionCol)} = ${quote(mainQueryAlias)}.${quote(mainPk)}`
+                    )
+                }
+            } else {
+                for (const joinColumn of joinMeta.joinColumns) {
+                    const fkColumn = joinColumn.databaseName
+                    const pkColumn = joinColumn.referencedColumn.databaseName
+                    let fkAlias: string
+                    let pkAlias: string
+                    if (parentMeta.isOwning) {
+                        pkAlias = relAlias(relationPath[0][0], 0)
+                        fkAlias = mainQueryAlias
                     } else {
-                        for (const joinColumn of joinMeta.joinColumns) {
-                            const fkColumn = joinColumn.databaseName
-                            const pkColumn = joinColumn.referencedColumn.databaseName
-                            let fkAlias: string
-                            let pkAlias: string
-                            if (parentMeta.isOwning) {
-                                pkAlias = relAlias(relationPath[0][0], 0)
-                                fkAlias = mainQueryAlias
+                        fkAlias = relAlias(relationPath[0][0], 0)
+                        pkAlias = mainQueryAlias
+                    }
+                    existsQb.andWhere(
+                        `${quote(fkAlias)}.${quote(fkColumn)} = ${quote(pkAlias)}.${quote(pkColumn)}`
+                    )
+                }
+            }
+        }
+
+        /**
+         * Renames all TypeORM named parameters in the EXISTS subquery by appending `suffix`.
+         * This prevents parameter name collisions when multiple EXISTS subqueries share the
+         * outer query's parameter namespace (AND-mode emits one EXISTS per `$and` value).
+         *
+         * Handles both simple parameters (`:name`) and spread parameters (`:...name` for IN),
+         * and correctly skips PostgreSQL cast syntax (`::type`).
+         */
+        function renameSubqueryParameters(existsQb: SelectQueryBuilder<any>, suffix: string) {
+            const oldParams = { ...existsQb.expressionMap.parameters }
+            existsQb.expressionMap.parameters = {}
+            for (const [key, value] of Object.entries(oldParams)) {
+                existsQb.expressionMap.parameters[key + suffix] = value
+            }
+            // Use the module-level TYPEORM_PARAM_REGEX (handles both :name and :...name spread form,
+            // skips PostgreSQL ::type cast syntax). Must reset lastIndex since the regex is stateful (flag g).
+            const renameParamsInString = (s: string) => {
+                TYPEORM_PARAM_REGEX.lastIndex = 0
+                return s.replace(TYPEORM_PARAM_REGEX, (_, spread, name) => `:${spread ?? ''}${name}${suffix}`)
+            }
+            const renameParamsInCondition = (condition: any): void => {
+                if (typeof condition === 'string') {
+                    // Top-level string conditions are handled by the caller (the `for` loop over
+                    // `existsQb.expressionMap.wheres` below). Nested string conditions that appear
+                    // inside a `WhereClause.condition` object are handled by the `condition.condition`
+                    // branch below. This branch is a no-op guard — TypeORM never passes a bare string
+                    // here in practice, but the type allows it.
+                    return
+                }
+                if (Array.isArray(condition)) {
+                    // Arrays cannot be mutated element-by-element for strings (immutable),
+                    // so we map over the array and replace string items directly.
+                    for (let i = 0; i < condition.length; i++) {
+                        if (typeof condition[i] === 'string') {
+                            condition[i] = renameParamsInString(condition[i])
+                        } else {
+                            renameParamsInCondition(condition[i])
+                        }
+                    }
+                    return
+                }
+                if (condition && typeof condition === 'object') {
+                    if (typeof condition.condition === 'string') {
+                        condition.condition = renameParamsInString(condition.condition)
+                    } else if (condition.condition) {
+                        renameParamsInCondition(condition.condition)
+                    }
+                    // Also rename in nested children arrays (e.g. Brackets with multiple clauses)
+                    if (Array.isArray(condition.wheres)) {
+                        for (const child of condition.wheres) {
+                            if (typeof child.condition === 'string') {
+                                child.condition = renameParamsInString(child.condition)
                             } else {
-                                fkAlias = relAlias(relationPath[0][0], 0)
-                                pkAlias = mainQueryAlias
+                                renameParamsInCondition(child.condition)
                             }
-                            existsQb.andWhere(
-                                `${quote(fkAlias)}.${quote(fkColumn)} = ${quote(pkAlias)}.${quote(pkColumn)}`
-                            )
                         }
                     }
                 }
             }
-
-            // Rename all parameters in the EXISTS subquery to include the existsIndex suffix,
-            // preventing parameter name collisions when multiple EXISTS subqueries are added
-            // to the same outer query (AND-mode emits one EXISTS per $and value).
-            if (existsIndex > 0) {
-                const suffix = `_e${existsIndex}`
-                const oldParams = { ...existsQb.expressionMap.parameters }
-                existsQb.expressionMap.parameters = {}
-                for (const [key, value] of Object.entries(oldParams)) {
-                    existsQb.expressionMap.parameters[key + suffix] = value
-                }
-                const renameParamsInCondition = (condition: any, suffix: string): void => {
-                    if (typeof condition === 'string') {
-                        return // handled at the where level
-                    }
-                    if (Array.isArray(condition)) {
-                        for (const item of condition) {
-                            renameParamsInCondition(item, suffix)
-                        }
-                        return
-                    }
-                    if (condition && typeof condition === 'object') {
-                        if (typeof condition.condition === 'string') {
-                            condition.condition = condition.condition.replace(
-                                /:([a-zA-Z0-9_]+)\b/g,
-                                (_, name) => `:${name}${suffix}`
-                            )
-                        } else if (condition.condition) {
-                            renameParamsInCondition(condition.condition, suffix)
-                        }
-                    }
-                }
-                for (const where of existsQb.expressionMap.wheres) {
-                    if (typeof where.condition === 'string') {
-                        where.condition = where.condition.replace(
-                            /:([a-zA-Z0-9_]+)\b/g,
-                            (_, name) => `:${name}${suffix}`
-                        )
-                    } else {
-                        renameParamsInCondition(where.condition, suffix)
-                    }
+            for (const where of existsQb.expressionMap.wheres) {
+                if (typeof where.condition === 'string') {
+                    where.condition = renameParamsInString(where.condition)
+                } else {
+                    renameParamsInCondition(where.condition)
                 }
             }
-
-            return existsQb
         }
 
         // Determine the quantifier for this path (must be uniform across all sub-columns).
@@ -832,36 +1025,95 @@ export function addToManySubFilters<T>(
             // This is the only correct way to express "entity has ALL of these related values" —
             // a single EXISTS with AND conditions on the same column is always false on a single row.
 
-            // Build the base sub-query without the $and values (keeps OR-mode filters on other columns).
+            // $and comparator is incompatible with $none/$all quantifiers — the $and comparator
+            // already implies AND-mode (multiple correlated EXISTS), so combining it with a
+            // quantifier that changes the EXISTS semantics is a user error.
+            if (quantifier !== FilterQuantifier.ANY) {
+                throw new Error(
+                    `The $and comparator cannot be combined with the $${quantifier} quantifier on column ${path}. ` +
+                        `Use $any (the default) with $and, or use $${quantifier} without $and.`
+                )
+            }
+
+            // $and on multiple sub-columns produces a cartesian product of EXISTS subqueries,
+            // which has surprising semantics: each EXISTS asserts a separate row exists, not a
+            // single row matching all conditions. Disallow this to avoid silent incorrect results.
+            if (andSubColumns.length > 1) {
+                throw new Error(
+                    `The $and comparator cannot be used on multiple sub-columns of the same relation path ${path} simultaneously ` +
+                        `(found: ${andSubColumns.join(', ')}). Apply $and to a single sub-column at a time.`
+                )
+            }
+
+            // Build the base sub-query without the $and values (keeps OR-mode filters on other columns,
+            // and keeps any non-$and values on the $and sub-column itself).
+            //
+            // Note: OR-mode values on the $and sub-column (non-$and values mixed with $and values)
+            // are included in every EXISTS subquery as an additional filter. For example:
+            //   filter[toys.name]=$and:Ball&filter[toys.name]=$eq:Mouse
+            // produces EXISTS subqueries that each include `$eq:Mouse` as an additional condition.
+            // This means each EXISTS asserts: "a related row exists where name = 'Ball' AND name = 'Mouse'"
+            // (always false for a single row), which is likely not the intended behavior.
+            // Users should use only $and values or only OR-mode values on a given sub-column, not both.
             const baseSubQuery: PaginateQuery = {
                 ...subQuery,
                 filter: Object.fromEntries(
-                    Object.entries(subQuery.filter ?? {}).filter(([col]) => !andSubColumns.includes(col))
+                    Object.entries(subQuery.filter ?? {}).flatMap(([col, rawValues]) => {
+                        if (!andSubColumns.includes(col)) {
+                            return [[col, rawValues]]
+                        }
+                        // Reject mixing $and values with non-$and (OR-mode) values on the same sub-column.
+                        // A mixed filter would produce EXISTS subqueries with conditions like
+                        // `name = 'Ball' AND name = 'Mouse'` (always false on a single row),
+                        // which silently returns empty results rather than the user's intent.
+                        const values = Array.isArray(rawValues) ? rawValues : [rawValues]
+                        const orValues = values.filter((v) => !hasExplicitAndComparator(v))
+                        if (orValues.length > 0) {
+                            throw new Error(
+                                `Cannot mix $and values with non-$and values on sub-column "${col}" of relation "${path}". ` +
+                                    `Use either all $and or no $and on a given sub-column.`
+                            )
+                        }
+                        return []
+                    })
                 ),
             }
 
-            // For each $and value on each sub-column, emit a separate EXISTS.
-            // When there are multiple $and sub-columns, we emit the cartesian product — but in
-            // practice this is almost always a single sub-column (e.g. tag.id).
-            const andValueCombinations = andSubColumns.reduce<{ [col: string]: string }[]>(
-                (combinations, subCol) => {
-                    const values = andValuesBySubColumn[subCol]
-                    return combinations.flatMap((combo) => values.map((v) => ({ ...combo, [subCol]: v })))
-                },
-                [{}]
-            )
+            // For each $and value on the (single) sub-column, emit a separate EXISTS subquery.
+            // Multiple $and sub-columns are disallowed (throws above), so andSubColumns always
+            // has exactly one entry here.
+            const andSubCol = andSubColumns[0]
+            const andValues = andValuesBySubColumn[andSubCol]
 
-            for (const [comboIndex, combo] of andValueCombinations.entries()) {
+            // Validate that each $and value has an actual operand after the comparator.
+            // A bare `$and` (no colon separator) produces token.value = undefined, which
+            // would generate a malformed query. Require at least `$and:` with a value.
+            for (const v of andValues) {
+                const token = parseFilterToken(v)
+                if (!token || token.value === undefined) {
+                    throw new Error(
+                        `Invalid $and filter value "${v}" for column ${path}.${andSubCol}: ` +
+                            `$and must be followed by a value, e.g. "$and:Ball" or "$and:$eq:Ball".`
+                    )
+                }
+            }
+
+            if (andValues.length > maxAndValues) {
+                throw new Error(
+                    `Too many $and filter values for column ${path}.${andSubCol}: ${andValues.length} (max ${maxAndValues}). ` +
+                        `Reduce the number of $and values.`
+                )
+            }
+
+            for (const [comboIndex, v] of andValues.entries()) {
                 const singleValueSubQuery: PaginateQuery = {
                     ...baseSubQuery,
                     filter: {
                         ...baseSubQuery.filter,
-                        ...Object.fromEntries(Object.entries(combo).map(([col, v]) => [col, v])),
+                        [andSubCol]: v,
                     },
                 }
                 const existsQb = buildExistsQb(singleValueSubQuery, comboIndex)
-                // AND-mode always uses andWhereExists — $none/$all quantifiers are incompatible
-                // with $and comparator (mixing them is a user error caught by the quantifier check above).
                 qb.andWhereExists(existsQb)
             }
         } else {

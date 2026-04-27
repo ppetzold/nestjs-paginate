@@ -12,7 +12,7 @@ import {
 } from 'typeorm'
 import { WherePredicateOperator } from 'typeorm/query-builder/WhereClause'
 import { PaginateQuery } from './decorator'
-import { addFilter, FilterComparator, FilterOperator, FilterQuantifier, FilterSuffix } from './filter'
+import { addFilter, AddFilterOptions, FilterComparator, FilterOperator, FilterQuantifier, FilterSuffix } from './filter'
 import {
     checkIsEmbedded,
     checkIsRelation,
@@ -46,7 +46,7 @@ import globalConfig from './global-config'
 
 const logger: Logger = new Logger('nestjs-paginate')
 
-export { FilterComparator, FilterOperator, FilterSuffix }
+export { AddFilterOptions, FilterComparator, FilterOperator, FilterSuffix }
 
 export class Paginated<T> {
     data: T[]
@@ -93,6 +93,7 @@ export interface PaginateConfig<T> {
     defaultLimit?: number
     where?: FindOptionsWhere<T> | FindOptionsWhere<T>[]
     filterableColumns?: Partial<MappedColumns<T, (FilterOperator | FilterSuffix | FilterQuantifier | FilterComparator)[] | true>>
+    maxAndValues?: number
     loadEagerRelations?: boolean
     withDeleted?: boolean
     allowWithDeletedInQuery?: boolean
@@ -663,7 +664,7 @@ export async function paginate<T extends ObjectLiteral>(
 
     let filterJoinMethods = {}
     if (query.filter) {
-        filterJoinMethods = addFilter(queryBuilder, query, config.filterableColumns)
+        filterJoinMethods = addFilter(queryBuilder, query, config.filterableColumns, { maxAndValues: config.maxAndValues })
     }
     const joinMethods = { ...filterJoinMethods, ...config.joinMethods }
 
