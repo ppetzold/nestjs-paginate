@@ -576,7 +576,13 @@ function findFirstToManyRelationship(
     columnName: string,
     metadata: EntityMetadata | EmbeddedMetadata
 ): { path: string[]; relation: RelationMetadata } | undefined {
-    const relationPath = getRelationPath(columnName, metadata)
+    let relationPath: ReturnType<typeof getRelationPath>
+    try {
+        relationPath = getRelationPath(columnName, metadata)
+    } catch (e) {
+        if (e instanceof RelationPathError) return undefined
+        throw e
+    }
     const relationSegments = columnName.split('.')
     const firstToMany = relationPath.findIndex(
         ([, relation]) => 'isOneToMany' in relation && (relation.isOneToMany || relation.isManyToMany)
