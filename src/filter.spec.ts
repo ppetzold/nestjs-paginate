@@ -105,31 +105,19 @@ describe('parseFilter $and gating', () => {
     })
 
     it('blocks $and when FilterComparator.AND is not in filterableColumns', () => {
-        const result = parseFilter(
-            { path: '', filter: { name: '$and:Ball' } },
-            { name: [FilterOperator.EQ] },
-            qb
-        )
+        const result = parseFilter({ path: '', filter: { name: '$and:Ball' } }, { name: [FilterOperator.EQ] }, qb)
         // The $and token should be filtered out
         expect(!result.name || result.name.length === 0).toBe(true)
     })
 
     it('allows a plain filter (no explicit $and) even without FilterComparator.AND in filterableColumns', () => {
-        const result = parseFilter(
-            { path: '', filter: { name: 'Ball' } },
-            { name: [FilterOperator.EQ] },
-            qb
-        )
+        const result = parseFilter({ path: '', filter: { name: 'Ball' } }, { name: [FilterOperator.EQ] }, qb)
         expect(result.name).toBeDefined()
         expect(result.name.length).toBe(1)
     })
 
     it('allows $and when filterableColumns is true (all allowed)', () => {
-        const result = parseFilter(
-            { path: '', filter: { name: '$and:Ball' } },
-            { name: true },
-            qb
-        )
+        const result = parseFilter({ path: '', filter: { name: '$and:Ball' } }, { name: true }, qb)
         expect(result.name).toBeDefined()
         expect(result.name.length).toBe(1)
     })

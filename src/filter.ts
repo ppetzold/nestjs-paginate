@@ -341,7 +341,9 @@ function fixColumnFilterValue<T>(column: string, qb: SelectQueryBuilder<T>, isJs
 
 export function parseFilter<T>(
     query: PaginateQuery,
-    filterableColumns?: { [column: string]: (FilterOperator | FilterSuffix | FilterQuantifier | FilterComparator)[] | true },
+    filterableColumns?: {
+        [column: string]: (FilterOperator | FilterSuffix | FilterQuantifier | FilterComparator)[] | true
+    },
     qb?: SelectQueryBuilder<T>
 ): ColumnFilters {
     const filter: ColumnFilters = {}
@@ -605,7 +607,9 @@ export interface AddFilterOptions {
 export function addFilter<T>(
     qb: SelectQueryBuilder<T>,
     query: PaginateQuery,
-    filterableColumns?: { [column: string]: (FilterOperator | FilterSuffix | FilterQuantifier | FilterComparator)[] | true },
+    filterableColumns?: {
+        [column: string]: (FilterOperator | FilterSuffix | FilterQuantifier | FilterComparator)[] | true
+    },
     opts: AddFilterOptions = {}
 ) {
     const mainMetadata = qb.expressionMap.mainAlias.metadata
@@ -693,7 +697,9 @@ export function addToManySubFilters<T>(
     qb: SelectQueryBuilder<T>,
     filter: ColumnFilters,
     query: PaginateQuery,
-    filterableColumns?: { [column: string]: (FilterOperator | FilterSuffix | FilterQuantifier | FilterComparator)[] | true },
+    filterableColumns?: {
+        [column: string]: (FilterOperator | FilterSuffix | FilterQuantifier | FilterComparator)[] | true
+    },
     { maxAndValues = 20, validateAndComparator = true }: AddFilterOptions = {}
 ) {
     const dbType = qb.connection.options.type
@@ -897,7 +903,9 @@ export function addToManySubFilters<T>(
                     .map((jc) => {
                         const junctionCol = jc.databaseName
                         const relatedPk = jc.referencedColumn.databaseName
-                        return `${quote(junctionAlias)}.${quote(junctionCol)} = ${quote(relatedAlias)}.${quote(relatedPk)}`
+                        return `${quote(junctionAlias)}.${quote(junctionCol)} = ${quote(relatedAlias)}.${quote(
+                            relatedPk
+                        )}`
                     })
                     .join(' AND ')
 
@@ -924,9 +932,7 @@ export function addToManySubFilters<T>(
                         fkAlias = relAlias(relationPath[0][0], 0)
                         pkAlias = mainQueryAlias
                     }
-                    existsQb.andWhere(
-                        `${quote(fkAlias)}.${quote(fkColumn)} = ${quote(pkAlias)}.${quote(pkColumn)}`
-                    )
+                    existsQb.andWhere(`${quote(fkAlias)}.${quote(fkColumn)} = ${quote(pkAlias)}.${quote(pkColumn)}`)
                 }
             }
         }
@@ -1134,7 +1140,9 @@ export function addToManySubFilters<T>(
 
 export function createSubFilter(
     query: PaginateQuery,
-    filterableColumns: { [column: string]: (FilterOperator | FilterSuffix | FilterQuantifier | FilterComparator)[] | true },
+    filterableColumns: {
+        [column: string]: (FilterOperator | FilterSuffix | FilterQuantifier | FilterComparator)[] | true
+    },
     column: string
 ) {
     const subQuery = { filter: {} } as PaginateQuery
@@ -1143,7 +1151,9 @@ export function createSubFilter(
             subQuery.filter[getSubColumn(column, subColumn)] = filter
         }
     }
-    const subFilterableColumns: { [column: string]: (FilterOperator | FilterSuffix | FilterQuantifier | FilterComparator)[] | true } = {}
+    const subFilterableColumns: {
+        [column: string]: (FilterOperator | FilterSuffix | FilterQuantifier | FilterComparator)[] | true
+    } = {}
     for (const [subColumn, filter] of Object.entries(filterableColumns)) {
         if (subColumn.startsWith(column + '.')) {
             subFilterableColumns[getSubColumn(column, subColumn)] = filter

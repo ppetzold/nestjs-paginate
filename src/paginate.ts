@@ -92,7 +92,9 @@ export interface PaginateConfig<T> {
     defaultSortBy?: SortBy<T>
     defaultLimit?: number
     where?: FindOptionsWhere<T> | FindOptionsWhere<T>[]
-    filterableColumns?: Partial<MappedColumns<T, (FilterOperator | FilterSuffix | FilterQuantifier | FilterComparator)[] | true>>
+    filterableColumns?: Partial<
+        MappedColumns<T, (FilterOperator | FilterSuffix | FilterQuantifier | FilterComparator)[] | true>
+    >
     maxAndValues?: number
     loadEagerRelations?: boolean
     withDeleted?: boolean
@@ -664,7 +666,9 @@ export async function paginate<T extends ObjectLiteral>(
 
     let filterJoinMethods = {}
     if (query.filter) {
-        filterJoinMethods = addFilter(queryBuilder, query, config.filterableColumns, { maxAndValues: config.maxAndValues })
+        filterJoinMethods = addFilter(queryBuilder, query, config.filterableColumns, {
+            maxAndValues: config.maxAndValues,
+        })
     }
     const joinMethods = { ...filterJoinMethods, ...config.joinMethods }
 
