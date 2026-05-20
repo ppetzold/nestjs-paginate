@@ -108,6 +108,7 @@ export interface PaginateConfig<T> {
     defaultJoinMethod?: JoinMethod
     joinMethods?: Partial<MappedColumns<T, JoinMethod>>
     buildCountQuery?: (qb: SelectQueryBuilder<T>) => SelectQueryBuilder<any>
+    throwOnInvalidFilter?: boolean
 }
 
 export enum PaginationLimit {
@@ -666,9 +667,15 @@ export async function paginate<T extends ObjectLiteral>(
 
     let filterJoinMethods = {}
     if (query.filter) {
-        filterJoinMethods = addFilter(queryBuilder, query, config.filterableColumns, {
-            maxAndValues: config.maxAndValues,
-        })
+        filterJoinMethods = addFilter(
+            queryBuilder,
+            query,
+            config.filterableColumns,
+            {
+                maxAndValues: config.maxAndValues,
+            },
+            config.throwOnInvalidFilter
+        )
     }
     const joinMethods = { ...filterJoinMethods, ...config.joinMethods }
 
