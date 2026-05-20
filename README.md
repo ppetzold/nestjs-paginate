@@ -317,6 +317,16 @@ const paginateConfig: PaginateConfig<CatEntity> {
 
   /**
    * Required: false
+   * Type: boolean
+   * Default: false
+   * Description: Throw a 400 error when a request uses an unknown filter column
+   * or a non-whitelisted filter operator/suffix. When disabled, invalid filters
+   * are silently ignored.
+   */
+  throwOnInvalidFilter: false,
+
+  /**
+   * Required: false
    * Type: RelationColumn<CatEntity>
    * Description: Indicates what relations of entity should be loaded.
    */
@@ -633,6 +643,8 @@ const result = await paginate<CatEntity>(query, catRepo, config)
 ## Filters
 
 Filter operators must be whitelisted per column in `PaginateConfig`.
+By default, unknown filter columns and invalid filter operators are ignored. Set
+`throwOnInvalidFilter: true` to return `400 Bad Request` instead.
 
 ### Examples
 
