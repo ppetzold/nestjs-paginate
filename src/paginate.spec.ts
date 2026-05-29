@@ -183,6 +183,20 @@ describe('paginate', () => {
             }),
         ])
 
+        // Link cats via two parallel to-one relations for polymorphic (~) sort tests.
+        // Saved as fresh objects so the shared `cats` fixture is not mutated. Some cats
+        // get a bestFriend, others only a nemesis, so COALESCE(bestFriend.age, nemesis.age)
+        // exercises the fallback from the first source to the second.
+        await catRepo.save([
+            catRepo.create({ id: cats[0].id, bestFriend: cats[2] }), // Milo  -> 4 (Shadow)
+            catRepo.create({ id: cats[1].id, nemesis: cats[0] }), //    Garfield -> 6 (Milo)
+            catRepo.create({ id: cats[2].id, bestFriend: cats[3] }), // Shadow -> 3 (George)
+            catRepo.create({ id: cats[3].id, nemesis: cats[5] }), //    George -> 0 (Baby)
+            catRepo.create({ id: cats[4].id, bestFriend: cats[1] }), // Leche  -> 5 (Garfield)
+            catRepo.create({ id: cats[5].id, nemesis: cats[2] }), //    Baby   -> 4 (Shadow)
+            catRepo.create({ id: cats[6].id, bestFriend: cats[0] }), // Adam   -> 6 (Milo)
+        ])
+
         toyShopsAddresses = await toyShopAddressRepository.save([
             toyShopAddressRepository.create({ address: '123 Main St' }),
         ])
@@ -827,6 +841,97 @@ describe('paginate', () => {
             ['name', 'ASC'],
         ])
         expect(result.data).toStrictEqual(sortedCats)
+    })
+
+    describe('polymorphic sort (~)', () => {
+        // Mirrors SQL COALESCE(bestFriend.age, nemesis.age) for the links set up in beforeAll.
+        const coalescedAge = (cat: CatEntity): number | null => cat.bestFriend?.age ?? cat.nemesis?.age ?? null
+
+        it('should sort by a polymorphic column group using COALESCE (ASC)', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id', 'bestFriend.age', 'nemesis.age'],
+                relations: ['bestFriend', 'nemesis'],
+            }
+            const query: PaginateQuery = {
+                path: '',
+                sortBy: [[['bestFriend.age', 'nemesis.age'], 'ASC']],
+            }
+
+            const result = await paginate<CatEntity>(query, catRepo, config)
+
+            expect(result.meta.sortBy).toStrictEqual([[['bestFriend.age', 'nemesis.age'], 'ASC']])
+
+            const values = result.data.map(coalescedAge)
+            // Every cat resolves to a non-null age through one of the two relations.
+            expect(values.every((v) => typeof v === 'number')).toBe(true)
+            // The COALESCE result is ordered ascending.
+            expect(values).toStrictEqual([...(values as number[])].sort((a, b) => a - b))
+            // The fallback actually fires: some rows resolve via nemesis (no bestFriend).
+            expect(result.data.some((cat) => !cat.bestFriend && !!cat.nemesis)).toBe(true)
+        })
+
+        it('should sort by a polymorphic column group using COALESCE (DESC)', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id', 'bestFriend.age', 'nemesis.age'],
+                relations: ['bestFriend', 'nemesis'],
+            }
+            const query: PaginateQuery = {
+                path: '',
+                sortBy: [[['bestFriend.age', 'nemesis.age'], 'DESC']],
+            }
+
+            const result = await paginate<CatEntity>(query, catRepo, config)
+
+            const values = result.data.map(coalescedAge)
+            expect(values).toStrictEqual([...(values as number[])].sort((a, b) => b - a))
+        })
+
+        it('should ignore a polymorphic group when one of its columns is not sortable', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id', 'bestFriend.age'], // nemesis.age intentionally omitted
+                relations: ['bestFriend', 'nemesis'],
+                defaultSortBy: [['id', 'ASC']],
+            }
+            const query: PaginateQuery = {
+                path: '',
+                sortBy: [[['bestFriend.age', 'nemesis.age'], 'ASC']],
+            }
+
+            const result = await paginate<CatEntity>(query, catRepo, config)
+
+            // The group is dropped during validation, so the default sort applies.
+            expect(result.meta.sortBy).toStrictEqual([['id', 'ASC']])
+        })
+
+        it('should reject a polymorphic group with cursor pagination', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id', 'bestFriend.age', 'nemesis.age'],
+                relations: ['bestFriend', 'nemesis'],
+                paginationType: PaginationType.CURSOR,
+            }
+            const query: PaginateQuery = {
+                path: '',
+                sortBy: [[['bestFriend.age', 'nemesis.age'], 'ASC']],
+            }
+
+            await expect(paginate<CatEntity>(query, catRepo, config)).rejects.toThrow(
+                'Polymorphic sort groups (using "~") are not supported with cursor pagination.'
+            )
+        })
+
+        it('should reject embedded columns inside a polymorphic group', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id', 'size.height', 'age'],
+            }
+            const query: PaginateQuery = {
+                path: '',
+                sortBy: [[['size.height', 'age'], 'ASC']],
+            }
+
+            await expect(paginate<CatEntity>(query, catRepo, config)).rejects.toThrow(
+                'Polymorphic sort groups (using "~") support only plain and relation columns'
+            )
+        })
     })
 
     it('should return result based on search term', async () => {

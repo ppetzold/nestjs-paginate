@@ -85,7 +85,7 @@ export type RelationColumn<T> = Extract<
     }[Column<T>]
 >
 
-export type Order<T> = [Column<T>, 'ASC' | 'DESC']
+export type Order<T> = [Column<T> | Column<T>[], 'ASC' | 'DESC']
 export type SortBy<T> = Order<T>[]
 
 // eslint-disable-next-line @typescript-eslint/ban-types
