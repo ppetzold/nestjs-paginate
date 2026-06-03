@@ -640,6 +640,44 @@ const config: PaginateConfig<CatEntity> = {
 const result = await paginate<CatEntity>(query, catRepo, config)
 ```
 
+## Polymorphic sorting
+
+Sometimes the value you want to sort on can come from one of several columns — for
+example a record that links to one of two relations and you want to order by
+whichever one is set. Join columns into a single sort term with `~` and the rows
+are ordered by the `COALESCE` of those columns (the first non-`null` value per row).
+
+### Endpoint
+
+```
+http://localhost:3000/cats?sortBy=bestFriend.age~nemesis.age:DESC
+```
+
+This orders by `COALESCE(bestFriend.age, nemesis.age)` — a cat's best friend's age,
+or its nemesis's age when it has no best friend.
+
+### Code
+
+```typescript
+const config: PaginateConfig<CatEntity> = {
+  // Every column used in a group must be listed in sortableColumns.
+  sortableColumns: ['id', 'bestFriend.age', 'nemesis.age'],
+  relations: ['bestFriend', 'nemesis'],
+}
+```
+
+Notes and limitations:
+
+- The grouped columns must be **type-compatible** (e.g. all numbers, or all dates).
+  Mixing incompatible types lets the database raise its own error; types are not
+  coerced for you.
+- A group is only applied when **every** column in it is listed in `sortableColumns`;
+  otherwise the term is ignored.
+- Only **plain** and **relation** columns are supported in a group. Embedded, virtual,
+  and JSONB-path columns are rejected.
+- Polymorphic groups are **not supported with cursor pagination** (the COALESCE value
+  cannot be encoded into a cursor) and will throw.
+
 ## Filters
 
 Filter operators must be whitelisted per column in `PaginateConfig`.

@@ -7,6 +7,7 @@ import {
     JoinColumn,
     JoinTable,
     ManyToMany,
+    ManyToOne,
     OneToMany,
     OneToOne,
     PrimaryGeneratedColumn,
@@ -66,6 +67,14 @@ export class CatEntity {
 
     @ManyToMany(() => CatEntity, (cat) => cat.friends)
     friendOf: CatEntity[]
+
+    // Two parallel to-one relations used to exercise polymorphic (~) sorting,
+    // e.g. sortBy=bestFriend.age~nemesis.age -> COALESCE(bestFriend.age, nemesis.age).
+    @ManyToOne(() => CatEntity, { nullable: true })
+    bestFriend: CatEntity | null
+
+    @ManyToOne(() => CatEntity, { nullable: true })
+    nemesis: CatEntity | null
 
     @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
     weightChange: number | null

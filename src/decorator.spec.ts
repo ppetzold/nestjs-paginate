@@ -168,6 +168,19 @@ describe('Decorator', () => {
         })
     })
 
+    it('should parse polymorphic (~) sort groups into column arrays', () => {
+        const context = expressContextFactory({
+            sortBy: ['bestFriend.age~nemesis.age:ASC', 'name:DESC'],
+        })
+
+        const result: PaginateQuery = decoratorfactory(null, context)
+
+        expect(result.sortBy).toStrictEqual([
+            [['bestFriend.age', 'nemesis.age'], 'ASC'],
+            ['name', 'DESC'],
+        ])
+    })
+
     it('should handle fastify defined query fields', () => {
         const context = fastifyContextFactory({
             page: '1',

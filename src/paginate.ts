@@ -449,7 +449,17 @@ export async function paginate<T extends ObjectLiteral>(
 
     if (query.sortBy) {
         for (const order of query.sortBy) {
-            if (isEntityKey(config.sortableColumns, order[0]) && ['ASC', 'DESC'].includes(order[1])) {
+            const [column, direction] = order
+            if (!['ASC', 'DESC'].includes(direction)) {
+                continue
+            }
+            // A polymorphic group (e.g. `colA~colB`) is valid only when every
+            // column in the group is sortable.
+            if (Array.isArray(column)) {
+                if (column.length > 0 && column.every((c) => isEntityKey(config.sortableColumns, c))) {
+                    sortBy.push(order as Order<T>)
+                }
+            } else if (isEntityKey(config.sortableColumns, column)) {
                 sortBy.push(order as Order<T>)
             }
         }
@@ -457,6 +467,13 @@ export async function paginate<T extends ObjectLiteral>(
 
     if (!sortBy.length) {
         sortBy.push(...(config.defaultSortBy || [[config.sortableColumns[0], 'ASC']]))
+    }
+
+    // Polymorphic sort groups rely on a COALESCE expression in the SELECT/ORDER BY,
+    // which cannot be encoded into a cursor token. Reject the combination explicitly
+    // rather than producing silently-wrong cursors.
+    if (config.paginationType === PaginationType.CURSOR && sortBy.some(([column]) => Array.isArray(column))) {
+        logAndThrowException('Polymorphic sort groups (using "~") are not supported with cursor pagination.')
     }
 
     const searchBy: Column<T>[] = []
@@ -591,7 +608,9 @@ export async function paginate<T extends ObjectLiteral>(
             }
 
             const cursorExpressions = sortBy.map(([column, direction]) => {
-                const columnProperties = getPropertiesByColumnName(column)
+                // Polymorphic sort groups are rejected for cursor pagination above,
+                // so every column here is a plain string.
+                const columnProperties = getPropertiesByColumnName(column as string)
                 const { isVirtualProperty, query: virtualQuery } = extractVirtualProperty(
                     queryBuilder,
                     columnProperties
@@ -700,7 +719,61 @@ export async function paginate<T extends ObjectLiteral>(
         }
 
         for (const order of sortBy) {
-            const columnProperties = getPropertiesByColumnName(order[0])
+            const [sortColumn, sortDirection] = order
+
+            // Polymorphic sort: `colA~colB` sorts by COALESCE(colA, colB) — the first
+            // non-null value per row. The grouped columns must be type-compatible.
+            if (Array.isArray(sortColumn)) {
+                const escape = (identifier: string) => queryBuilder.connection.driver.escape(identifier)
+                const coalesceExpr = `COALESCE(${sortColumn
+                    .map((column) => {
+                        const props = getPropertiesByColumnName(column)
+                        const { isVirtualProperty } = extractVirtualProperty(queryBuilder, props)
+                        const isEmbedded = checkIsEmbedded(queryBuilder, props.propertyPath)
+                        if (isVirtualProperty || isEmbedded || resolveJsonbPath(queryBuilder, props.column).isJsonb) {
+                            logAndThrowException(
+                                `Polymorphic sort groups (using "~") support only plain and relation columns, not "${column}".`
+                            )
+                        }
+                        const isRelation = checkIsRelation(queryBuilder, props.propertyPath)
+                        // For plain and relation columns fixColumnAlias returns `<alias>.<column>`
+                        // with a single dot. Escape each identifier so camel-cased columns work
+                        // on case-folding drivers (e.g. Postgres), since this raw expression is
+                        // added to the SELECT list and is not escaped by the query builder.
+                        const ref = fixColumnAlias(
+                            props,
+                            queryBuilder.alias,
+                            isRelation,
+                            false,
+                            false,
+                            undefined,
+                            queryBuilder
+                        )
+                        const separator = ref.indexOf('.')
+                        return `${escape(ref.slice(0, separator))}.${escape(ref.slice(separator + 1))}`
+                    })
+                    .join(', ')})`
+                const polymorphAlias = `_polymorph_${sortColumn.join('_').replace(/[^a-zA-Z0-9]/g, '_')}`.toLowerCase()
+                queryBuilder.addSelect(coalesceExpr, polymorphAlias)
+
+                if (isMySqlOrMariaDb) {
+                    if (nullSort) {
+                        const selectionAliasName = `${polymorphAlias}IsNull`
+                        queryBuilder.addSelect(`${coalesceExpr} ${nullSort}`, selectionAliasName)
+                        queryBuilder.addOrderBy(selectionAliasName)
+                    }
+                    queryBuilder.addOrderBy(polymorphAlias, sortDirection)
+                } else {
+                    queryBuilder.addOrderBy(
+                        polymorphAlias,
+                        sortDirection,
+                        nullSort as 'NULLS FIRST' | 'NULLS LAST' | undefined
+                    )
+                }
+                continue
+            }
+
+            const columnProperties = getPropertiesByColumnName(sortColumn)
             const { isVirtualProperty, query: virtualQuery } = extractVirtualProperty(queryBuilder, columnProperties)
             const isRelation = checkIsRelation(queryBuilder, columnProperties.propertyPath)
             const isEmbedded = checkIsEmbedded(queryBuilder, columnProperties.propertyPath)

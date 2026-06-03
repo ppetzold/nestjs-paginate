@@ -15,7 +15,7 @@ function isExpressRequest(request: unknown): request is ExpressRequest {
 export interface PaginateQuery {
     page?: number
     limit?: number
-    sortBy?: [string, string][]
+    sortBy?: [string | string[], string][]
     searchBy?: string[]
     search?: string
     filter?: { [column: string]: string | string[] }
@@ -96,7 +96,9 @@ export const Paginate = createParamDecorator((_data: unknown, ctx: ExecutionCont
     }
 
     const searchBy = parseParam<string>(query.searchBy, singleSplit)
-    const sortBy = parseParam<[string, string]>(query.sortBy, multipleSplit)
+    const sortBy = parseParam<[string, string]>(query.sortBy, multipleSplit)?.map(
+        ([column, order]) => [column.includes('~') ? column.split('~') : column, order] as [string | string[], string]
+    )
     const select = parseParam<string>(query.select, multipleAndCommaSplit)
 
     const filter = mapKeys(
