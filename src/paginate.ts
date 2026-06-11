@@ -14,6 +14,7 @@ import { WherePredicateOperator } from 'typeorm/query-builder/WhereClause'
 import { PaginateQuery } from './decorator'
 import { addFilter, AddFilterOptions, FilterComparator, FilterOperator, FilterQuantifier, FilterSuffix } from './filter'
 import {
+    buildOptimizedCountQuery,
     checkIsEmbedded,
     checkIsRelation,
     Column,
@@ -47,6 +48,7 @@ import globalConfig from './global-config'
 const logger: Logger = new Logger('nestjs-paginate')
 
 export { AddFilterOptions, FilterComparator, FilterOperator, FilterSuffix }
+export { buildOptimizedCountQuery }
 
 export class Paginated<T> {
     data: T[]
@@ -108,6 +110,7 @@ export interface PaginateConfig<T> {
     defaultJoinMethod?: JoinMethod
     joinMethods?: Partial<MappedColumns<T, JoinMethod>>
     buildCountQuery?: (qb: SelectQueryBuilder<T>) => SelectQueryBuilder<any>
+    optimizedCount?: boolean
     throwOnInvalidFilter?: boolean
 }
 
@@ -1036,9 +1039,10 @@ export async function paginate<T extends ObjectLiteral>(
     if (query.limit === PaginationLimit.COUNTER_ONLY) {
         totalItems = await queryBuilder.getCount()
     } else if (isPaginated && config.paginationType !== PaginationType.CURSOR) {
-        if (config.buildCountQuery) {
+        if (config.buildCountQuery || config.optimizedCount) {
+            const buildCountQuery = config.buildCountQuery ?? buildOptimizedCountQuery
             items = await queryBuilder.getMany()
-            totalItems = await config.buildCountQuery(queryBuilder.clone()).getCount()
+            totalItems = await buildCountQuery(queryBuilder.clone()).getCount()
         } else {
             ;[items, totalItems] = await queryBuilder.getManyAndCount()
         }

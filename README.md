@@ -445,6 +445,22 @@ const paginateConfig: PaginateConfig<CatEntity> {
    * ```
    */
   buildCountQuery: (qb: SelectQueryBuilder<T>) => SelectQueryBuilder<any>,
+
+  /**
+   * Required: false
+   * Type: boolean
+   * Default: false
+   * Description: Build the COUNT query from a pruned clone of the main query
+   * instead of counting over the fully-joined statement. LEFT JOINs that the
+   * WHERE clause does not reference are removed before counting (INNER JOINs
+   * and the parent chains of referenced joins are kept), so configs that join
+   * many relations purely for hydration no longer pay for them in the count.
+   *
+   * The page data query is unaffected. Ignored when buildCountQuery is set;
+   * the pruning helper is exported as `buildOptimizedCountQuery` so it can be
+   * composed inside a custom buildCountQuery as well.
+   */
+  optimizedCount: true,
 }
 ````
 

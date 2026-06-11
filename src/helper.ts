@@ -3,6 +3,7 @@ import {
     FindOperator,
     FindOptionsRelationByString,
     FindOptionsRelations,
+    ObjectLiteral,
     Repository,
     SelectQueryBuilder,
 } from 'typeorm'
@@ -519,4 +520,58 @@ export function andWhereAllExist(
     // so it should be safe to replace the first WHERE with WHERE NOT (...) and get a correct query.
     const existsWhereNot = query.replace('WHERE', 'WHERE NOT (') + ')'
     return qb.andWhere(`NOT ${existsWhereNot}`, params)
+}
+
+/**
+ * Strips the parts of a fully-built paginate query that do not affect how many root
+ * entities match, so the count query stays cheap even when many relations are joined
+ * for hydration.
+ *
+ * Pruning rules:
+ * - INNER joins are always kept: they restrict the result set even when unreferenced.
+ * - LEFT joins are kept only when the WHERE clause references their alias.
+ * - Parent joins of any kept join are kept, so nested relation chains stay intact.
+ * - ORDER BY is cleared, since ordering does not change the count.
+ *
+ * Used by `paginate` when `PaginateConfig.optimizedCount` is enabled. It can also be
+ * composed inside a custom `PaginateConfig.buildCountQuery`.
+ *
+ * @param {SelectQueryBuilder<T>} qb A clone of the fully-built query builder.
+ * @return {SelectQueryBuilder<T>} The same builder with count-irrelevant joins removed.
+ */
+export function buildOptimizedCountQuery<T extends ObjectLiteral>(qb: SelectQueryBuilder<T>): SelectQueryBuilder<T> {
+    qb.orderBy()
+    // Protected TypeORM API that renders only the WHERE clause. Slicing getQuery() at
+    // its first WHERE instead would false-match subqueries rendered into the SELECT
+    // clause, such as virtual columns.
+    const whereSql: string = qb['createWhereExpression']()
+
+    const joins = qb.expressionMap.joinAttributes
+    const rootAlias = qb.expressionMap.mainAlias?.name
+    const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const isReferenced = (alias: string) =>
+        whereSql.includes(`"${alias}".`) || new RegExp(`(?<![\\w"])${escapeRegExp(alias)}\\.`).test(whereSql)
+
+    const kept = new Set<string>()
+    for (const join of joins) {
+        if (join.direction === 'INNER' || isReferenced(join.alias.name)) {
+            kept.add(join.alias.name)
+        }
+    }
+
+    let added = true
+    while (added) {
+        added = false
+        for (const join of joins) {
+            if (!kept.has(join.alias.name)) continue
+            const parent = join.parentAlias
+            if (parent && parent !== rootAlias && !kept.has(parent)) {
+                kept.add(parent)
+                added = true
+            }
+        }
+    }
+
+    qb.expressionMap.joinAttributes = joins.filter((join) => kept.has(join.alias.name))
+    return qb
 }
