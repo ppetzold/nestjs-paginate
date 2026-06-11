@@ -22,7 +22,14 @@ import {
     OperatorSymbolToFunction,
     parseFilterToken,
 } from './filter'
-import { paginate, PaginateConfig, Paginated, PaginationLimit, PaginationType } from './paginate'
+import {
+    buildOptimizedCountQuery,
+    paginate,
+    PaginateConfig,
+    Paginated,
+    PaginationLimit,
+    PaginationType,
+} from './paginate'
 import globalConfig, { updateGlobalConfig } from './global-config'
 
 // Disable debug logs during tests
@@ -3294,6 +3301,71 @@ describe('paginate', () => {
 
         expect(fakeQB.getCount).toHaveBeenCalledTimes(1)
         expect(page.meta.totalItems).toBe(42)
+    })
+
+    it('should return the same results with optimizedCount as the default count', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            relations: ['toys', 'home'],
+            filterableColumns: { color: [FilterOperator.EQ] },
+        }
+        const query: PaginateQuery = {
+            path: '',
+            filter: { color: 'white' },
+        }
+
+        const defaultResult = await paginate<CatEntity>(query, catRepo, config)
+        const optimizedResult = await paginate<CatEntity>(query, catRepo, { ...config, optimizedCount: true })
+
+        expect(defaultResult.meta.totalItems).toBeGreaterThan(0)
+        expect(optimizedResult.meta.totalItems).toBe(defaultResult.meta.totalItems)
+        expect(optimizedResult.data).toStrictEqual(defaultResult.data)
+    })
+
+    it('should return the same results with optimizedCount when filtering through a relation', async () => {
+        const config: PaginateConfig<CatToyEntity> = {
+            sortableColumns: ['id'],
+            relations: ['cat', 'shop'],
+            filterableColumns: { 'cat.color': [FilterOperator.EQ] },
+        }
+        const query: PaginateQuery = {
+            path: '',
+            filter: { 'cat.color': 'ginger' },
+        }
+
+        const defaultResult = await paginate<CatToyEntity>(query, catToyRepo, config)
+        const optimizedResult = await paginate<CatToyEntity>(query, catToyRepo, { ...config, optimizedCount: true })
+
+        expect(defaultResult.meta.totalItems).toBeGreaterThan(0)
+        expect(optimizedResult.meta.totalItems).toBe(defaultResult.meta.totalItems)
+        expect(optimizedResult.data).toStrictEqual(defaultResult.data)
+    })
+
+    it('should prune joins the where clause does not reference from the count query', async () => {
+        const queryBuilder = catRepo
+            .createQueryBuilder('cats')
+            .leftJoinAndSelect('cats.toys', 'toys')
+            .leftJoinAndSelect('cats.home', 'home')
+            .where('cats.color = :color', { color: 'white' })
+
+        const prunedQueryBuilder = buildOptimizedCountQuery(queryBuilder.clone())
+
+        expect(prunedQueryBuilder.expressionMap.joinAttributes).toHaveLength(0)
+        expect(await prunedQueryBuilder.getCount()).toBe(await queryBuilder.getCount())
+    })
+
+    it('should keep joins referenced by the where clause in the count query', async () => {
+        const queryBuilder = catRepo
+            .createQueryBuilder('cats')
+            .leftJoinAndSelect('cats.toys', 'toys')
+            .leftJoinAndSelect('cats.home', 'home')
+            .where('home.name = :name', { name: 'Box' })
+
+        const prunedQueryBuilder = buildOptimizedCountQuery(queryBuilder.clone())
+
+        const keptAliases = prunedQueryBuilder.expressionMap.joinAttributes.map((join) => join.alias.name)
+        expect(keptAliases).toStrictEqual(['home'])
+        expect(await prunedQueryBuilder.getCount()).toBe(await queryBuilder.getCount())
     })
 
     it('should fix currentPage when page is out of bounds', async () => {
