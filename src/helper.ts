@@ -262,6 +262,13 @@ export interface JsonbPathResolution {
 }
 
 /**
+ * Column data types treated as JSON. Both `jsonb` and plain `json` are supported:
+ * `#>>` path extraction works on both, and TypeORM's `JsonContains` ($eq/$in/$contains)
+ * emits `<column> ::jsonb @> :value`, which casts a `json` column to `jsonb` for free.
+ */
+const JSON_COLUMN_TYPES = ['jsonb', 'json']
+
+/**
  * Walks the dot-separated `column` path through TypeORM entity metadata to determine
  * whether the path terminates in a JSONB column and, if so, where the relation chain
  * ends and the JSON key path begins.
@@ -296,9 +303,9 @@ export function resolveJsonbPath(qb: SelectQueryBuilder<unknown>, column: string
             relationPath.push(segment)
             metadata = relation.inverseEntityMetadata
         } else {
-            // Not a relation — check whether it is a JSONB column
-            const isJsonbColumn = metadata?.findColumnWithPropertyName(segment)?.type === 'jsonb'
-            if (!isJsonbColumn) {
+            // Not a relation — check whether it is a JSON(B) column
+            const columnType = metadata?.findColumnWithPropertyName(segment)?.type
+            if (!JSON_COLUMN_TYPES.includes(columnType as string)) {
                 return notJsonb
             }
             return {
@@ -310,10 +317,10 @@ export function resolveJsonbPath(qb: SelectQueryBuilder<unknown>, column: string
         }
     }
 
-    // All segments except the last were relations; the last segment must be a JSONB column.
+    // All segments except the last were relations; the last segment must be a JSON(B) column.
     const lastSegment = parts[parts.length - 1]
-    const isJsonbColumn = metadata?.findColumnWithPropertyName(lastSegment)?.type === 'jsonb'
-    if (isJsonbColumn) {
+    const lastColumnType = metadata?.findColumnWithPropertyName(lastSegment)?.type
+    if (JSON_COLUMN_TYPES.includes(lastColumnType as string)) {
         return {
             isJsonb: true,
             relationPath,
