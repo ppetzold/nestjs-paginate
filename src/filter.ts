@@ -617,6 +617,44 @@ function findFirstToManyRelationship(
         }
 }
 
+/**
+ * Finds the first relationship of any cardinality (to-one or to-many) on the column path,
+ * returning the path up to and including it. Embedded segments are not relationships.
+ * Returns undefined for pure root/embedded columns.
+ */
+function findFirstRelationship(
+    columnName: string,
+    metadata: EntityMetadata | EmbeddedMetadata
+): { path: string[]; relation: RelationMetadata } | undefined {
+    let relationPath: ReturnType<typeof getRelationPath>
+    try {
+        relationPath = getRelationPath(columnName, metadata)
+    } catch (e) {
+        if (e instanceof RelationPathError) return undefined
+        throw e
+    }
+    const relationSegments = columnName.split('.')
+    const firstRelation = relationPath.findIndex(([, meta]) => 'isOneToMany' in meta)
+    if (firstRelation > -1)
+        return {
+            path: relationSegments.slice(0, firstRelation + 1),
+            relation: relationPath[firstRelation][1] as RelationMetadata,
+        }
+}
+
+/**
+ * Determines where the EXISTS subquery for a relation filter should be rooted: at the first
+ * to-many relation if the path has one (so the existing to-many join chain is preserved), and
+ * otherwise at the first to-one relation. Used for top-level filters; inside an EXISTS subquery
+ * only to-many relations are lifted out, while to-one relations are joined locally.
+ */
+function findExistsRootPath(
+    columnName: string,
+    metadata: EntityMetadata | EmbeddedMetadata
+): { path: string[]; relation: RelationMetadata } | undefined {
+    return findFirstToManyRelationship(columnName, metadata) ?? findFirstRelationship(columnName, metadata)
+}
+
 export interface AddFilterOptions {
     /**
      * Maximum number of `$and` values allowed per sub-column in a single to-many filter.
@@ -631,6 +669,14 @@ export interface AddFilterOptions {
      * @internal
      */
     validateAndComparator?: boolean
+    /**
+     * Set when `addFilter` is called recursively to build an EXISTS subquery. Inside a subquery
+     * to-one relations are joined locally (they don't pollute the outer result set), so only
+     * to-many relations are lifted into nested EXISTS. At the top level every relation filter
+     * becomes an EXISTS.
+     * @internal
+     */
+    subFilter?: boolean
 }
 
 export function addFilter<T>(
@@ -642,47 +688,48 @@ export function addFilter<T>(
     opts: AddFilterOptions = {},
     throwOnInvalidFilter = false
 ) {
-    const mainMetadata = qb.expressionMap.mainAlias.metadata
+    const { subFilter = false } = opts
     const filter = parseFilter(query, filterableColumns, qb, throwOnInvalidFilter)
 
-    addDirectFilters(qb, filter)
+    addDirectFilters(qb, filter, subFilter)
     addToManySubFilters(qb, filter, query, filterableColumns, opts)
 
-    // Direct filters require to be joined, so pass the join information back up to the main pagination builder
-    // (or the parent filter query in case of subfilters)
     const columnJoinMethods: ColumnJoinMethods = {}
+    if (!subFilter) {
+        // Top level: relation filters are EXISTS subqueries and root/embedded filters are plain
+        // WHERE clauses, so filtering never joins a relation into the result set.
+        return columnJoinMethods
+    }
+    // Inside an EXISTS subquery, to-one relation filters are joined locally; report those joins so
+    // the subquery builder adds them.
+    const metadata = qb.expressionMap.mainAlias.metadata
     for (const [key] of Object.entries(filter)) {
-        const relationPath = getRelationPath(key, mainMetadata)
-        // Skip filters that don't result in WHERE clauses and so don't need to be joined..
-        if (
-            relationPath.find(
-                ([, relation]) => 'isOneToMany' in relation && (relation.isOneToMany || relation.isManyToMany)
-            )
-        ) {
+        const relationPath = getRelationPath(key, metadata)
+        if (findFirstToManyRelationship(key, metadata)) {
             continue
         }
-
         for (let i = 0; i < relationPath.length; i++) {
             const column = relationPath
                 .slice(0, i + 1)
                 .map((p) => p[0])
                 .join('.')
-            // Skip joins on embedded entities
             if ('inverseRelation' in relationPath[i][1]) {
                 columnJoinMethods[column] = 'innerJoinAndSelect'
             }
         }
     }
-
     return columnJoinMethods
 }
 
-export function addDirectFilters<T>(qb: SelectQueryBuilder<T>, filter: ColumnFilters) {
+export function addDirectFilters<T>(qb: SelectQueryBuilder<T>, filter: ColumnFilters, subFilter = false) {
     const filterEntries = Object.entries(filter)
     const metadata = qb.expressionMap.mainAlias.metadata
 
-    // Direct filters are those without toMany relationships on their path, and can be expressed as simple JOINs + WHERE clauses
-    const whereFilters = filterEntries.filter(([key]) => !findFirstToManyRelationship(key, metadata))
+    // Top level: only root/embedded columns are direct WHERE clauses; every relation filter becomes
+    // an EXISTS subquery. Inside a subquery, to-one relations are joined locally and stay direct,
+    // and only to-many relations are lifted into nested EXISTS.
+    const findRelation = subFilter ? findFirstToManyRelationship : findFirstRelationship
+    const whereFilters = filterEntries.filter(([key]) => !findRelation(key, metadata))
     const orFilters = whereFilters.filter(([, value]) => value[0].comparator === '$or')
     const andFilters = whereFilters.filter(([, value]) => value[0].comparator === '$and')
 
@@ -730,16 +777,19 @@ export function addToManySubFilters<T>(
     filterableColumns?: {
         [column: string]: (FilterOperator | FilterSuffix | FilterQuantifier | FilterComparator)[] | true
     },
-    { maxAndValues = 20, validateAndComparator = true }: AddFilterOptions = {}
+    { maxAndValues = 20, validateAndComparator = true, subFilter = false }: AddFilterOptions = {}
 ) {
     const dbType = qb.connection.options.type
     const quote = (column: string) => quoteColumn(column, ['mysql', 'mariadb'].includes(dbType))
     const mainMetadata = qb.expressionMap.mainAlias.metadata
     const filterEntries = Object.entries(filter)
 
-    // Filters with toMany relationships on their path need to be expressed as EXISTS subqueries.
-    const existsFilters = filterEntries.map(([key]) => findFirstToManyRelationship(key, mainMetadata)).filter(Boolean)
-    // Find all the different toMany starting paths
+    // Each relation filter becomes a correlated EXISTS subquery. At the top level it is rooted at
+    // the first relation of any cardinality; inside a subquery only to-many relations are lifted out
+    // (to-one relations are joined locally), preserving the existing to-many query shape.
+    const findRoot = subFilter ? findFirstToManyRelationship : findExistsRootPath
+    const existsFilters = filterEntries.map(([key]) => findRoot(key, mainMetadata)).filter(Boolean)
+    // Find all the distinct relation starting paths
     const toManyPaths = [...new Set(existsFilters.map((f) => f.path.join('.')))]
 
     // Validate that $and is not used on scalar (non-to-many) columns — it has no meaningful
@@ -812,7 +862,10 @@ export function addToManySubFilters<T>(
             const leafAlias = relAlias(relationPath[relationPath.length - 1][0], relationPath.length - 1)
             const existsQb = qb.connection.createQueryBuilder(existsMetadata.target as any, leafAlias)
 
-            const subJoins = addFilter(existsQb, extraSubQuery, subFilterableColumns, { validateAndComparator: false })
+            const subJoins = addFilter(existsQb, extraSubQuery, subFilterableColumns, {
+                validateAndComparator: false,
+                subFilter: true,
+            })
 
             // Step 3: Add the sub relationship joins to the EXISTS subquery.
             const relationsSchema = mergeRelationSchema(createRelationSchema(Object.keys(subJoins)))

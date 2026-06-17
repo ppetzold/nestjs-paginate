@@ -2409,6 +2409,8 @@ describe('paginate', () => {
     it('should return result based on null query on nested relation', async () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id'],
+            // Filtering a relation no longer hydrates it; request the chain explicitly to load it.
+            relations: ['home.naptimePillow.brand'],
             filterableColumns: {
                 'home.naptimePillow.brand.quality': [FilterOperator.NULL],
             },
@@ -6044,6 +6046,56 @@ describe('paginate', () => {
                     )
                 })
             })
+        })
+    })
+
+    describe('Filtering across to-one relationship boundaries', () => {
+        let existsSpy
+
+        beforeAll(() => {
+            existsSpy = jest.spyOn(SelectQueryBuilder.prototype, 'andWhereExists')
+        })
+        beforeEach(() => existsSpy.mockClear())
+        afterAll(() => existsSpy.mockRestore())
+
+        it('should filter a to-one relation with an EXISTS subquery and not hydrate it', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id'],
+                filterableColumns: {
+                    'home.name': [FilterOperator.EQ],
+                },
+            }
+            const query: PaginateQuery = {
+                path: '',
+                filter: { 'home.name': '$eq:House' },
+            }
+
+            const result = await paginate<CatEntity>(query, catRepo, config)
+
+            expect(result.data.map((c) => c.id)).toStrictEqual([cats[1].id])
+            // The filter must not drag the relation into the result set.
+            expect(result.data[0]).not.toHaveProperty('home')
+            expect(existsSpy).toHaveBeenCalledTimes(1)
+        })
+
+        it('should filter a nested to-one relation chain with a single EXISTS', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id'],
+                filterableColumns: {
+                    'home.config': true,
+                    'home.street': [FilterOperator.EQ],
+                },
+            }
+            const query: PaginateQuery = {
+                path: '',
+                filter: { 'home.street': '$eq:Boulevard Avenue' },
+            }
+
+            const result = await paginate<CatEntity>(query, catRepo, config)
+
+            expect(result.data.map((c) => c.id)).toStrictEqual([cats[2].id])
+            expect(result.data[0]).not.toHaveProperty('home')
+            expect(existsSpy).toHaveBeenCalledTimes(1)
         })
     })
 })
