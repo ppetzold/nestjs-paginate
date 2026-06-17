@@ -3925,6 +3925,34 @@ describe('paginate', () => {
                 expect(result.data).toEqual(expect.arrayContaining([catHairs[0], catHairs[1]]))
                 expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.metadata.length=$in:5,20')
             })
+
+            // Operators other than $eq/$in/$contains use the `#>>` extraction path instead of
+            // JsonContains. That path keys the filter on the full `column.key` path, which the
+            // relation resolver used to reject ("No relation or embedded found"). Extraction
+            // operators must work on JSON key paths too.
+            it('should filter on a direct JSONB column using an extraction operator ($sw)', async () => {
+                const config: PaginateConfig<CatHairEntity> = {
+                    sortableColumns: ['id'],
+                    filterableColumns: {
+                        'metadata.length': [FilterOperator.SW],
+                    },
+                }
+                const query: PaginateQuery = {
+                    path: '',
+                    filter: {
+                        // length values are 5, 20, 0.5 → only '20' starts with '2'
+                        'metadata.length': '$sw:2',
+                    },
+                }
+
+                const result = await paginate<CatHairEntity>(query, catHairRepo, config)
+
+                expect(result.meta.filter).toStrictEqual({
+                    'metadata.length': '$sw:2',
+                })
+                expect(result.data).toStrictEqual([catHairs[1]])
+                expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.metadata.length=$sw:2')
+            })
         })
     }
 
@@ -4032,6 +4060,34 @@ describe('paginate', () => {
                 expect(result.links.current).toBe(
                     '?page=1&limit=20&sortBy=id:ASC&filter.underCoat.metadataJson.length=$eq:5'
                 )
+            })
+
+            // Same extraction path as above, but on a camel-cased column. TypeORM escapes the
+            // `alias.column` token inside the `#>>` expression, so camel-casing is not itself a
+            // separate problem — this guards that extraction filtering keeps working on a
+            // realistic camel-cased json column.
+            it('should filter a camel-cased json column via an extraction operator ($sw)', async () => {
+                const config: PaginateConfig<CatHairEntity> = {
+                    sortableColumns: ['id'],
+                    filterableColumns: {
+                        'metadataJson.length': [FilterOperator.SW],
+                    },
+                }
+                const query: PaginateQuery = {
+                    path: '',
+                    filter: {
+                        // length values are 5, 20, 0.5 → only '20' starts with '2'
+                        'metadataJson.length': '$sw:2',
+                    },
+                }
+
+                const result = await paginate<CatHairEntity>(query, catHairRepo, config)
+
+                expect(result.meta.filter).toStrictEqual({
+                    'metadataJson.length': '$sw:2',
+                })
+                expect(result.data).toStrictEqual([catHairs[1]])
+                expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.metadataJson.length=$sw:2')
             })
         })
     }

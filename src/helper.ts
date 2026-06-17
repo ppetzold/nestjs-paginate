@@ -266,7 +266,7 @@ export interface JsonbPathResolution {
  * `#>>` path extraction works on both, and TypeORM's `JsonContains` ($eq/$in/$contains)
  * emits `<column> ::jsonb @> :value`, which casts a `json` column to `jsonb` for free.
  */
-const JSON_COLUMN_TYPES = ['jsonb', 'json']
+export const JSON_COLUMN_TYPES = ['jsonb', 'json']
 
 /**
  * Walks the dot-separated `column` path through TypeORM entity metadata to determine

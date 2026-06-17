@@ -33,6 +33,7 @@ import {
     isDateColumnType,
     isISODate,
     JoinMethod,
+    JSON_COLUMN_TYPES,
     mergeRelationSchema,
     quoteColumn,
     resolveJsonbPath,
@@ -571,6 +572,16 @@ export function getRelationPath(
                 [fieldName, embedded] as const,
                 ...(relationSegments.length > 1 ? getRelationPath(deeper, embedded) : []),
             ]
+        }
+
+        // A JSON(B) column followed by a key path (e.g. `metadata.length`) is a direct filter,
+        // not a relation chain: the remaining segments index into the JSON value, they are not
+        // relations. Terminate the path here rather than treating `length` as a missing relation.
+        if ('findColumnWithPropertyName' in metadata) {
+            const columnType = metadata.findColumnWithPropertyName(fieldName)?.type
+            if (JSON_COLUMN_TYPES.includes(columnType as string)) {
+                return []
+            }
         }
     } catch (e) {
         if (e instanceof RelationPathError) {
