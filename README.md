@@ -736,6 +736,20 @@ precedence `NOT` > `AND` > `OR`) and parentheses:
 The value-level `$not` suffix (negating a single comparison, e.g. `color=$not:$eq:white`) is
 distinct from the boolean `NOT` (negating a whole term or group).
 
+### Polymorphic columns (`~`)
+
+A filter column may group several columns with `~` to filter on their `COALESCE` — the first
+non-null value per row (the same `~` syntax as polymorphic sorting). This works in both the
+`filter=` expression and the per-column form:
+
+```url
+?filter=bestFriend.age~nemesis.age=$eq:4
+?filter.bestFriend.age~nemesis.age=$gte:5
+```
+
+Each part must be a plain or **to-one** relation column (not embedded, virtual, JSONB, or to-many).
+Relation parts are left-joined automatically and are not added to the result set.
+
 ## JSONB Support
 
 You can sort, search, and filter on JSONB columns using dot notation to access nested fields.

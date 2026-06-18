@@ -206,38 +206,80 @@ export function generatePredicateCondition(
     ) as WherePredicateOperator
 }
 
+/**
+ * Validates the parts of a polymorphic `a~b` column and left-joins any to-one relation parts
+ * (without selecting them). Must run on the main query builder — joins cannot be added from
+ * inside a `Brackets` where-callback. Each part must be a plain or to-one relation column.
+ */
+export function preparePolymorphicColumn(qb: SelectQueryBuilder<any>, column: string) {
+    for (const part of column.split('~')) {
+        const props = getPropertiesByColumnName(part)
+        const { isVirtualProperty } = extractVirtualProperty(qb, props)
+        const isEmbedded = checkIsEmbedded(qb, props.propertyPath)
+        if (isVirtualProperty || isEmbedded || resolveJsonbPath(qb, props.column).isJsonb) {
+            throw new BadRequestException(
+                `Polymorphic filter groups (using "~") support only plain and to-one relation columns, not "${part}".`
+            )
+        }
+        if (checkIsRelation(qb, props.propertyPath)) {
+            const relation = qb.expressionMap.mainAlias.metadata.findRelationWithPropertyPath(props.propertyPath)
+            if (relation?.isOneToMany || relation?.isManyToMany) {
+                throw new BadRequestException(
+                    `Polymorphic filter groups (using "~") support only to-one relations, not "${part}".`
+                )
+            }
+            const joinAlias = `${qb.alias}_${props.propertyPath}_rel`
+            if (!qb.expressionMap.joinAttributes.some((attr) => attr.alias?.name === joinAlias)) {
+                qb.leftJoin(`${qb.alias}.${props.propertyPath}`, joinAlias)
+            }
+        }
+    }
+}
+
+/**
+ * Builds `COALESCE(colA, colB, ...)` for a polymorphic column `colA~colB`. Identifiers are escaped
+ * because this raw expression is not escaped by the query builder. The parts must already have been
+ * validated and joined by `preparePolymorphicColumn`.
+ */
+function buildPolymorphicCoalesce(qb: SelectQueryBuilder<any>, column: string): string {
+    const escape = (identifier: string) => qb.connection.driver.escape(identifier)
+    const refs = column.split('~').map((part) => {
+        const props = getPropertiesByColumnName(part)
+        const isRelation = checkIsRelation(qb, props.propertyPath)
+        const ref = fixColumnAlias(props, qb.alias, isRelation, false, false, undefined, qb)
+        const separator = ref.indexOf('.')
+        return separator === -1 ? escape(ref) : `${escape(ref.slice(0, separator))}.${escape(ref.slice(separator + 1))}`
+    })
+    return `COALESCE(${refs.join(', ')})`
+}
+
 export function addWhereCondition<T>(
     qb: SelectQueryBuilder<T>,
     column: string,
     filter: ColumnFilters,
     paramKeySuffix = ''
 ) {
+    const isPolymorphic = column.includes('~')
     const columnProperties = getPropertiesByColumnName(column)
-    const { isVirtualProperty, query: virtualQuery } = extractVirtualProperty(qb, columnProperties)
-    const isRelation = checkIsRelation(qb, columnProperties.propertyPath)
-    const isEmbedded = checkIsEmbedded(qb, columnProperties.propertyPath)
-    const isArray = checkIsArray(qb, columnProperties.propertyName)
+    const { isVirtualProperty, query: virtualQuery } = isPolymorphic
+        ? { isVirtualProperty: false, query: undefined }
+        : extractVirtualProperty(qb, columnProperties)
+    const isRelation = !isPolymorphic && checkIsRelation(qb, columnProperties.propertyPath)
+    const isEmbedded = !isPolymorphic && checkIsEmbedded(qb, columnProperties.propertyPath)
+    const isArray = !isPolymorphic && checkIsArray(qb, columnProperties.propertyName)
 
-    const alias = fixColumnAlias(
-        columnProperties,
-        qb.alias,
-        isRelation,
-        isVirtualProperty,
-        isEmbedded,
-        virtualQuery,
-        qb
-    )
+    const alias = isPolymorphic
+        ? buildPolymorphicCoalesce(qb, column)
+        : fixColumnAlias(columnProperties, qb.alias, isRelation, isVirtualProperty, isEmbedded, virtualQuery, qb)
+
+    // `~` is not a valid parameter-name character, so sanitise it for polymorphic columns.
+    const paramColumn = isPolymorphic ? column.replace(/[^a-zA-Z0-9_]/g, '_') : columnProperties.column
+
     filter[column].forEach((columnFilter: Filter, index: number) => {
         // The suffix keeps parameter names unique when the same column appears in several
         // leaves of a filter expression (e.g. `color=$eq:a OR color=$eq:b`).
-        const columnNamePerIteration = `${columnProperties.column}${index}${paramKeySuffix}`
-        const condition = generatePredicateCondition(
-            qb,
-            columnProperties.column,
-            columnFilter,
-            alias,
-            isVirtualProperty
-        )
+        const columnNamePerIteration = `${paramColumn}${index}${paramKeySuffix}`
+        const condition = generatePredicateCondition(qb, paramColumn, columnFilter, alias, isVirtualProperty)
         const parameters = fixQueryParam(alias, columnNamePerIteration, columnFilter, condition, {
             [columnNamePerIteration]: columnFilter.findOperator.value,
         })
@@ -304,7 +346,10 @@ export function parseFilterToken(raw?: string): FilterToken | null {
 }
 
 function fixColumnFilterValue<T>(column: string, qb: SelectQueryBuilder<T>, isJsonb = false) {
-    const columnProperties = getPropertiesByColumnName(column)
+    // A polymorphic `a~b` column has no metadata of its own; coerce values using its first part,
+    // so e.g. a numeric COALESCE compares numerically on type-strict drivers (SQLite).
+    const typeColumn = column.includes('~') ? column.split('~')[0] : column
+    const columnProperties = getPropertiesByColumnName(typeColumn)
     const virtualProperty = extractVirtualProperty(qb, columnProperties)
     const columnType = virtualProperty.type
 
@@ -669,6 +714,12 @@ export function addFilter<T>(
     const { subFilter = false } = opts
     const filter = parseFilter(query, filterableColumns, qb, throwOnInvalidFilter)
 
+    // Polymorphic `a~b` columns need their relation parts joined on this query builder before the
+    // condition (added inside Brackets, which cannot add joins) references the COALESCE.
+    for (const key of Object.keys(filter)) {
+        if (key.includes('~')) preparePolymorphicColumn(qb, key)
+    }
+
     addDirectFilters(qb, filter, subFilter)
     addToManySubFilters(qb, filter, query, filterableColumns, opts)
 
@@ -705,8 +756,8 @@ type ExpressionFilterableColumns = {
 
 /**
  * Applies a `filter=` boolean expression to the query. Each leaf is wrapped in its own
- * `Brackets` so AND/OR/NOT compose uniformly; negation on a root/embedded leaf becomes
- * `Not(...)`. Relation leaves are not handled here yet.
+ * `Brackets` so AND/OR/NOT compose uniformly. Root/embedded and polymorphic (`a~b`) leaves
+ * become direct conditions; relation leaves become correlated EXISTS (NOT EXISTS when negated).
  */
 export function addFilterExpression<T>(
     qb: SelectQueryBuilder<T>,
@@ -714,7 +765,16 @@ export function addFilterExpression<T>(
     filterableColumns?: ExpressionFilterableColumns
 ) {
     const ast = normalizeFilterExpression(parseFilterExpression(expression))
+    // Join the relation parts of any polymorphic `a~b` leaves up front (joins can't be added from
+    // inside the Brackets the leaves compile to).
+    for (const column of collectLeafColumns(ast)) {
+        if (column.includes('~')) preparePolymorphicColumn(qb, column)
+    }
     qb.andWhere(compileFilterExpression(ast, filterableColumns, { next: 0 }))
+}
+
+function collectLeafColumns(node: NormalizedFilterExpression): string[] {
+    return node.type === 'leaf' ? [node.column] : node.children.flatMap(collectLeafColumns)
 }
 
 function compileFilterExpression(
@@ -747,7 +807,9 @@ function applyExpressionLeaf(
 ) {
     const metadata = qb.expressionMap.mainAlias.metadata
 
-    if (findFirstRelationship(leaf.column, metadata)) {
+    // Polymorphic `a~b` columns COALESCE across columns and are applied as a direct condition
+    // (handled by addWhereCondition below), never as an EXISTS.
+    if (!leaf.column.includes('~') && findFirstRelationship(leaf.column, metadata)) {
         // A relation leaf is a correlated EXISTS; its negation is NOT EXISTS, expressed with the
         // $none quantifier. addFilter (top level) routes the relation through the EXISTS builder.
         let value = leaf.value
@@ -777,11 +839,11 @@ function applyExpressionLeaf(
 export function addDirectFilters<T>(qb: SelectQueryBuilder<T>, filter: ColumnFilters, subFilter = false) {
     const metadata = qb.expressionMap.mainAlias.metadata
 
-    // Top level: only root/embedded columns are direct WHERE clauses; every relation filter becomes
-    // an EXISTS subquery. Inside a subquery, to-one relations are joined locally and stay direct,
-    // and only to-many relations are lifted into nested EXISTS.
+    // Top level: only root/embedded/polymorphic columns are direct WHERE clauses; every relation
+    // filter becomes an EXISTS subquery. Inside a subquery, to-one relations are joined locally and
+    // stay direct, and only to-many relations are lifted into nested EXISTS.
     const findRelation = subFilter ? findFirstToManyRelationship : findFirstRelationship
-    const directColumns = Object.keys(filter).filter((key) => !findRelation(key, metadata))
+    const directColumns = Object.keys(filter).filter((key) => key.includes('~') || !findRelation(key, metadata))
 
     // Columns are ANDed; each is wrapped in its own brackets so a column's own OR group
     // (e.g. a JSONB `$in` expansion) stays self-contained.
@@ -813,7 +875,9 @@ export function addToManySubFilters<T>(
     // the first relation of any cardinality; inside a subquery only to-many relations are lifted out
     // (to-one relations are joined locally), preserving the existing to-many query shape.
     const findRoot = subFilter ? findFirstToManyRelationship : findExistsRootPath
-    const existsFilters = filterEntries.map(([key]) => findRoot(key, mainMetadata)).filter(Boolean)
+    const existsFilters = filterEntries
+        .map(([key]) => (key.includes('~') ? undefined : findRoot(key, mainMetadata)))
+        .filter(Boolean)
     // Find all the distinct relation starting paths
     const toManyPaths = [...new Set(existsFilters.map((f) => f.path.join('.')))]
 

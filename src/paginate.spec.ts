@@ -5833,4 +5833,40 @@ describe('paginate', () => {
             await expect(run('NOT toys.name=$all:$eq:String')).rejects.toThrow(/Cannot negate a quantified/)
         })
     })
+
+    describe('filter= polymorphic (~) columns', () => {
+        // COALESCE(bestFriend.age, nemesis.age) per cat (each has exactly one of the two):
+        // Milo=4, Garfield=6, Shadow=3, George=0, Leche=5, Baby=4, Adam=6.
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            defaultSortBy: [['id', 'ASC']],
+            filterableColumns: { 'bestFriend.age~nemesis.age': true, color: true, 'toys.id~color': true },
+        }
+        const run = (filterExpression: string) =>
+            paginate<CatEntity>({ path: '', filterExpression } as PaginateQuery, catRepo, config)
+
+        it('filters on COALESCE across two to-one relations (auto-joined, not hydrated)', async () => {
+            const result = await run('bestFriend.age~nemesis.age=$eq:4')
+            expect(result.data.map((c) => c.name)).toStrictEqual(['Milo', 'Baby'])
+            expect(result.data[0]).not.toHaveProperty('bestFriend')
+        })
+
+        it('composes a polymorphic column with a root column', async () => {
+            const result = await run('bestFriend.age~nemesis.age=$gte:5 AND color=$eq:black')
+            expect(result.data.map((c) => c.name)).toStrictEqual(['Adam'])
+        })
+
+        it('works via the per-column filter form too', async () => {
+            const result = await paginate<CatEntity>(
+                { path: '', filter: { 'bestFriend.age~nemesis.age': '$gte:5' } } as PaginateQuery,
+                catRepo,
+                config
+            )
+            expect(result.data.map((c) => c.name)).toStrictEqual(['Garfield', 'Leche', 'Adam'])
+        })
+
+        it('rejects a to-many relation component', async () => {
+            await expect(run('toys.id~color=$eq:1')).rejects.toThrow(/support only to-one relations/)
+        })
+    })
 })
