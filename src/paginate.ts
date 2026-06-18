@@ -16,7 +16,6 @@ import {
     addFilter,
     addFilterExpression,
     AddFilterOptions,
-    FilterComparator,
     FilterOperator,
     FilterQuantifier,
     FilterSuffix,
@@ -55,7 +54,7 @@ import globalConfig from './global-config'
 
 const logger: Logger = new Logger('nestjs-paginate')
 
-export { AddFilterOptions, FilterComparator, FilterOperator, FilterSuffix }
+export { AddFilterOptions, FilterOperator, FilterSuffix }
 export { buildOptimizedCountQuery }
 
 export class Paginated<T> {
@@ -102,10 +101,7 @@ export interface PaginateConfig<T> {
     defaultSortBy?: SortBy<T>
     defaultLimit?: number
     where?: FindOptionsWhere<T> | FindOptionsWhere<T>[]
-    filterableColumns?: Partial<
-        MappedColumns<T, (FilterOperator | FilterSuffix | FilterQuantifier | FilterComparator)[] | true>
-    >
-    maxAndValues?: number
+    filterableColumns?: Partial<MappedColumns<T, (FilterOperator | FilterSuffix | FilterQuantifier)[] | true>>
     loadEagerRelations?: boolean
     withDeleted?: boolean
     allowWithDeletedInQuery?: boolean
@@ -697,15 +693,7 @@ export async function paginate<T extends ObjectLiteral>(
 
     let filterJoinMethods = {}
     if (query.filter) {
-        filterJoinMethods = addFilter(
-            queryBuilder,
-            query,
-            config.filterableColumns,
-            {
-                maxAndValues: config.maxAndValues,
-            },
-            config.throwOnInvalidFilter
-        )
+        filterJoinMethods = addFilter(queryBuilder, query, config.filterableColumns, {}, config.throwOnInvalidFilter)
     }
     if (query.filterExpression) {
         addFilterExpression(queryBuilder, query.filterExpression, config.filterableColumns)
