@@ -6265,4 +6265,47 @@ describe('paginate', () => {
             expect(existsSpy).toHaveBeenCalledTimes(1)
         })
     })
+
+    describe('filter= boolean expression (root columns)', () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            defaultSortBy: [['id', 'ASC']],
+            filterableColumns: { color: true, name: true },
+        }
+        const run = (filterExpression: string) =>
+            paginate<CatEntity>({ path: '', filterExpression } as PaginateQuery, catRepo, config)
+
+        it('applies AND', async () => {
+            const result = await run('color=$eq:brown AND name=$eq:Milo')
+            expect(result.data.map((c) => c.name)).toStrictEqual(['Milo'])
+        })
+
+        it('applies OR', async () => {
+            const result = await run('color=$eq:black OR color=$eq:ginger')
+            expect(result.data.map((c) => c.name)).toStrictEqual(['Garfield', 'Shadow', 'Adam'])
+        })
+
+        it('respects parentheses and NOT together', async () => {
+            const result = await run('(color=$eq:white OR color=$eq:brown) AND NOT name=$eq:Leche')
+            expect(result.data.map((c) => c.name)).toStrictEqual(['Milo', 'George', 'Baby'])
+        })
+
+        it('applies NOT over a group via De Morgan', async () => {
+            const result = await run('NOT (color=$eq:white OR color=$eq:brown)')
+            expect(result.data.map((c) => c.name)).toStrictEqual(['Garfield', 'Shadow', 'Adam'])
+        })
+
+        it('honours operator precedence (AND binds tighter than OR)', async () => {
+            const result = await run('color=$eq:ginger OR color=$eq:white AND name=$eq:George')
+            expect(result.data.map((c) => c.name)).toStrictEqual(['Garfield', 'George'])
+        })
+
+        it('rejects relation columns (not yet supported)', async () => {
+            await expect(run('home.name=$eq:House')).rejects.toThrow(/Relation columns are not yet supported/)
+        })
+
+        it('rejects a non-filterable column', async () => {
+            await expect(run('age=$eq:3')).rejects.toThrow(/not filterable|not allowed/i)
+        })
+    })
 })

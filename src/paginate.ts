@@ -12,7 +12,15 @@ import {
 } from 'typeorm'
 import { WherePredicateOperator } from 'typeorm/query-builder/WhereClause'
 import { PaginateQuery } from './decorator'
-import { addFilter, AddFilterOptions, FilterComparator, FilterOperator, FilterQuantifier, FilterSuffix } from './filter'
+import {
+    addFilter,
+    addFilterExpression,
+    AddFilterOptions,
+    FilterComparator,
+    FilterOperator,
+    FilterQuantifier,
+    FilterSuffix,
+} from './filter'
 import {
     buildOptimizedCountQuery,
     checkIsEmbedded,
@@ -698,6 +706,9 @@ export async function paginate<T extends ObjectLiteral>(
             },
             config.throwOnInvalidFilter
         )
+    }
+    if (query.filterExpression) {
+        addFilterExpression(queryBuilder, query.filterExpression, config.filterableColumns)
     }
     const joinMethods = { ...filterJoinMethods, ...config.joinMethods }
 

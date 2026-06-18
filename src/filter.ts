@@ -20,6 +20,7 @@ import {
 } from 'typeorm'
 import { WherePredicateOperator } from 'typeorm/query-builder/WhereClause'
 import { PaginateQuery } from './decorator'
+import { normalizeFilterExpression, NormalizedFilterExpression, parseFilterExpression } from './filter-expression'
 import {
     andWhereAllExist,
     andWhereNoneExist,
@@ -231,7 +232,12 @@ export function generatePredicateCondition(
     ) as WherePredicateOperator
 }
 
-export function addWhereCondition<T>(qb: SelectQueryBuilder<T>, column: string, filter: ColumnFilters) {
+export function addWhereCondition<T>(
+    qb: SelectQueryBuilder<T>,
+    column: string,
+    filter: ColumnFilters,
+    paramKeySuffix = ''
+) {
     const columnProperties = getPropertiesByColumnName(column)
     const { isVirtualProperty, query: virtualQuery } = extractVirtualProperty(qb, columnProperties)
     const isRelation = checkIsRelation(qb, columnProperties.propertyPath)
@@ -248,7 +254,9 @@ export function addWhereCondition<T>(qb: SelectQueryBuilder<T>, column: string, 
         qb
     )
     filter[column].forEach((columnFilter: Filter, index: number) => {
-        const columnNamePerIteration = `${columnProperties.column}${index}`
+        // The suffix keeps parameter names unique when the same column appears in several
+        // leaves of a filter expression (e.g. `color=$eq:a OR color=$eq:b`).
+        const columnNamePerIteration = `${columnProperties.column}${index}${paramKeySuffix}`
         const condition = generatePredicateCondition(
             qb,
             columnProperties.column,
@@ -730,6 +738,67 @@ export function addFilter<T>(
         }
     }
     return columnJoinMethods
+}
+
+type ExpressionFilterableColumns = {
+    [column: string]: (FilterOperator | FilterSuffix | FilterQuantifier | FilterComparator)[] | true
+}
+
+/**
+ * Applies a `filter=` boolean expression to the query. Each leaf is wrapped in its own
+ * `Brackets` so AND/OR/NOT compose uniformly; negation on a root/embedded leaf becomes
+ * `Not(...)`. Relation leaves are not handled here yet.
+ */
+export function addFilterExpression<T>(
+    qb: SelectQueryBuilder<T>,
+    expression: string,
+    filterableColumns?: ExpressionFilterableColumns
+) {
+    const ast = normalizeFilterExpression(parseFilterExpression(expression))
+    qb.andWhere(compileFilterExpression(ast, filterableColumns, { next: 0 }))
+}
+
+function compileFilterExpression(
+    node: NormalizedFilterExpression,
+    filterableColumns: ExpressionFilterableColumns | undefined,
+    counter: { next: number }
+): Brackets {
+    if (node.type === 'leaf') {
+        const leafId = counter.next++
+        return new Brackets((qb: SelectQueryBuilder<any>) => applyExpressionLeaf(qb, node, filterableColumns, leafId))
+    }
+    // Compile children eagerly so each leaf gets a stable id and unique parameter names.
+    const childBrackets = node.children.map((child) => compileFilterExpression(child, filterableColumns, counter))
+    return new Brackets((qb: SelectQueryBuilder<any>) => {
+        childBrackets.forEach((childBracket, index) => {
+            if (index === 0 || node.type === 'and') {
+                qb.andWhere(childBracket)
+            } else {
+                qb.orWhere(childBracket)
+            }
+        })
+    })
+}
+
+function applyExpressionLeaf(
+    qb: SelectQueryBuilder<any>,
+    leaf: { column: string; value: string; negated: boolean },
+    filterableColumns: ExpressionFilterableColumns | undefined,
+    leafId: number
+) {
+    const metadata = qb.expressionMap.mainAlias.metadata
+    if (findFirstRelationship(leaf.column, metadata)) {
+        throw new BadRequestException(`Relation columns are not yet supported in filter expressions: "${leaf.column}"`)
+    }
+    // Expression terms always validate: silently dropping a leaf would change the boolean result.
+    const columnFilters = parseFilter({ filter: { [leaf.column]: leaf.value }, path: '' }, filterableColumns, qb, true)
+    const filters = columnFilters[leaf.column] ?? []
+    if (leaf.negated) {
+        for (const filter of filters) {
+            filter.findOperator = Not(filter.findOperator)
+        }
+    }
+    addWhereCondition(qb, leaf.column, columnFilters, `_e${leafId}`)
 }
 
 export function addDirectFilters<T>(qb: SelectQueryBuilder<T>, filter: ColumnFilters, subFilter = false) {
