@@ -5735,6 +5735,16 @@ describe('paginate', () => {
         const run = (filterExpression: string) =>
             paginate<CatEntity>({ path: '', filterExpression } as PaginateQuery, catRepo, config)
 
+        it('is ANDed with the per-column filter when both are present', async () => {
+            // color=brown matches Milo and Baby; the expression narrows it to Milo only.
+            const result = await paginate<CatEntity>(
+                { path: '', filter: { color: 'brown' }, filterExpression: 'name=$eq:Milo' } as PaginateQuery,
+                catRepo,
+                config
+            )
+            expect(result.data.map((c) => c.name)).toStrictEqual(['Milo'])
+        })
+
         it('applies AND', async () => {
             const result = await run('color=$eq:brown AND name=$eq:Milo')
             expect(result.data.map((c) => c.name)).toStrictEqual(['Milo'])
