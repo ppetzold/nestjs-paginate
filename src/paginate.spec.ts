@@ -6300,12 +6300,68 @@ describe('paginate', () => {
             expect(result.data.map((c) => c.name)).toStrictEqual(['Garfield', 'George'])
         })
 
-        it('rejects relation columns (not yet supported)', async () => {
-            await expect(run('home.name=$eq:House')).rejects.toThrow(/Relation columns are not yet supported/)
+        it('passes operators through to the leaf ($in)', async () => {
+            const result = await run('color=$in:white,brown')
+            expect(result.data.map((c) => c.name)).toStrictEqual(['Milo', 'George', 'Leche', 'Baby'])
+        })
+
+        it('distinguishes a value-level $not suffix from the boolean NOT', async () => {
+            const result = await run('color=$not:$eq:white')
+            expect(result.data.map((c) => c.name)).toStrictEqual(['Milo', 'Garfield', 'Shadow', 'Baby', 'Adam'])
         })
 
         it('rejects a non-filterable column', async () => {
             await expect(run('age=$eq:3')).rejects.toThrow(/not filterable|not allowed/i)
+        })
+    })
+
+    describe('filter= boolean expression (relations)', () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            defaultSortBy: [['id', 'ASC']],
+            filterableColumns: { color: true, 'home.name': true, 'toys.name': true },
+        }
+        const run = (filterExpression: string) =>
+            paginate<CatEntity>({ path: '', filterExpression } as PaginateQuery, catRepo, config)
+
+        it('combines a root column and a to-one relation (the motivating example)', async () => {
+            const result = await run('color=$eq:black AND home.name=$eq:Mansion')
+            expect(result.data.map((c) => c.name)).toStrictEqual(['Shadow'])
+            // The relation filter must not hydrate the relation.
+            expect(result.data[0]).not.toHaveProperty('home')
+        })
+
+        it('ORs two leaves on the same relation path (unique aliases/params)', async () => {
+            const result = await run('toys.name=$eq:"Fuzzy Thing" OR toys.name=$eq:String')
+            expect(result.data.map((c) => c.name)).toStrictEqual(['Milo', 'Garfield'])
+        })
+
+        it('ORs a root column with a to-many relation', async () => {
+            const result = await run('color=$eq:white OR toys.name=$eq:String')
+            expect(result.data.map((c) => c.name)).toStrictEqual(['Garfield', 'George', 'Leche'])
+        })
+
+        it('negates a relation leaf as NOT EXISTS', async () => {
+            const result = await run('NOT toys.name=$eq:String')
+            expect(result.data.map((c) => c.name)).not.toContain('Garfield')
+            expect(result.data.map((c) => c.name)).toEqual(
+                expect.arrayContaining(['Milo', 'Shadow', 'George', 'Leche', 'Baby', 'Adam'])
+            )
+        })
+
+        it('mixes relations and roots under parentheses', async () => {
+            const result = await run('(home.name=$eq:Box OR home.name=$eq:House) AND NOT color=$eq:brown')
+            // Milo (Box, brown) excluded by NOT brown; Garfield (House, ginger) kept.
+            expect(result.data.map((c) => c.name)).toStrictEqual(['Garfield'])
+        })
+
+        it('ANDs two distinct relation paths', async () => {
+            const result = await run('home.name=$eq:House AND toys.name=$eq:String')
+            expect(result.data.map((c) => c.name)).toStrictEqual(['Garfield'])
+        })
+
+        it('rejects negating a quantified relation leaf', async () => {
+            await expect(run('NOT toys.name=$all:$eq:String')).rejects.toThrow(/Cannot negate a quantified/)
         })
     })
 })

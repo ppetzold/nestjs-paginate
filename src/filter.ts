@@ -696,6 +696,12 @@ export interface AddFilterOptions {
      * @internal
      */
     subFilter?: boolean
+    /**
+     * Suffix appended to EXISTS subquery aliases and parameters to keep them unique across
+     * sibling filter-expression leaves on the same relation path.
+     * @internal
+     */
+    scope?: string | number
 }
 
 export function addFilter<T>(
@@ -787,9 +793,23 @@ function applyExpressionLeaf(
     leafId: number
 ) {
     const metadata = qb.expressionMap.mainAlias.metadata
+
     if (findFirstRelationship(leaf.column, metadata)) {
-        throw new BadRequestException(`Relation columns are not yet supported in filter expressions: "${leaf.column}"`)
+        // A relation leaf is a correlated EXISTS; its negation is NOT EXISTS, expressed with the
+        // $none quantifier. addFilter (top level) routes the relation through the EXISTS builder.
+        let value = leaf.value
+        if (leaf.negated) {
+            if (parseFilterToken(value)?.quantifier !== FilterQuantifier.ANY) {
+                throw new BadRequestException(
+                    `Cannot negate a quantified relation filter "${leaf.column}=${leaf.value}"`
+                )
+            }
+            value = `${FilterQuantifier.NONE}:${value}`
+        }
+        addFilter(qb, { filter: { [leaf.column]: value }, path: '' }, filterableColumns, { scope: leafId }, true)
+        return
     }
+
     // Expression terms always validate: silently dropping a leaf would change the boolean result.
     const columnFilters = parseFilter({ filter: { [leaf.column]: leaf.value }, path: '' }, filterableColumns, qb, true)
     const filters = columnFilters[leaf.column] ?? []
@@ -857,7 +877,7 @@ export function addToManySubFilters<T>(
     filterableColumns?: {
         [column: string]: (FilterOperator | FilterSuffix | FilterQuantifier | FilterComparator)[] | true
     },
-    { maxAndValues = 20, validateAndComparator = true, subFilter = false }: AddFilterOptions = {}
+    { maxAndValues = 20, validateAndComparator = true, subFilter = false, scope = '' }: AddFilterOptions = {}
 ) {
     const dbType = qb.connection.options.type
     const quote = (column: string) => quoteColumn(column, ['mysql', 'mariadb'].includes(dbType))
@@ -907,7 +927,9 @@ export function addToManySubFilters<T>(
         // Using the path (e.g. "toys" → "toys", "cat.toys" → "cat_toys") ensures that two
         // independent to-many paths in the same outer query never share alias or parameter names,
         // even when both use existsIndex=0 (OR-mode) or overlapping sub-column names.
-        const pathSlug = path.replace(/\./g, '_')
+        // `scope` keeps aliases/parameters unique when several filter-expression leaves build an
+        // EXISTS for the same relation path (e.g. `toys.name=$eq:a OR toys.name=$eq:b`).
+        const pathSlug = `${path.replace(/\./g, '_')}${scope === '' ? '' : `_x${scope}`}`
 
         // 2. Extract sub-filters for this path.
         // If any sub-filter entry uses the $and comparator, we must emit one correlated EXISTS
