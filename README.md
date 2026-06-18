@@ -739,6 +739,29 @@ const config: PaginateConfig<CatEntity> = {
 
 `?filter.roles=$contains:moderator,admin` where column `roles` is an array and contains the values `moderator` and `admin`
 
+### Filter expressions (`filter=`)
+
+The per-column `filter.<column>=` parameters above are always combined with `AND`. For
+arbitrary boolean logic, pass a single `filter=` expression instead. It uses the same
+column and `$op:value` syntax, combined with `AND`, `OR`, `NOT` (case-insensitive,
+precedence `NOT` > `AND` > `OR`) and parentheses:
+
+```
+?filter=color=$eq:black AND age=$gte:3
+?filter=(color=$eq:black OR color=$eq:white) AND NOT name=$eq:Leche
+?filter=home.name=$eq:House AND toys.name=$eq:String
+```
+
+- The columns and operators are validated against `filterableColumns`, exactly like the
+  per-column form. An unknown column or disallowed operator always returns `400 Bad Request`.
+- Relation columns are matched with correlated `EXISTS` subqueries, so they compose under
+  `OR`/`NOT` and never join the relation into the result set. `NOT toys.name=$eq:Ball` means
+  "no matching toy exists".
+- A value containing whitespace or parentheses must be quoted: `?filter=home.name=$eq:"Cat Mansion"`.
+
+The value-level `$not` suffix (negating a single comparison, e.g. `color=$not:$eq:white`) is
+distinct from the boolean `NOT` (negating a whole term or group).
+
 ## JSONB Support
 
 You can sort, search, and filter on JSONB columns using dot notation to access nested fields.
