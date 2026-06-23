@@ -1,12 +1,5 @@
 import { mergeWith } from 'lodash'
-import {
-    FindOperator,
-    FindOptionsRelationByString,
-    FindOptionsRelations,
-    ObjectLiteral,
-    Repository,
-    SelectQueryBuilder,
-} from 'typeorm'
+import { FindOperator, FindOptionsRelations, ObjectLiteral, Repository, SelectQueryBuilder } from 'typeorm'
 import { ColumnMetadata } from 'typeorm/metadata/ColumnMetadata'
 import { OrmUtils } from 'typeorm/util/OrmUtils'
 
@@ -92,7 +85,7 @@ export type SortBy<T> = Order<T>[]
 // eslint-disable-next-line @typescript-eslint/ban-types
 export type MappedColumns<T, S> = { [key in Column<T> | (string & {})]: S }
 export type JoinMethod = 'leftJoinAndSelect' | 'innerJoinAndSelect'
-export type RelationSchemaInput<T = any> = FindOptionsRelations<T> | RelationColumn<T>[] | FindOptionsRelationByString
+export type RelationSchemaInput<T = any> = FindOptionsRelations<T> | RelationColumn<T>[]
 // eslint-disable-next-line @typescript-eslint/ban-types
 export type RelationSchema<T = any> = { [relation in Column<T> | (string & {})]: true }
 
