@@ -108,7 +108,7 @@ describe('paginate', () => {
             case 'sqlite':
                 dataSource = new DataSource({
                     ...dbOptions,
-                    type: 'sqlite',
+                    type: 'better-sqlite3',
                     database: ':memory:',
                 })
                 break
@@ -1042,7 +1042,7 @@ describe('paginate', () => {
 
     it('should return result based on search term on one-to-one relation', async () => {
         const config: PaginateConfig<CatHomeEntity> = {
-            relations: ['cat', 'naptimePillow.brand'],
+            relations: { cat: true, naptimePillow: { brand: true } },
             sortableColumns: ['id', 'name', 'cat.id'],
         }
         const query: PaginateQuery = {
@@ -1112,7 +1112,7 @@ describe('paginate', () => {
 
     it('should return result based on sort on one-to-many relation', async () => {
         const config: PaginateConfig<CatEntity> = {
-            relations: ['toys', 'toys.shop', 'toys.shop.address'],
+            relations: { toys: { shop: { address: true } } },
             sortableColumns: ['id', 'name', 'toys.id'],
             searchableColumns: ['name', 'toys.name'],
         }
@@ -1138,7 +1138,7 @@ describe('paginate', () => {
 
     it('should return result based on sort on one-to-one relation', async () => {
         const config: PaginateConfig<CatHomeEntity> = {
-            relations: ['cat', 'naptimePillow.brand'],
+            relations: { cat: true, naptimePillow: { brand: true } },
             sortableColumns: ['id', 'name'],
             searchableColumns: ['name', 'cat.name'],
         }
@@ -1193,7 +1193,7 @@ describe('paginate', () => {
 
     it('should load nested relations (array notation)', async () => {
         const config: PaginateConfig<CatEntity> = {
-            relations: ['home.pillows', 'home.naptimePillow.brand'],
+            relations: { home: { pillows: true, naptimePillow: { brand: true } } },
             sortableColumns: ['id', 'name'],
             searchableColumns: ['name'],
         }
@@ -1360,7 +1360,7 @@ describe('paginate', () => {
 
     it('should return all cats with a toys from the lovely shop', async () => {
         const config: PaginateConfig<CatEntity> = {
-            relations: ['toys', 'toys.shop'],
+            relations: { toys: { shop: true } },
             sortableColumns: ['id', 'name'],
             where: {
                 toys: {
@@ -1385,7 +1385,7 @@ describe('paginate', () => {
 
     it('should return all cats from shop where street name like 123', async () => {
         const config: PaginateConfig<CatEntity> = {
-            relations: ['toys', 'toys.shop', 'toys.shop.address'],
+            relations: { toys: { shop: { address: true } } },
             sortableColumns: ['id', 'name'],
             where: {
                 toys: {
@@ -1534,7 +1534,7 @@ describe('paginate', () => {
 
     it('should return result based on filter on one-to-one relation', async () => {
         const config: PaginateConfig<CatHomeEntity> = {
-            relations: ['cat', 'naptimePillow.brand'],
+            relations: { cat: true, naptimePillow: { brand: true } },
             sortableColumns: ['id', 'name'],
             filterableColumns: {
                 'cat.name': [FilterSuffix.NOT],
@@ -1563,7 +1563,7 @@ describe('paginate', () => {
 
     it('should return result based on $in filter on one-to-one relation', async () => {
         const config: PaginateConfig<CatHomeEntity> = {
-            relations: ['cat', 'naptimePillow.brand'],
+            relations: { cat: true, naptimePillow: { brand: true } },
             sortableColumns: ['id', 'name'],
             filterableColumns: {
                 'cat.age': [FilterOperator.IN],
@@ -1592,7 +1592,7 @@ describe('paginate', () => {
 
     it('should return result based on $btw filter on one-to-one relation', async () => {
         const config: PaginateConfig<CatHomeEntity> = {
-            relations: ['cat', 'naptimePillow.brand'],
+            relations: { cat: true, naptimePillow: { brand: true } },
             sortableColumns: ['id', 'name'],
             filterableColumns: {
                 'cat.age': [FilterOperator.BTW],
@@ -1648,7 +1648,7 @@ describe('paginate', () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id', 'name', 'size.height', 'size.length', 'size.width', 'toys.(size.height)'],
             searchableColumns: ['name'],
-            relations: ['home', 'toys', 'home.naptimePillow.brand'],
+            relations: { home: { naptimePillow: { brand: true } }, toys: true },
         }
         const query: PaginateQuery = {
             path: '',
@@ -1780,7 +1780,7 @@ describe('paginate', () => {
         const config: PaginateConfig<CatHomeEntity> = {
             sortableColumns: ['id', 'name', 'cat.(size.height)', 'cat.(size.length)', 'cat.(size.width)'],
             searchableColumns: ['name'],
-            relations: ['cat', 'naptimePillow.brand'],
+            relations: { cat: true, naptimePillow: { brand: true } },
         }
         const query: PaginateQuery = {
             path: '',
@@ -1888,7 +1888,7 @@ describe('paginate', () => {
         const config: PaginateConfig<CatHomeEntity> = {
             sortableColumns: ['id', 'name', 'cat.(size.height)', 'cat.(size.length)', 'cat.(size.width)'],
             searchableColumns: ['cat.(size.height)'],
-            relations: ['cat', 'naptimePillow.brand'],
+            relations: { cat: true, naptimePillow: { brand: true } },
         }
         const query: PaginateQuery = {
             path: '',
@@ -1953,7 +1953,7 @@ describe('paginate', () => {
             filterableColumns: {
                 'size.height': [FilterSuffix.NOT],
             },
-            relations: ['home', 'home.naptimePillow.brand'],
+            relations: { home: { naptimePillow: { brand: true } } },
         }
         const query: PaginateQuery = {
             path: '',
@@ -2035,7 +2035,7 @@ describe('paginate', () => {
 
     it('should return result based on filter on embedded on one-to-one relation', async () => {
         const config: PaginateConfig<CatHomeEntity> = {
-            relations: ['cat', 'naptimePillow.brand'],
+            relations: { cat: true, naptimePillow: { brand: true } },
             sortableColumns: ['id', 'name'],
             filterableColumns: {
                 'cat.(size.height)': [FilterOperator.EQ],
@@ -2061,7 +2061,7 @@ describe('paginate', () => {
 
     it('should return result based on $in filter on embedded on one-to-one relation', async () => {
         const config: PaginateConfig<CatHomeEntity> = {
-            relations: ['cat', 'naptimePillow.brand'],
+            relations: { cat: true, naptimePillow: { brand: true } },
             sortableColumns: ['id', 'name'],
             filterableColumns: {
                 'cat.(size.height)': [FilterOperator.IN],
@@ -2091,7 +2091,7 @@ describe('paginate', () => {
 
     it('should return result based on $btw filter on embedded on one-to-one relation', async () => {
         const config: PaginateConfig<CatHomeEntity> = {
-            relations: ['cat', 'naptimePillow.brand'],
+            relations: { cat: true, naptimePillow: { brand: true } },
             sortableColumns: ['id', 'name'],
             filterableColumns: {
                 'cat.(size.height)': [FilterOperator.BTW],
@@ -2361,7 +2361,7 @@ describe('paginate', () => {
             filterableColumns: {
                 'home.street': [FilterSuffix.NOT, FilterOperator.NULL],
             },
-            relations: ['home', 'home.naptimePillow.brand'],
+            relations: { home: { naptimePillow: { brand: true } } },
         }
         const query: PaginateQuery = {
             path: '',
@@ -2388,7 +2388,7 @@ describe('paginate', () => {
             filterableColumns: {
                 'home.street': [FilterOperator.NULL],
             },
-            relations: ['home', 'home.naptimePillow.brand'],
+            relations: { home: { naptimePillow: { brand: true } } },
         }
         const query: PaginateQuery = {
             path: '',
@@ -2413,7 +2413,7 @@ describe('paginate', () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id'],
             // Filtering a relation no longer hydrates it; request the chain explicitly to load it.
-            relations: ['home.naptimePillow.brand'],
+            relations: { home: { naptimePillow: { brand: true } } },
             filterableColumns: {
                 'home.naptimePillow.brand.quality': [FilterOperator.NULL],
             },
@@ -4098,7 +4098,7 @@ describe('paginate', () => {
         it('should return result sorted and filter by a virtual column in main entity', async () => {
             const config: PaginateConfig<CatHomeEntity> = {
                 sortableColumns: ['countCat'],
-                relations: ['cat', 'naptimePillow.brand'],
+                relations: { cat: true, naptimePillow: { brand: true } },
                 filterableColumns: {
                     countCat: [FilterOperator.GT],
                 },
@@ -4123,7 +4123,7 @@ describe('paginate', () => {
                 filterableColumns: {
                     'home.countCat': [FilterOperator.GT],
                 },
-                relations: ['home', 'home.naptimePillow.brand'],
+                relations: { home: { naptimePillow: { brand: true } } },
             }
             const query: PaginateQuery = {
                 path: '',
@@ -4147,7 +4147,7 @@ describe('paginate', () => {
         it('should return result sorted by a virtual column', async () => {
             const config: PaginateConfig<CatEntity> = {
                 sortableColumns: ['home.countCat'],
-                relations: ['home', 'home.naptimePillow.brand'],
+                relations: { home: { naptimePillow: { brand: true } } },
             }
             const query: PaginateQuery = {
                 path: '',
@@ -5445,7 +5445,7 @@ describe('paginate', () => {
             const result = await paginate(query, catRepo, {
                 sortableColumns: ['id', 'toys.id'],
                 select: ['*', 'toys.*', 'toys.shop.*', 'toys.shop.address.*'],
-                relations: ['toys', 'toys.shop', 'toys.shop.address'],
+                relations: { toys: { shop: { address: true } } },
             })
 
             expect(result.data[0]).toHaveProperty('id')
@@ -5622,7 +5622,7 @@ describe('paginate', () => {
                 // This test tests toMany relationships that are part of a deeper chain such as cat.home.pillows
                 const config: PaginateConfig<CatEntity> = {
                     sortableColumns: ['id'],
-                    relations: ['home.pillows'],
+                    relations: { home: { pillows: true } },
                     filterableColumns: {
                         'home.pillows.color': [FilterOperator.EQ],
                     },
@@ -5707,7 +5707,7 @@ describe('paginate', () => {
                 // This test tests absence filtering. Also asserts that the loaded relation is empty.
                 const config: PaginateConfig<CatEntity> = {
                     sortableColumns: ['id'],
-                    relations: ['home.pillows'],
+                    relations: { home: { pillows: true } },
                     filterableColumns: {
                         'home.pillows': [FilterQuantifier.NONE],
                     },
