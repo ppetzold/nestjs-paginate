@@ -41,10 +41,8 @@ updateGlobalConfig({
   defaultOrigin: undefined,
   defaultLimit: 20,
   defaultMaxLimit: 100,
-});
+})
 ```
-
-
 
 ### Example
 
@@ -270,12 +268,12 @@ const paginateConfig: PaginateConfig<CatEntity> {
    * Description: TypeORM partial selection. Limit selection further by using `select` query param.
    * https://typeorm.io/select-query-builder#partial-selection
    * Note: if you do not contain the primary key in the select array, primary key will be added automatically.
-   * 
+   *
    * Wildcard support:
    * - Use '*' to select all columns from the main entity.
    * - Use 'relation.*' to select all columns from a relation.
    * - Use 'relation.subrelation.*' to select all columns from nested relations.
-   * 
+   *
    * Examples:
    * select: ['*'] - Selects all columns from main entity
    * select: ['id', 'name', 'toys.*'] - Selects id, name from main entity and all columns from toys relation
@@ -330,7 +328,7 @@ const paginateConfig: PaginateConfig<CatEntity> {
    * Type: RelationColumn<CatEntity>
    * Description: Indicates what relations of entity should be loaded.
    */
-  relations: [],
+  relations: {},
 
   /**
    * Required: false
@@ -495,7 +493,7 @@ http://localhost:3000/cats?filter.toys.name=$in:Mouse,String
 
 ```typescript
 const config: PaginateConfig<CatEntity> = {
-  relations: ['toys'],
+  relations: { toys: true },
   sortableColumns: ['id', 'name', 'toys.name'],
   filterableColumns: {
     'toys.name': [FilterOperator.IN],
@@ -511,7 +509,7 @@ const result = await paginate<CatEntity>(query, catRepo, config)
 const config: PaginateConfig<CatEntity> = {
   sortableColumns: ['id', 'name', 'toys.(size.height)', 'toys.(size.width)'],
   searchableColumns: ['name'],
-  relations: ['toys'],
+  relations: { toys: true },
 }
 ```
 
@@ -552,6 +550,7 @@ Quantifiers define how many related rows must satisfy the condition:
 - `$none`: no related rows match the condition
 
 ### Examples
+
 Assume `CatEntity` has a one‑to‑many relation `toys: CatToyEntity[]` where `CatToyEntity` has a string column `name`.
 
 - At least one toy named exactly "Ball":
@@ -652,7 +651,7 @@ or its nemesis's age when it has no best friend.
 const config: PaginateConfig<CatEntity> = {
   // Every column used in a group must be listed in sortableColumns.
   sortableColumns: ['id', 'bestFriend.age', 'nemesis.age'],
-  relations: ['bestFriend', 'nemesis'],
+  relations: { bestFriend: true, nemesis: true },
 }
 ```
 
@@ -760,21 +759,21 @@ You can sort, search, and filter on JSONB columns using dot notation to access n
 
 ### Database support matrix
 
-| Feature | PostgreSQL / CockroachDB | MySQL / MariaDB | SQLite |
-|---------|---|---|---|
-| **Sorting** (`sortableColumns`) | Yes (`#>>`) | Yes (`JSON_UNQUOTE(JSON_EXTRACT(...))`) | Yes (`json_extract`) |
-| **Searching** (`searchableColumns`) | Yes | Yes | Yes |
-| **Filtering** (`$eq`, `$in`, `$contains`) | Yes (`@>` containment) | No | No |
+| Feature                                   | PostgreSQL / CockroachDB | MySQL / MariaDB                         | SQLite               |
+| ----------------------------------------- | ------------------------ | --------------------------------------- | -------------------- |
+| **Sorting** (`sortableColumns`)           | Yes (`#>>`)              | Yes (`JSON_UNQUOTE(JSON_EXTRACT(...))`) | Yes (`json_extract`) |
+| **Searching** (`searchableColumns`)       | Yes                      | Yes                                     | Yes                  |
+| **Filtering** (`$eq`, `$in`, `$contains`) | Yes (`@>` containment)   | No                                      | No                   |
 
 > **Note:** Sorting and searching on JSONB paths is supported across all database engines — the library automatically uses the correct JSON extraction function for your DB. Filtering via `$eq`, `$in`, and `$contains` uses PostgreSQL's `@>` containment operator (via TypeORM's `JsonContains`) and is only supported on **PostgreSQL** and **CockroachDB**.
 
 ### Filtering operators (PostgreSQL / CockroachDB only)
 
-| Operator | Description |
-|----------|-------------|
+| Operator    | Description                                              |
+| ----------- | -------------------------------------------------------- |
 | `$eq`       | Exact match via containment (`col @> '{"key":"value"}'`) |
-| `$in`       | Match any of a comma-separated list of values |
-| `$contains` | Match if a JSON array contains the value |
+| `$in`       | Match any of a comma-separated list of values            |
+| `$contains` | Match if a JSON array contains the value                 |
 
 ### Direct JSONB column
 
@@ -796,7 +795,7 @@ where `settings` is a relation whose JSONB column `theme` is filtered.
 
 ```typescript
 const config: PaginateConfig<UserEntity> = {
-  relations: ['settings'],
+  relations: { settings: true },
   filterableColumns: {
     'settings.theme': [FilterOperator.EQ, FilterOperator.IN],
   },
@@ -930,7 +929,6 @@ export function CustomSortBy(paginationConfig: PaginateConfig<any>) {
 Now you can create your version of the whole docs decorator and use it
 
 ```typescript
-
 const CustomApiPaginationQuery = (paginationConfig: PaginateConfig<any>) => {
   return applyDecorators(
     ...[
@@ -948,12 +946,9 @@ const CustomApiPaginationQuery = (paginationConfig: PaginateConfig<any>) => {
 function CustomPaginatedSwaggerDocs<DTO extends Type<unknown>>(dto: DTO, paginatedConfig: PaginateConfig<any>) {
   return applyDecorators(ApiOkPaginatedResponse(dto, paginatedConfig), CustomApiPaginationQuery(paginatedConfig))
 }
-
 ```
 
 You can use CustomPaginatedSwaggerDocs instead of default PaginatedSwaggerDocs
-
-
 
 ## Troubleshooting
 

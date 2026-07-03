@@ -436,7 +436,7 @@ export async function paginate<T extends ObjectLiteral>(
                 return `UNIX_TIMESTAMP(${alias}) * 1000`
             case 'postgres':
                 return `EXTRACT(EPOCH FROM ${alias}) * 1000`
-            case 'sqlite':
+            case 'better-sqlite3':
                 return `(STRFTIME('%s', ${alias}) + (STRFTIME('%f', ${alias}) - STRFTIME('%S', ${alias}))) * 1000`
             default:
                 return alias
