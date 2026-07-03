@@ -5879,4 +5879,152 @@ describe('paginate', () => {
             await expect(run('toys.id~color=$eq:1')).rejects.toThrow(/support only to-one relations/)
         })
     })
+
+    describe('filter= boolean expression (leaf operator coverage)', () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            defaultSortBy: [['id', 'ASC']],
+            filterableColumns: {
+                age: true,
+                name: true,
+                color: true,
+                cutenessLevel: true,
+                lastVetVisit: true,
+                weightChange: true,
+                'size.height': true,
+                'size.length': true,
+                'toys.name': true,
+            },
+        }
+        const run = (filterExpression: string) =>
+            paginate<CatEntity>({ path: '', filterExpression } as PaginateQuery, catRepo, config)
+        const names = (result: Paginated<CatEntity>) => result.data.map((c) => c.name)
+
+        // Every comparison operator, threaded through the expression parser to a single leaf.
+        it.each([
+            ['age=$gt:4', ['Milo', 'Garfield']],
+            ['age=$gte:4', ['Milo', 'Garfield', 'Shadow', 'Adam']],
+            ['age=$lt:4', ['George', 'Baby']],
+            ['age=$lte:3', ['George', 'Baby']],
+            ['age=$btw:4,5', ['Garfield', 'Shadow', 'Adam']],
+            ['age=$null', ['Leche']],
+            ['age=$not:$null', ['Milo', 'Garfield', 'Shadow', 'George', 'Baby', 'Adam']],
+            ['age=$in:5,6', ['Milo', 'Garfield']],
+            ['color=$not:$in:white,black', ['Milo', 'Garfield', 'Baby']],
+            ['name=$ilike:e', ['Garfield', 'George', 'Leche']],
+            ['name=$sw:G', ['Garfield', 'George']],
+            ['cutenessLevel=$eq:high', ['Milo', 'Shadow', 'Leche', 'Baby']],
+        ])('passes operator through to a root leaf: %s', async (expression, expected) => {
+            expect(names(await run(expression))).toStrictEqual(expected)
+        })
+
+        it('filters an embedded column with $gte', async () => {
+            expect(names(await run('size.height=$gte:30'))).toStrictEqual(['Garfield', 'George'])
+        })
+
+        it('filters an embedded column with $btw', async () => {
+            expect(names(await run('size.length=$btw:40,45'))).toStrictEqual(['Milo', 'Garfield', 'George'])
+        })
+
+        it('filters a decimal column with $lt', async () => {
+            expect(names(await run('weightChange=$lt:0'))).toStrictEqual(['Milo', 'Shadow', 'Leche'])
+        })
+
+        it('filters a nullable date column with $null', async () => {
+            expect(names(await run('lastVetVisit=$null'))).toStrictEqual(['George', 'Leche', 'Baby'])
+        })
+
+        it('negates a leaf that carries a non-$eq operator (boolean NOT wraps the whole comparison)', async () => {
+            // NOT (age IN (4,5)); NULL ages drop out under NOT IN.
+            expect(names(await run('NOT age=$in:4,5'))).toStrictEqual(['Milo', 'George', 'Baby'])
+        })
+
+        it('negates an embedded range leaf', async () => {
+            expect(names(await run('NOT size.height=$gte:30'))).toStrictEqual([
+                'Milo',
+                'Shadow',
+                'Leche',
+                'Baby',
+                'Adam',
+            ])
+        })
+
+        // The three relation quantifiers, spelled explicitly in an expression leaf.
+        it('applies an explicit $any quantifier on a to-many relation (EXISTS)', async () => {
+            expect(names(await run('toys.name=$any:$eq:String'))).toStrictEqual(['Garfield'])
+        })
+
+        it('applies an explicit $none quantifier on a to-many relation (NOT EXISTS)', async () => {
+            expect(names(await run('toys.name=$none:$eq:String'))).toStrictEqual([
+                'Milo',
+                'Shadow',
+                'George',
+                'Leche',
+                'Baby',
+                'Adam',
+            ])
+        })
+
+        it('routes an $all quantifier leaf through the same path as the per-column filter', async () => {
+            // $all row semantics are covered by the per-column filter's own tests; here we assert
+            // the expression leaf delegates to that identical code path (same rows out).
+            const viaExpression = await run('toys.name=$all:$eq:String')
+            const viaColumn = await paginate<CatEntity>(
+                { path: '', filter: { 'toys.name': '$all:$eq:String' } } as PaginateQuery,
+                catRepo,
+                config
+            )
+            expect(names(viaExpression)).toStrictEqual(names(viaColumn))
+        })
+    })
+
+    if (process.env.DB === 'postgres') {
+        describe('filter= boolean expression (jsonb & array columns)', () => {
+            const names = (result: Paginated<CatHairEntity>) => result.data.map((h) => h.name)
+            const runJson = (filterExpression: string) =>
+                paginate<CatHairEntity>({ path: '', filterExpression } as PaginateQuery, catHairRepo, {
+                    sortableColumns: ['id'],
+                    defaultSortBy: [['id', 'ASC']],
+                    filterableColumns: { 'metadata.length': true, 'metadata.thickness': true },
+                })
+            const runArray = (filterExpression: string) =>
+                paginate<CatHairEntity>({ path: '', filterExpression } as PaginateQuery, catHairRepo, {
+                    sortableColumns: ['id'],
+                    defaultSortBy: [['id', 'ASC']],
+                    filterableColumns: { colors: true },
+                })
+
+            it('ORs two jsonb key-path leaves', async () => {
+                expect(names(await runJson('metadata.length=$eq:5 OR metadata.length=$eq:20'))).toStrictEqual([
+                    'short',
+                    'long',
+                ])
+            })
+
+            it('ANDs a jsonb $in leaf with a negated jsonb $eq leaf', async () => {
+                // thickness in {1,10} -> short, buzzed; NOT length=5 drops short.
+                expect(names(await runJson('metadata.thickness=$in:1,10 AND NOT metadata.length=$eq:5'))).toStrictEqual(
+                    ['buzzed']
+                )
+            })
+
+            it('filters an array column with $contains', async () => {
+                expect(names(await runArray('colors=$contains:brown'))).toStrictEqual(['short', 'long'])
+            })
+
+            it('ORs two array $contains leaves', async () => {
+                expect(names(await runArray('colors=$contains:black OR colors=$contains:white'))).toStrictEqual([
+                    'short',
+                    'long',
+                    'buzzed',
+                ])
+            })
+
+            it('ANDs a positive and a negated array $contains leaf', async () => {
+                expect(names(await runArray('colors=$contains:white AND NOT colors=$contains:brown'))).toStrictEqual([
+                    'buzzed',
+                ])
+            })
+        })
+    }
 })

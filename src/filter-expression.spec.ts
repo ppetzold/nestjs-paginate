@@ -80,6 +80,23 @@ describe('parseFilterExpression', () => {
         })
     })
 
+    it('accepts single quotes as well as double quotes', () => {
+        expect(parseFilterExpression("home.name=$eq:'Cat Mansion'")).toEqual({
+            type: 'leaf',
+            column: 'home.name',
+            value: '$eq:Cat Mansion',
+        })
+    })
+
+    it('concatenates quoted and unquoted spans within one token', () => {
+        // `foo" bar"baz` -> the quoted span only protects its own whitespace.
+        expect(parseFilterExpression('name=$eq:foo" bar"baz')).toEqual({
+            type: 'leaf',
+            column: 'name',
+            value: '$eq:foo barbaz',
+        })
+    })
+
     it('allows a boolean keyword as a literal value when quoted', () => {
         expect(parseFilterExpression('name=$eq:"a AND b"')).toEqual({
             type: 'leaf',
@@ -88,14 +105,86 @@ describe('parseFilterExpression', () => {
         })
     })
 
+    it('splits a leaf on the first "=" only, keeping later "=" in the value', () => {
+        expect(parseFilterExpression('name=$eq:a=b')).toEqual({
+            type: 'leaf',
+            column: 'name',
+            value: '$eq:a=b',
+        })
+    })
+
+    it('allows an empty value after "="', () => {
+        expect(parseFilterExpression('name=')).toEqual({ type: 'leaf', column: 'name', value: '' })
+    })
+
+    it('binds NOT tighter than AND (NOT a AND b -> (NOT a) AND b)', () => {
+        expect(parseFilterExpression('NOT a=$eq:1 AND b=$eq:2')).toEqual({
+            type: 'and',
+            children: [
+                { type: 'not', child: { type: 'leaf', column: 'a', value: '$eq:1' } },
+                { type: 'leaf', column: 'b', value: '$eq:2' },
+            ],
+        })
+    })
+
+    it('parses NOT applied to a parenthesised group', () => {
+        expect(parseFilterExpression('NOT (a=$eq:1 OR b=$eq:2)')).toEqual({
+            type: 'not',
+            child: {
+                type: 'or',
+                children: [
+                    { type: 'leaf', column: 'a', value: '$eq:1' },
+                    { type: 'leaf', column: 'b', value: '$eq:2' },
+                ],
+            },
+        })
+    })
+
+    it('flattens redundant nested parentheses', () => {
+        expect(parseFilterExpression('((a=$eq:1 OR b=$eq:2) AND c=$eq:3)')).toEqual({
+            type: 'and',
+            children: [
+                {
+                    type: 'or',
+                    children: [
+                        { type: 'leaf', column: 'a', value: '$eq:1' },
+                        { type: 'leaf', column: 'b', value: '$eq:2' },
+                    ],
+                },
+                { type: 'leaf', column: 'c', value: '$eq:3' },
+            ],
+        })
+    })
+
+    it('treats tabs and newlines as token separators', () => {
+        expect(parseFilterExpression('a=$eq:1\tAND\nb=$eq:2')).toEqual(parseFilterExpression('a=$eq:1 AND b=$eq:2'))
+    })
+
+    it('keeps an operator/suffix/quantifier chain in the value untouched', () => {
+        expect(parseFilterExpression('toys.name=$none:$not:$eq:String')).toEqual({
+            type: 'leaf',
+            column: 'toys.name',
+            value: '$none:$not:$eq:String',
+        })
+    })
+
     describe('errors', () => {
         it.each([
             ['', 'Empty filter expression'],
+            ['   ', 'Empty filter expression'],
             ['name=$eq:"unterminated', 'Unterminated quote'],
+            ["name=$eq:'unterminated", 'Unterminated quote'],
             ['(a=$eq:1', 'Expected ")"'],
             ['justacolumn', 'expected "column=value"'],
+            ['=novalue', 'expected "column=value"'],
             ['a=$eq:1 AND', 'Unexpected end'],
+            ['NOT', 'Unexpected end'],
             ['a=$eq:1 b=$eq:2', 'trailing tokens'],
+            ['a=$eq:1)', 'trailing tokens'],
+            ['OR a=$eq:1', 'Unexpected "or"'],
+            [')', 'Unexpected "rparen"'],
+            ['()', 'Unexpected "rparen"'],
+            ['a=$eq:1 AND AND b=$eq:2', 'Unexpected "and"'],
         ])('rejects %p', (input, message) => {
             expect(() => parseFilterExpression(input)).toThrow(message)
         })
@@ -129,5 +218,35 @@ describe('normalizeFilterExpression', () => {
             type: 'and',
             children: [leaf('a', '$eq:1', true), leaf('b', '$eq:2', true)],
         })
+    })
+
+    it('preserves all children when applying De Morgan to a 3-way group', () => {
+        expect(normalizeFilterExpression(parseFilterExpression('NOT (a=$eq:1 AND b=$eq:2 AND c=$eq:3)'))).toEqual({
+            type: 'or',
+            children: [leaf('a', '$eq:1', true), leaf('b', '$eq:2', true), leaf('c', '$eq:3', true)],
+        })
+    })
+
+    it('recurses De Morgan through a nested mixed group', () => {
+        // NOT (a AND (b OR c)) -> (NOT a) OR ((NOT b) AND (NOT c))
+        expect(normalizeFilterExpression(parseFilterExpression('NOT (a=$eq:1 AND (b=$eq:2 OR c=$eq:3))'))).toEqual({
+            type: 'or',
+            children: [
+                leaf('a', '$eq:1', true),
+                { type: 'and', children: [leaf('b', '$eq:2', true), leaf('c', '$eq:3', true)] },
+            ],
+        })
+    })
+
+    it('collapses a double negation wrapping a group', () => {
+        expect(normalizeFilterExpression(parseFilterExpression('NOT NOT (a=$eq:1 OR b=$eq:2)'))).toEqual(
+            normalizeFilterExpression(parseFilterExpression('a=$eq:1 OR b=$eq:2'))
+        )
+    })
+
+    it('marks the leaf negated without touching a value-level $not suffix', () => {
+        expect(normalizeFilterExpression(parseFilterExpression('NOT color=$not:$eq:white'))).toEqual(
+            leaf('color', '$not:$eq:white', true)
+        )
     })
 })
