@@ -827,13 +827,17 @@ function applyExpressionLeaf(
 
     // Expression terms always validate: silently dropping a leaf would change the boolean result.
     const columnFilters = parseFilter({ filter: { [leaf.column]: leaf.value }, path: '' }, filterableColumns, qb, true)
-    const filters = columnFilters[leaf.column] ?? []
-    if (leaf.negated) {
-        for (const filter of filters) {
-            filter.findOperator = Not(filter.findOperator)
+    // A JSONB key-path leaf (e.g. `metadata.length`) is re-keyed by parseFilter under its JSONB
+    // column (`metadata`), so drive the conditions off the keys parseFilter actually produced
+    // rather than assuming the leaf column is present verbatim.
+    for (const key of Object.keys(columnFilters)) {
+        if (leaf.negated) {
+            for (const filter of columnFilters[key]) {
+                filter.findOperator = Not(filter.findOperator)
+            }
         }
+        addWhereCondition(qb, key, columnFilters, `_e${leafId}`)
     }
-    addWhereCondition(qb, leaf.column, columnFilters, `_e${leafId}`)
 }
 
 export function addDirectFilters<T>(qb: SelectQueryBuilder<T>, filter: ColumnFilters, subFilter = false) {
