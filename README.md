@@ -731,6 +731,10 @@ precedence `NOT` > `AND` > `OR`) and parentheses:
 - Relation columns are matched with correlated `EXISTS` subqueries, so they compose under
   `OR`/`NOT` and never join the relation into the result set. `NOT toys.name=$eq:Ball` means
   "no matching toy exists".
+- Root, embedded, [JSONB key-path](#jsonb-support), and [polymorphic (`~`)](#polymorphic-columns-)
+  columns are all valid leaves and apply as direct conditions. Every operator, suffix and
+  quantifier from the per-column form works unchanged (e.g. `age=$btw:3,5`, `age=$not:$null`,
+  `toys.name=$none:$eq:Ball`); JSONB filtering keeps its PostgreSQL/CockroachDB-only limitation.
 - A value containing whitespace or parentheses must be quoted: `?filter=home.name=$eq:"Cat Mansion"`.
 
 The value-level `$not` suffix (negating a single comparison, e.g. `color=$not:$eq:white`) is
