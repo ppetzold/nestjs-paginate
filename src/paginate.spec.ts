@@ -5783,6 +5783,31 @@ describe('paginate', () => {
         it('rejects a non-filterable column', async () => {
             await expect(run('age=$eq:3')).rejects.toThrow(/not filterable|not allowed/i)
         })
+
+        it('rejects an over-complex expression per filterExpressionMaxComplexity', async () => {
+            const capped: PaginateConfig<CatEntity> = { ...config, filterExpressionMaxComplexity: 3 }
+            // color AND color AND color = 5 nodes, over the cap of 3.
+            await expect(
+                paginate<CatEntity>(
+                    {
+                        path: '',
+                        filterExpression: 'color=$eq:black AND color=$eq:white AND color=$eq:brown',
+                    } as PaginateQuery,
+                    catRepo,
+                    capped
+                )
+            ).rejects.toThrow(/too complex/i)
+        })
+
+        it('allows an expression within filterExpressionMaxComplexity', async () => {
+            const capped: PaginateConfig<CatEntity> = { ...config, filterExpressionMaxComplexity: 3 }
+            const result = await paginate<CatEntity>(
+                { path: '', filterExpression: 'color=$eq:black OR color=$eq:ginger' } as PaginateQuery,
+                catRepo,
+                capped
+            )
+            expect(result.data.map((c) => c.name)).toStrictEqual(['Garfield', 'Shadow', 'Adam'])
+        })
     })
 
     describe('filter= boolean expression (relations)', () => {

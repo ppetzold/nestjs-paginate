@@ -20,6 +20,16 @@ export type FilterExpression =
     | { type: 'not'; child: FilterExpression }
     | { type: 'leaf'; column: string; value: string }
 
+/**
+ * Default cap on the number of nodes (leaves, AND/OR/NOT operators, and parenthesised
+ * groups) a single `filter=` expression may contain. Because the parser is recursive, an
+ * unbounded expression is a denial-of-service vector: a deeply nested or very wide payload
+ * can exhaust the call stack or blow up the generated SQL. 100 nodes comfortably covers any
+ * realistic query while keeping the parse cheap. Override per-endpoint via
+ * `PaginateConfig.filterExpressionMaxComplexity`.
+ */
+export const DEFAULT_FILTER_EXPRESSION_MAX_COMPLEXITY = 100
+
 /** Filter expression with negation pushed onto the leaves, so only AND/OR groups remain. */
 export type NormalizedFilterExpression =
     | { type: 'and'; children: NormalizedFilterExpression[] }
@@ -90,14 +100,25 @@ function tokenize(input: string): Token[] {
     return tokens
 }
 
-function parse(tokens: Token[]): FilterExpression {
+function parse(tokens: Token[], maxComplexity: number): FilterExpression {
     let pos = 0
     const peek = () => tokens[pos]
+
+    // Every leaf, AND/OR/NOT operator, and parenthesised descent counts as one unit of
+    // complexity. Tallied as the tree is built and checked eagerly, so a hostile payload is
+    // rejected before it can nest deep enough to overflow the recursion stack.
+    let complexity = 0
+    const spend = () => {
+        if (++complexity > maxComplexity) {
+            throw new BadRequestException(`Filter expression is too complex (max ${maxComplexity} nodes)`)
+        }
+    }
 
     function parseOr(): FilterExpression {
         const children = [parseAnd()]
         while (peek()?.type === 'or') {
             pos++
+            spend()
             children.push(parseAnd())
         }
         return children.length === 1 ? children[0] : { type: 'or', children }
@@ -107,6 +128,7 @@ function parse(tokens: Token[]): FilterExpression {
         const children = [parseNot()]
         while (peek()?.type === 'and') {
             pos++
+            spend()
             children.push(parseNot())
         }
         return children.length === 1 ? children[0] : { type: 'and', children }
@@ -115,6 +137,7 @@ function parse(tokens: Token[]): FilterExpression {
     function parseNot(): FilterExpression {
         if (peek()?.type === 'not') {
             pos++
+            spend()
             return { type: 'not', child: parseNot() }
         }
         return parsePrimary()
@@ -127,6 +150,7 @@ function parse(tokens: Token[]): FilterExpression {
         }
         if (token.type === 'lparen') {
             pos++
+            spend()
             const expr = parseOr()
             if (peek()?.type !== 'rparen') {
                 throw new BadRequestException('Expected ")" in filter expression')
@@ -136,6 +160,7 @@ function parse(tokens: Token[]): FilterExpression {
         }
         if (token.type === 'leaf') {
             pos++
+            spend()
             const eq = token.raw.indexOf('=')
             if (eq < 1) {
                 throw new BadRequestException(`Invalid filter expression term "${token.raw}", expected "column=value"`)
@@ -155,8 +180,11 @@ function parse(tokens: Token[]): FilterExpression {
     return expr
 }
 
-export function parseFilterExpression(input: string): FilterExpression {
-    return parse(tokenize(input))
+export function parseFilterExpression(
+    input: string,
+    maxComplexity: number = DEFAULT_FILTER_EXPRESSION_MAX_COMPLEXITY
+): FilterExpression {
+    return parse(tokenize(input), maxComplexity)
 }
 
 /** Pushes every NOT down onto the leaves via De Morgan, leaving only AND/OR groups. */

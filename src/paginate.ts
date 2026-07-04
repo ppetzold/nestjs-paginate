@@ -116,6 +116,12 @@ export interface PaginateConfig<T> {
     buildCountQuery?: (qb: SelectQueryBuilder<T>) => SelectQueryBuilder<any>
     optimizedCount?: boolean
     throwOnInvalidFilter?: boolean
+    /**
+     * Maximum number of nodes (leaves, AND/OR/NOT operators, and parenthesised groups) a
+     * single `filter=` expression may contain. Guards against denial-of-service via deeply
+     * nested or very wide expressions. Defaults to 100.
+     */
+    filterExpressionMaxComplexity?: number
 }
 
 export enum PaginationLimit {
@@ -696,7 +702,12 @@ export async function paginate<T extends ObjectLiteral>(
         filterJoinMethods = addFilter(queryBuilder, query, config.filterableColumns, {}, config.throwOnInvalidFilter)
     }
     if (query.filterExpression) {
-        addFilterExpression(queryBuilder, query.filterExpression, config.filterableColumns)
+        addFilterExpression(
+            queryBuilder,
+            query.filterExpression,
+            config.filterableColumns,
+            config.filterExpressionMaxComplexity ?? globalConfig.defaultFilterExpressionMaxComplexity
+        )
     }
     const joinMethods = { ...filterJoinMethods, ...config.joinMethods }
 

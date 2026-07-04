@@ -1,4 +1,8 @@
-import { parseFilterExpression, normalizeFilterExpression } from './filter-expression'
+import {
+    parseFilterExpression,
+    normalizeFilterExpression,
+    DEFAULT_FILTER_EXPRESSION_MAX_COMPLEXITY,
+} from './filter-expression'
 
 describe('parseFilterExpression', () => {
     it('parses a single leaf', () => {
@@ -187,6 +191,37 @@ describe('parseFilterExpression', () => {
             ['a=$eq:1 AND AND b=$eq:2', 'Unexpected "and"'],
         ])('rejects %p', (input, message) => {
             expect(() => parseFilterExpression(input)).toThrow(message)
+        })
+    })
+
+    describe('complexity guard', () => {
+        // Each leaf plus each AND joining them is one node: N leaves ANDed together = 2N-1 nodes.
+        const chain = (leaves: number) =>
+            Array.from({ length: leaves }, (_, i) => `c${i}=$eq:${i}`).join(' AND ')
+
+        it('accepts an expression exactly at the limit', () => {
+            // 3 nodes: leaf AND leaf.
+            expect(() => parseFilterExpression(chain(2), 3)).not.toThrow()
+        })
+
+        it('rejects an expression one node over the limit', () => {
+            // 3 nodes exceeds a limit of 2.
+            expect(() => parseFilterExpression(chain(2), 2)).toThrow('too complex (max 2 nodes)')
+        })
+
+        it('counts NOT operators toward complexity', () => {
+            expect(() => parseFilterExpression('NOT NOT a=$eq:1', 2)).toThrow('too complex')
+        })
+
+        it('counts parenthesised groups toward complexity, catching deep nesting', () => {
+            // Nested parens create no extra leaves but still consume the recursion stack, so
+            // each descent must be charged: `(((a=$eq:1)))` is 3 groups + 1 leaf = 4 nodes.
+            expect(() => parseFilterExpression('(((a=$eq:1)))', 3)).toThrow('too complex')
+        })
+
+        it('is bounded by a safe default when no limit is supplied', () => {
+            const overDefault = chain(DEFAULT_FILTER_EXPRESSION_MAX_COMPLEXITY)
+            expect(() => parseFilterExpression(overDefault)).toThrow('too complex')
         })
     })
 })

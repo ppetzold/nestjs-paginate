@@ -762,9 +762,10 @@ type ExpressionFilterableColumns = {
 export function addFilterExpression<T>(
     qb: SelectQueryBuilder<T>,
     expression: string,
-    filterableColumns?: ExpressionFilterableColumns
+    filterableColumns?: ExpressionFilterableColumns,
+    maxComplexity?: number
 ) {
-    const ast = normalizeFilterExpression(parseFilterExpression(expression))
+    const ast = normalizeFilterExpression(parseFilterExpression(expression, maxComplexity))
     // Join the relation parts of any polymorphic `a~b` leaves up front (joins can't be added from
     // inside the Brackets the leaves compile to).
     for (const column of collectLeafColumns(ast)) {

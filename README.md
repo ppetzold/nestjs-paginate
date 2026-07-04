@@ -739,6 +739,21 @@ precedence `NOT` > `AND` > `OR`) and parentheses:
 The value-level `$not` suffix (negating a single comparison, e.g. `color=$not:$eq:white`) is
 distinct from the boolean `NOT` (negating a whole term or group).
 
+Because the expression is parsed recursively, an unbounded expression is a denial-of-service
+vector: a deeply nested or very wide payload can exhaust the call stack or blow up the
+generated SQL. Every leaf, `AND`/`OR`/`NOT` operator, and parenthesised group counts as one
+node, and the total is capped at **100** by default. Override the cap per endpoint with
+`filterExpressionMaxComplexity` in the config, or globally via `updateGlobalConfig({ defaultFilterExpressionMaxComplexity })`.
+An expression over the limit returns `400 Bad Request`.
+
+```typescript
+const config: PaginateConfig<CatEntity> = {
+  sortableColumns: ['id'],
+  filterableColumns: { color: true, name: true },
+  filterExpressionMaxComplexity: 50, // reject filter= expressions with more than 50 nodes
+}
+```
+
 ### Polymorphic columns (`~`)
 
 A filter column may group several columns with `~` to filter on their `COALESCE` — the first
