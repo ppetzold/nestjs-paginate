@@ -737,19 +737,21 @@ precedence `NOT` > `AND` > `OR`) and parentheses:
 - A value containing whitespace or parentheses must be quoted with `"` or `'`:
   `?filter=home.name=$eq:"Cat Mansion"`.
 
-There is **no** backslash escape character. A quoted span simply runs to the next matching
-quote, and adjacent quoted/unquoted spans within one token are concatenated. To embed a quote
-character, wrap that span in the **other** quote type:
+Inside a quoted value, a backslash escapes a following quote or backslash (`\"`, `\'`, `\\`),
+so a value can contain either quote character:
 
 ```
-?filter=name=$eq:"O'Malley"           # value: O'Malley   (single quote inside double quotes)
-?filter=name=$eq:'Milo "the cat"'     # value: Milo "the cat"   (double quote inside single quotes)
-?filter=name=$eq:a'"'b"'"c            # value: a"b'c   (mix both by concatenating spans)
+?filter=name=$eq:"Milo \"the cat\""   # value: Milo "the cat"
+?filter=name=$eq:'it\'s mine'         # value: it's mine
+?filter=name=$eq:"a\"b\'c\\d"         # value: a"b'c\d
 ```
 
-Note that doubling a quote does **not** escape it (`"say ""hi"""` yields `say hi`, not
-`say "hi"`) — the two quotes just close and reopen empty spans. Remember to URL-encode the
-`filter=` value; the examples above are shown decoded for readability.
+Any other backslash is kept literal, so Windows paths and regexes need no doubling
+(`?filter=path=$eq:"C:\Users"` → `C:\Users`). You can also switch quote styles instead of
+escaping — `?filter=name=$eq:'O'"'"'Malley'`-style concatenation still works — but the
+backslash form is usually clearer. Doubling a quote does **not** escape it
+(`"say ""hi"""` yields `say hi`). Remember to URL-encode the `filter=` value; the examples
+above are shown decoded for readability.
 
 The value-level `$not` suffix (negating a single comparison, e.g. `color=$not:$eq:white`) is
 distinct from the boolean `NOT` (negating a whole term or group).

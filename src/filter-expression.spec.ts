@@ -109,7 +109,41 @@ describe('parseFilterExpression', () => {
         })
     })
 
-    describe('embedding quote characters (no escape char; wrap in the other quote type)', () => {
+    describe('embedding quote characters', () => {
+        it('escapes a double quote inside a double-quoted span with a backslash', () => {
+            expect(parseFilterExpression('name=$eq:"Milo \\"the cat\\""')).toEqual({
+                type: 'leaf',
+                column: 'name',
+                value: '$eq:Milo "the cat"',
+            })
+        })
+
+        it('escapes a single quote inside a single-quoted span with a backslash', () => {
+            expect(parseFilterExpression("name=$eq:'it\\'s'")).toEqual({
+                type: 'leaf',
+                column: 'name',
+                value: "$eq:it's",
+            })
+        })
+
+        it('escapes both quote types and a literal backslash in one span', () => {
+            // \"  \'  \\  ->  "  '  \
+            expect(parseFilterExpression('name=$eq:"a\\"b\\\'c\\\\d"')).toEqual({
+                type: 'leaf',
+                column: 'name',
+                value: '$eq:a"b\'c\\d',
+            })
+        })
+
+        it('keeps a backslash literal when it does not precede a quote or backslash', () => {
+            // Windows paths / regexes are unaffected: `\U` and `\d` stay as-is.
+            expect(parseFilterExpression('name=$eq:"C:\\Users\\d"')).toEqual({
+                type: 'leaf',
+                column: 'name',
+                value: '$eq:C:\\Users\\d',
+            })
+        })
+
         it('embeds a single quote by wrapping the span in double quotes', () => {
             expect(parseFilterExpression(`name=$eq:"O'Malley"`)).toEqual({
                 type: 'leaf',

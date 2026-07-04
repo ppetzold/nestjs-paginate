@@ -12,7 +12,8 @@ import { BadRequestException } from '@nestjs/common'
  *   leaf    := column '=' value          // value uses the existing $op:operand syntax
  *
  * Tokens are whitespace-delimited; `(` and `)` are punctuation. A value containing
- * whitespace or a `(` `)` must be quoted with `"` or `'`.
+ * whitespace or a `(` `)` must be quoted with `"` or `'`. Inside a quoted value a backslash
+ * escapes a following quote or backslash (`\"`, `\'`, `\\`); any other backslash is literal.
  */
 export type FilterExpression =
     | { type: 'and'; children: FilterExpression[] }
@@ -75,6 +76,18 @@ function tokenize(input: string): Token[] {
                 quoted = true
                 i++
                 while (i < input.length && input[i] !== ch) {
+                    // Inside a quoted span a backslash escapes a following quote or backslash,
+                    // so either quote character (and a literal backslash) can appear without
+                    // switching quote styles. Any other backslash is kept literal, leaving
+                    // values such as Windows paths or regexes untouched.
+                    if (input[i] === '\\' && i + 1 < input.length) {
+                        const next = input[i + 1]
+                        if (next === '"' || next === "'" || next === '\\') {
+                            raw += next
+                            i += 2
+                            continue
+                        }
+                    }
                     raw += input[i]
                     i++
                 }
