@@ -734,7 +734,22 @@ precedence `NOT` > `AND` > `OR`) and parentheses:
   columns are all valid leaves and apply as direct conditions. Every operator, suffix and
   quantifier from the per-column form works unchanged (e.g. `age=$btw:3,5`, `age=$not:$null`,
   `toys.name=$none:$eq:Ball`); JSONB filtering keeps its PostgreSQL/CockroachDB-only limitation.
-- A value containing whitespace or parentheses must be quoted: `?filter=home.name=$eq:"Cat Mansion"`.
+- A value containing whitespace or parentheses must be quoted with `"` or `'`:
+  `?filter=home.name=$eq:"Cat Mansion"`.
+
+There is **no** backslash escape character. A quoted span simply runs to the next matching
+quote, and adjacent quoted/unquoted spans within one token are concatenated. To embed a quote
+character, wrap that span in the **other** quote type:
+
+```
+?filter=name=$eq:"O'Malley"           # value: O'Malley   (single quote inside double quotes)
+?filter=name=$eq:'Milo "the cat"'     # value: Milo "the cat"   (double quote inside single quotes)
+?filter=name=$eq:a'"'b"'"c            # value: a"b'c   (mix both by concatenating spans)
+```
+
+Note that doubling a quote does **not** escape it (`"say ""hi"""` yields `say hi`, not
+`say "hi"`) — the two quotes just close and reopen empty spans. Remember to URL-encode the
+`filter=` value; the examples above are shown decoded for readability.
 
 The value-level `$not` suffix (negating a single comparison, e.g. `color=$not:$eq:white`) is
 distinct from the boolean `NOT` (negating a whole term or group).

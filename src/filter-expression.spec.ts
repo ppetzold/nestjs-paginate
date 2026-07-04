@@ -109,6 +109,42 @@ describe('parseFilterExpression', () => {
         })
     })
 
+    describe('embedding quote characters (no escape char; wrap in the other quote type)', () => {
+        it('embeds a single quote by wrapping the span in double quotes', () => {
+            expect(parseFilterExpression(`name=$eq:"O'Malley"`)).toEqual({
+                type: 'leaf',
+                column: 'name',
+                value: `$eq:O'Malley`,
+            })
+        })
+
+        it('embeds a double quote by wrapping the span in single quotes', () => {
+            expect(parseFilterExpression(`name=$eq:'Milo "the cat"'`)).toEqual({
+                type: 'leaf',
+                column: 'name',
+                value: `$eq:Milo "the cat"`,
+            })
+        })
+
+        it('embeds both quote types by concatenating opposite-quoted spans', () => {
+            // a'"'b"'"c  ->  a + " + b + ' + c
+            expect(parseFilterExpression(`name=$eq:a'"'b"'"c`)).toEqual({
+                type: 'leaf',
+                column: 'name',
+                value: `$eq:a"b'c`,
+            })
+        })
+
+        it('does NOT treat a doubled quote as an escaped quote (spans just concatenate)', () => {
+            // "say ""hi"""  ->  'say ' + '' + 'hi' + '' , the doubled quotes yield no literal quote
+            expect(parseFilterExpression('name=$eq:"say ""hi"""')).toEqual({
+                type: 'leaf',
+                column: 'name',
+                value: '$eq:say hi',
+            })
+        })
+    })
+
     it('splits a leaf on the first "=" only, keeping later "=" in the value', () => {
         expect(parseFilterExpression('name=$eq:a=b')).toEqual({
             type: 'leaf',
@@ -196,8 +232,7 @@ describe('parseFilterExpression', () => {
 
     describe('complexity guard', () => {
         // Each leaf plus each AND joining them is one node: N leaves ANDed together = 2N-1 nodes.
-        const chain = (leaves: number) =>
-            Array.from({ length: leaves }, (_, i) => `c${i}=$eq:${i}`).join(' AND ')
+        const chain = (leaves: number) => Array.from({ length: leaves }, (_, i) => `c${i}=$eq:${i}`).join(' AND ')
 
         it('accepts an expression exactly at the limit', () => {
             // 3 nodes: leaf AND leaf.
