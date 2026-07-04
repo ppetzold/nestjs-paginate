@@ -5875,7 +5875,14 @@ describe('paginate', () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id'],
             defaultSortBy: [['id', 'ASC']],
-            filterableColumns: { 'bestFriend.age~nemesis.age': true, color: true, 'toys.id~color': true },
+            filterableColumns: {
+                'bestFriend.age~nemesis.age': true,
+                color: true,
+                'toys.id~color': true,
+                // Multi-level (nested) relation parts, sharing a `bestFriend` prefix.
+                'bestFriend.bestFriend.age~bestFriend.age': true,
+                'bestFriend.bestFriend.age~nemesis.age': true,
+            },
         }
         const run = (filterExpression: string) =>
             paginate<CatEntity>({ path: '', filterExpression } as PaginateQuery, catRepo, config)
@@ -5884,6 +5891,24 @@ describe('paginate', () => {
             const result = await run('bestFriend.age~nemesis.age=$eq:4')
             expect(result.data.map((c) => c.name)).toStrictEqual(['Milo', 'Baby'])
             expect(result.data[0]).not.toHaveProperty('bestFriend')
+        })
+
+        // bestFriend.bestFriend.age: Milo->George(3), Adam->Shadow(4), rest null.
+        // COALESCE(bestFriend.bestFriend.age, bestFriend.age): Milo=3, Shadow=3, Leche=5, Adam=4, rest null.
+        it('joins a multi-level relation path and filters on its COALESCE (shared prefix)', async () => {
+            const result = await run('bestFriend.bestFriend.age~bestFriend.age=$eq:3')
+            expect(result.data.map((c) => c.name)).toStrictEqual(['Milo', 'Shadow'])
+        })
+
+        // COALESCE(bestFriend.bestFriend.age, nemesis.age): Milo=3, Garfield=6, George=0, Baby=4, Adam=4, rest null.
+        it('mixes a nested path with a single-level relation in one group', async () => {
+            expect((await run('bestFriend.bestFriend.age~nemesis.age=$eq:4')).data.map((c) => c.name)).toStrictEqual([
+                'Baby',
+                'Adam',
+            ])
+            expect((await run('bestFriend.bestFriend.age~nemesis.age=$gte:5')).data.map((c) => c.name)).toStrictEqual([
+                'Garfield',
+            ])
         })
 
         it('composes a polymorphic column with a root column', async () => {

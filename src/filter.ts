@@ -210,6 +210,12 @@ export function generatePredicateCondition(
  * Validates the parts of a polymorphic `a~b` column and left-joins any to-one relation parts
  * (without selecting them). Must run on the main query builder — joins cannot be added from
  * inside a `Brackets` where-callback. Each part must be a plain or to-one relation column.
+ *
+ * Relation parts may be nested (`a.b.c.leaf`): every segment before the leaf column is a hop that
+ * is joined step by step (the database cannot resolve a multi-level path in one join). Each hop is
+ * joined under a path-derived alias (`<parent>_<segment>_rel`) that matches exactly what
+ * `fixColumnAlias`/`buildPolymorphicCoalesce` reference for the leaf, and hops shared across parts
+ * (e.g. a common `a.b` prefix) reuse the already-created join by alias rather than colliding.
  */
 export function preparePolymorphicColumn(qb: SelectQueryBuilder<any>, column: string) {
     for (const part of column.split('~')) {
@@ -221,17 +227,29 @@ export function preparePolymorphicColumn(qb: SelectQueryBuilder<any>, column: st
                 `Polymorphic filter groups (using "~") support only plain and to-one relation columns, not "${part}".`
             )
         }
-        if (checkIsRelation(qb, props.propertyPath)) {
-            const relation = qb.expressionMap.mainAlias.metadata.findRelationWithPropertyPath(props.propertyPath)
-            if (relation?.isOneToMany || relation?.isManyToMany) {
+
+        // Every path segment except the trailing column is a relation hop to join.
+        const relationPath = part.split('.').slice(0, -1)
+        let parentAlias = qb.alias
+        let metadata = qb.expressionMap.mainAlias.metadata
+        for (const relationName of relationPath) {
+            const relation = metadata.relations.find((r) => r.propertyPath === relationName)
+            if (!relation) {
+                throw new BadRequestException(
+                    `Polymorphic filter groups (using "~") support only plain and to-one relation columns, not "${part}".`
+                )
+            }
+            if (relation.isOneToMany || relation.isManyToMany) {
                 throw new BadRequestException(
                     `Polymorphic filter groups (using "~") support only to-one relations, not "${part}".`
                 )
             }
-            const joinAlias = `${qb.alias}_${props.propertyPath}_rel`
+            const joinAlias = `${parentAlias}_${relationName}_rel`
             if (!qb.expressionMap.joinAttributes.some((attr) => attr.alias?.name === joinAlias)) {
-                qb.leftJoin(`${qb.alias}.${props.propertyPath}`, joinAlias)
+                qb.leftJoin(`${parentAlias}.${relationName}`, joinAlias)
             }
+            parentAlias = joinAlias
+            metadata = relation.inverseEntityMetadata
         }
     }
 }
@@ -345,13 +363,35 @@ export function parseFilterToken(raw?: string): FilterToken | null {
     return token
 }
 
+/**
+ * Resolves the type of a (possibly nested) relation column's leaf, e.g. `a.b.leaf`, by walking the
+ * relation chain hop by hop — `extractVirtualProperty` only resolves a single hop. Used to coerce
+ * polymorphic (`~`) filter values, whose raw COALESCE has no query-builder-typed parameter and so
+ * would otherwise compare as text on type-strict drivers (SQLite). Returns undefined if any hop or
+ * the leaf column can't be resolved.
+ */
+function resolveLeafColumnType(qb: SelectQueryBuilder<unknown>, column: string): unknown {
+    const segments = column.split('.')
+    const leaf = segments[segments.length - 1]
+    let metadata = qb?.expressionMap?.mainAlias?.metadata
+    for (const relationName of segments.slice(0, -1)) {
+        const relation = metadata?.relations.find((r) => r.propertyPath === relationName)
+        if (!relation) return undefined
+        metadata = relation.inverseEntityMetadata
+    }
+    return metadata?.columns?.find((c) => c.propertyName === leaf)?.type
+}
+
 function fixColumnFilterValue<T>(column: string, qb: SelectQueryBuilder<T>, isJsonb = false) {
+    const isPolymorphic = column.includes('~')
     // A polymorphic `a~b` column has no metadata of its own; coerce values using its first part,
-    // so e.g. a numeric COALESCE compares numerically on type-strict drivers (SQLite).
-    const typeColumn = column.includes('~') ? column.split('~')[0] : column
+    // so e.g. a numeric COALESCE compares numerically on type-strict drivers (SQLite). The first
+    // part may be nested (`a.b.leaf`), so walk the relation chain to the leaf's type.
+    const typeColumn = isPolymorphic ? column.split('~')[0] : column
     const columnProperties = getPropertiesByColumnName(typeColumn)
-    const virtualProperty = extractVirtualProperty(qb, columnProperties)
-    const columnType = virtualProperty.type
+    const columnType = isPolymorphic
+        ? resolveLeafColumnType(qb, typeColumn)
+        : extractVirtualProperty(qb, columnProperties).type
 
     return (value: string) => {
         if ((isDateColumnType(columnType) || isJsonb) && isISODate(value)) {

@@ -783,7 +783,14 @@ non-null value per row (the same `~` syntax as polymorphic sorting). This works 
 ```
 
 Each part must be a plain or **to-one** relation column (not embedded, virtual, JSONB, or to-many).
-Relation parts are left-joined automatically and are not added to the result set.
+Relation parts are left-joined automatically and are not added to the result set. Parts may be
+**nested** (`a.b.c.leaf`) as long as every segment before the leaf is a to-one relation; each hop is
+joined step by step, and a prefix shared across parts (e.g. two parts both starting `a.b`) reuses the
+same join rather than colliding:
+
+```url
+?filter=bestFriend.home.street~home.street=$eq:Downtown
+```
 
 ## JSONB Support
 
