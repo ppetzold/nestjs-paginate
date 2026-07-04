@@ -1173,7 +1173,23 @@ export function addRelationsFromSchema<T>(
         Object.keys(relations).forEach((relationName) => {
             const joinMethod =
                 joinMethods[parentRelation ? `${parentRelation}.${relationName}` : relationName] ?? defaultJoinMethod
-            queryBuilder[joinMethod](`${alias ?? prefix}.${relationName}`, `${alias ?? prefix}_${relationName}_rel`)
+            const joinAlias = `${alias ?? prefix}_${relationName}_rel`
+
+            // A prior step (e.g. a polymorphic `~` filter, which left-joins its relation parts on
+            // the main query builder before relations are loaded) may have already joined this
+            // relation under the same alias. Re-joining it duplicates the table and makes its
+            // columns ambiguous, so reuse the existing join — but still add the SELECT if this
+            // schema wants the relation hydrated (the earlier polymorphic join is unselected).
+            const alreadyJoined = queryBuilder.expressionMap.joinAttributes.some(
+                (attr) => attr.alias?.name === joinAlias
+            )
+            if (alreadyJoined) {
+                if (joinMethod === 'leftJoinAndSelect' || joinMethod === 'innerJoinAndSelect') {
+                    queryBuilder.addSelect(joinAlias)
+                }
+            } else {
+                queryBuilder[joinMethod](`${alias ?? prefix}.${relationName}`, joinAlias)
+            }
 
             // Check whether this is a non-terminal node with a relation schema to load
             const relationSchema = relations[relationName]

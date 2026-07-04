@@ -5928,6 +5928,39 @@ describe('paginate', () => {
         it('rejects a to-many relation component', async () => {
             await expect(run('toys.id~color=$eq:1')).rejects.toThrow(/support only to-one relations/)
         })
+
+        // Regression: a `~` group whose relation parts are ALSO eager-loaded via
+        // config.relations. preparePolymorphicColumn left-joins `bestFriend` (and
+        // `bestFriend.bestFriend`) under `__root_bestFriend_rel` first; then the relations
+        // loader (addRelationsFromSchema), which had no dedup, joined the same alias AGAIN:
+        //   QueryFailedError: table name "__root_bestFriend_rel" specified more than once
+        //   (or "ambiguous column name: __root_bestFriend_rel.id", query-dependent)
+        // Fix: the relations loader reuses an already-joined alias, adding only the SELECT
+        // so the relation is still hydrated. Downstream repro: beehive Activity/Application
+        // endpoints eager-load their target relations (course.camp/camp/workshop) AND filter
+        // on the polymorphic group `course.camp.end~camp.end~workshop.end`.
+        it('joins a `~` group whose relations are also eager-loaded via config.relations', async () => {
+            const configWithRelations: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id'],
+                defaultSortBy: [['id', 'ASC']],
+                relations: { bestFriend: { bestFriend: true } },
+                filterableColumns: {
+                    'bestFriend.bestFriend.age~bestFriend.age': true,
+                },
+            }
+            const result = await paginate<CatEntity>(
+                { path: '', filterExpression: 'bestFriend.bestFriend.age~bestFriend.age=$eq:3' } as PaginateQuery,
+                catRepo,
+                configWithRelations
+            )
+            // COALESCE(bestFriend.bestFriend.age, bestFriend.age): Milo=3, Shadow=3.
+            expect(result.data.map((c) => c.name)).toStrictEqual(['Milo', 'Shadow'])
+            // The relations requested by config.relations are still hydrated (reused join keeps
+            // its SELECT): Milo -> Shadow -> George.
+            const milo = result.data.find((c) => c.name === 'Milo')
+            expect(milo?.bestFriend?.name).toBe('Shadow')
+            expect(milo?.bestFriend?.bestFriend?.name).toBe('George')
+        })
     })
 
     describe('filter= boolean expression (leaf operator coverage)', () => {
