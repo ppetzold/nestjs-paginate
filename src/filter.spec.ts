@@ -117,6 +117,12 @@ describe('parseFilter value coercion (type classifier)', () => {
         it('does not coerce true/false on a string column', () => {
             expect(coerce('varchar', '$eq:true')).toBe('true')
         })
+
+        it('does not throw on a valueless operator ($null) for boolean columns', () => {
+            // `$null` (IS NULL) carries no operand; coercion must skip it, not call
+            // parseBooleanToken(undefined) → "Cannot read properties of undefined (reading 'trim')".
+            expect(() => coerce('boolean', '$null')).not.toThrow()
+        })
     })
 
     describe('dates', () => {

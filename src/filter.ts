@@ -345,6 +345,9 @@ function fixColumnFilterValue<T>(column: string, qb: SelectQueryBuilder<T>, isJs
     const columnType = resolveColumnType(qb, column)
 
     return (value: string): string | number | boolean | Date => {
+        // Valueless operators (e.g. `$null` → IS NULL) pass no operand; never coerce them
+        // (parseBooleanToken/isISODate would throw on `undefined`).
+        if (value == null) return value
         // Temporal columns: a full ISO timestamp is always accepted; a date-only string
         // (YYYY-MM-DD) is accepted for datetime/timestamp and date columns. JSONB values also
         // accept ISO timestamps. `isDateColumnType` is intentionally not broadened to the
