@@ -2598,6 +2598,96 @@ describe('paginate', () => {
         expect(result.data).toStrictEqual([cats[0]])
     })
 
+    it('should allow any sort within allowDepth without listing it', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            allowDepth: 1,
+        }
+        const query: PaginateQuery = {
+            path: '',
+            sortBy: [['name', 'ASC']],
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        expect(result.meta.sortBy).toStrictEqual([['name', 'ASC']])
+        expect(result.data.map((cat) => cat.name)).toStrictEqual(
+            [...cats].map((cat) => cat.name).sort((a, b) => a.localeCompare(b))
+        )
+    })
+
+    it('should ignore a sort deeper than allowDepth', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            relations: { home: { pillows: true } },
+            sortableColumns: ['id'],
+            allowDepth: 1,
+        }
+        const query: PaginateQuery = {
+            path: '',
+            sortBy: [['home.pillows.color', 'ASC']],
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        // The column is too deep to be auto-allowed, so the default sort applies.
+        expect(result.meta.sortBy).toStrictEqual([['id', 'ASC']])
+    })
+
+    it('should allow a nested relation sort within allowDepth without listing it', async () => {
+        const config: PaginateConfig<CatHomeEntity> = {
+            relations: { cat: true },
+            sortableColumns: ['id'],
+            allowDepth: 2,
+        }
+        const query: PaginateQuery = {
+            path: '',
+            sortBy: [['cat.id', 'DESC']],
+        }
+
+        const result = await paginate<CatHomeEntity>(query, catHomeRepo, config)
+
+        expect(result.meta.sortBy).toStrictEqual([['cat.id', 'DESC']])
+        expect(result.data.map((home) => home.cat.id)).toStrictEqual(
+            result.data.map((home) => home.cat.id).sort((a, b) => b - a)
+        )
+    })
+
+    it('should allow a polymorphic sort group within allowDepth without listing it', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            relations: { bestFriend: true, nemesis: true },
+            sortableColumns: ['id'],
+            allowDepth: 2,
+        }
+        const query: PaginateQuery = {
+            path: '',
+            sortBy: [[['bestFriend.age', 'nemesis.age'], 'ASC']],
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        expect(result.meta.sortBy).toStrictEqual([[['bestFriend.age', 'nemesis.age'], 'ASC']])
+        const values = result.data.map((cat) => cat.bestFriend?.age ?? cat.nemesis?.age ?? null)
+        expect(values).toStrictEqual([...(values as number[])].sort((a, b) => a - b))
+    })
+
+    it('should ignore a polymorphic sort group when an alternative is deeper than allowDepth', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            relations: { bestFriend: true, nemesis: true },
+            sortableColumns: ['id'],
+            allowDepth: 1, // both `bestFriend.age` and `nemesis.age` are depth 2
+            defaultSortBy: [['id', 'ASC']],
+        }
+        const query: PaginateQuery = {
+            path: '',
+            sortBy: [[['bestFriend.age', 'nemesis.age'], 'ASC']],
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        // The group is dropped during validation, so the default sort applies.
+        expect(result.meta.sortBy).toStrictEqual([['id', 'ASC']])
+    })
+
     it('should throw an error when no sortableColumns', async () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: [],

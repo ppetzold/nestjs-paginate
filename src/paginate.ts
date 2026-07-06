@@ -104,15 +104,17 @@ export interface PaginateConfig<T> {
     where?: FindOptionsWhere<T> | FindOptionsWhere<T>[]
     filterableColumns?: Partial<MappedColumns<T, (FilterOperator | FilterSuffix | FilterQuantifier)[] | true>>
     /**
-     * Bulk-allows any filtered column whose dot-path depth is at most this value, without having
-     * to enumerate it in {@link filterableColumns}. Depth is the number of dot-separated segments,
-     * so `allowDepth: 5` permits `a.b.c.d.e` (5 segments) but rejects `a.b.c.d.e.f` (6 segments).
-     * A polymorphic `a~b` column is measured by its deepest alternative.
+     * Bulk-allows any filtered or sorted column whose dot-path depth is at most this value, without
+     * having to enumerate it in {@link filterableColumns} or {@link sortableColumns}. Depth is the
+     * number of dot-separated segments, so `allowDepth: 5` permits `a.b.c.d.e` (5 segments) but
+     * rejects `a.b.c.d.e.f` (6 segments). A polymorphic (`a~b`) column is measured by its deepest
+     * alternative.
      *
-     * Only columns actually referenced by the request (via `filter.*` or a `filter=` expression)
-     * are considered — this does not open every possible path, it simply skips the allowlist check
-     * for shallow-enough ones. An explicit {@link filterableColumns} entry always takes precedence,
-     * so per-column operator restrictions still apply even within the allowed depth.
+     * Only columns actually referenced by the request (via `filter.*`, a `filter=` expression, or
+     * `sortBy`) are considered — this does not open every possible path, it simply skips the
+     * allowlist check for shallow-enough ones. An explicit {@link filterableColumns} entry always
+     * takes precedence, so per-column operator restrictions still apply even within the allowed
+     * depth.
      */
     allowDepth?: number
     loadEagerRelations?: boolean
@@ -142,8 +144,8 @@ export enum PaginationLimit {
     COUNTER_ONLY = 0,
 }
 
-/** Dot-path depth of a filter column; a polymorphic `a~b` column counts its deepest alternative. */
-function filterColumnDepth(column: string): number {
+/** Dot-path depth of a column; a polymorphic `a~b` column counts its deepest alternative. */
+function columnPathDepth(column: string): number {
     return Math.max(...column.split('~').map((part) => part.split('.').length))
 }
 
@@ -180,10 +182,42 @@ function withDepthAllowedColumns<T>(
     const synthetic: Record<string, true> = {}
     for (const column of referenced) {
         if (config.filterableColumns && column in config.filterableColumns) continue
-        if (filterColumnDepth(column) <= config.allowDepth) synthetic[column] = true
+        if (columnPathDepth(column) <= config.allowDepth) synthetic[column] = true
     }
 
     return { ...synthetic, ...config.filterableColumns } as PaginateConfig<T>['filterableColumns']
+}
+
+/**
+ * Resolves the effective sortable-columns list for a request, honouring `config.allowDepth`.
+ *
+ * For every column the request actually references (via `sortBy`, including each alternative of a
+ * polymorphic `a~b` group) that is not already listed and whose depth is within `allowDepth`, a
+ * synthetic entry is appended so the downstream `isEntityKey` allowlist check passes. Because the
+ * entries carry the full column path, the existing relation ordering machinery (which joins by
+ * prefix) handles nested paths without any further changes. When `allowDepth` is unset the
+ * configured list is returned unchanged.
+ */
+function withDepthAllowedSortColumns<T>(config: PaginateConfig<T>, query: PaginateQuery): Column<T>[] {
+    if (config.allowDepth == null) {
+        return config.sortableColumns
+    }
+
+    const referenced = new Set<string>()
+    if (query.sortBy) {
+        for (const [column] of query.sortBy) {
+            // A polymorphic sort group arrives already split into its alternatives.
+            for (const part of Array.isArray(column) ? column : [column]) referenced.add(part)
+        }
+    }
+
+    const synthetic: Column<T>[] = []
+    for (const column of referenced) {
+        if (isEntityKey(config.sortableColumns, column)) continue
+        if (columnPathDepth(column) <= config.allowDepth) synthetic.push(column as Column<T>)
+    }
+
+    return [...config.sortableColumns, ...synthetic]
 }
 
 function generateWhereStatement<T>(
@@ -515,6 +549,8 @@ export async function paginate<T extends ObjectLiteral>(
         logAndThrowException("Missing required 'sortableColumns' config.")
     }
 
+    const sortableColumns = withDepthAllowedSortColumns(config, query)
+
     const sortBy = [] as SortBy<T>
 
     if (query.sortBy) {
@@ -526,10 +562,10 @@ export async function paginate<T extends ObjectLiteral>(
             // A polymorphic group (e.g. `colA~colB`) is valid only when every
             // column in the group is sortable.
             if (Array.isArray(column)) {
-                if (column.length > 0 && column.every((c) => isEntityKey(config.sortableColumns, c))) {
+                if (column.length > 0 && column.every((c) => isEntityKey(sortableColumns, c))) {
                     sortBy.push(order as Order<T>)
                 }
-            } else if (isEntityKey(config.sortableColumns, column)) {
+            } else if (isEntityKey(sortableColumns, column)) {
                 sortBy.push(order as Order<T>)
             }
         }
