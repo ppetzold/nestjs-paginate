@@ -50,6 +50,7 @@ import {
     resolveJsonbPath,
     SortBy,
 } from './helper'
+import { collectFilterExpressionColumns } from './filter-expression'
 import globalConfig from './global-config'
 
 const logger: Logger = new Logger('nestjs-paginate')
@@ -102,6 +103,18 @@ export interface PaginateConfig<T> {
     defaultLimit?: number
     where?: FindOptionsWhere<T> | FindOptionsWhere<T>[]
     filterableColumns?: Partial<MappedColumns<T, (FilterOperator | FilterSuffix | FilterQuantifier)[] | true>>
+    /**
+     * Bulk-allows any filtered column whose dot-path depth is at most this value, without having
+     * to enumerate it in {@link filterableColumns}. Depth is the number of dot-separated segments,
+     * so `allowDepth: 5` permits `a.b.c.d.e` (5 segments) but rejects `a.b.c.d.e.f` (6 segments).
+     * A polymorphic `a~b` column is measured by its deepest alternative.
+     *
+     * Only columns actually referenced by the request (via `filter.*` or a `filter=` expression)
+     * are considered — this does not open every possible path, it simply skips the allowlist check
+     * for shallow-enough ones. An explicit {@link filterableColumns} entry always takes precedence,
+     * so per-column operator restrictions still apply even within the allowed depth.
+     */
+    allowDepth?: number
     loadEagerRelations?: boolean
     withDeleted?: boolean
     allowWithDeletedInQuery?: boolean
@@ -127,6 +140,50 @@ export interface PaginateConfig<T> {
 export enum PaginationLimit {
     NO_PAGINATION = -1,
     COUNTER_ONLY = 0,
+}
+
+/** Dot-path depth of a filter column; a polymorphic `a~b` column counts its deepest alternative. */
+function filterColumnDepth(column: string): number {
+    return Math.max(...column.split('~').map((part) => part.split('.').length))
+}
+
+/**
+ * Resolves the effective filterable-columns map for a request, honouring `config.allowDepth`.
+ *
+ * For every column the request actually references (`filter.*` keys and `filter=` expression
+ * leaves) that is not already listed and whose depth is within `allowDepth`, a synthetic `true`
+ * entry is added so the downstream allowlist check passes. Explicit `filterableColumns` entries are
+ * layered on top, so their per-column operator restrictions always win. Because the entries carry
+ * the full column path, the existing relation sub-filter machinery (which re-scopes by prefix)
+ * validates nested and to-many paths without any further changes. When `allowDepth` is unset the
+ * configured map is returned unchanged.
+ */
+function withDepthAllowedColumns<T>(
+    config: PaginateConfig<T>,
+    query: PaginateQuery,
+    filterExpressionMaxComplexity: number
+): PaginateConfig<T>['filterableColumns'] {
+    if (config.allowDepth == null) {
+        return config.filterableColumns
+    }
+
+    const referenced = new Set<string>()
+    if (query.filter) {
+        for (const column of Object.keys(query.filter)) referenced.add(column)
+    }
+    if (query.filterExpression) {
+        for (const column of collectFilterExpressionColumns(query.filterExpression, filterExpressionMaxComplexity)) {
+            referenced.add(column)
+        }
+    }
+
+    const synthetic: Record<string, true> = {}
+    for (const column of referenced) {
+        if (config.filterableColumns && column in config.filterableColumns) continue
+        if (filterColumnDepth(column) <= config.allowDepth) synthetic[column] = true
+    }
+
+    return { ...synthetic, ...config.filterableColumns } as PaginateConfig<T>['filterableColumns']
 }
 
 function generateWhereStatement<T>(
@@ -697,17 +754,16 @@ export async function paginate<T extends ObjectLiteral>(
         queryBuilder.withDeleted()
     }
 
+    const filterExpressionMaxComplexity =
+        config.filterExpressionMaxComplexity ?? globalConfig.defaultFilterExpressionMaxComplexity
+    const filterableColumns = withDepthAllowedColumns(config, query, filterExpressionMaxComplexity)
+
     let filterJoinMethods = {}
     if (query.filter) {
-        filterJoinMethods = addFilter(queryBuilder, query, config.filterableColumns, {}, config.throwOnInvalidFilter)
+        filterJoinMethods = addFilter(queryBuilder, query, filterableColumns, {}, config.throwOnInvalidFilter)
     }
     if (query.filterExpression) {
-        addFilterExpression(
-            queryBuilder,
-            query.filterExpression,
-            config.filterableColumns,
-            config.filterExpressionMaxComplexity ?? globalConfig.defaultFilterExpressionMaxComplexity
-        )
+        addFilterExpression(queryBuilder, query.filterExpression, filterableColumns, filterExpressionMaxComplexity)
     }
     const joinMethods = { ...filterJoinMethods, ...config.joinMethods }
 
