@@ -108,7 +108,7 @@ describe('paginate', () => {
             case 'sqlite':
                 dataSource = new DataSource({
                     ...dbOptions,
-                    type: 'sqlite',
+                    type: 'better-sqlite3',
                     database: ':memory:',
                 })
                 break
@@ -285,16 +285,19 @@ describe('paginate', () => {
                     name: 'short',
                     colors: ['white', 'brown', 'black'],
                     metadata: { length: 5, thickness: 1 },
+                    metadataJson: { length: 5, thickness: 1 },
                 }),
                 catHairRepo.create({
                     name: 'long',
                     colors: ['white', 'brown'],
                     metadata: { length: 20, thickness: 5 },
+                    metadataJson: { length: 20, thickness: 5 },
                 }),
                 catHairRepo.create({
                     name: 'buzzed',
                     colors: ['white'],
                     metadata: { length: 0.5, thickness: 10 },
+                    metadataJson: { length: 0.5, thickness: 10 },
                 }),
                 catHairRepo.create({ name: 'none' }),
             ])
@@ -1039,7 +1042,7 @@ describe('paginate', () => {
 
     it('should return result based on search term on one-to-one relation', async () => {
         const config: PaginateConfig<CatHomeEntity> = {
-            relations: ['cat', 'naptimePillow.brand'],
+            relations: { cat: true, naptimePillow: { brand: true } },
             sortableColumns: ['id', 'name', 'cat.id'],
         }
         const query: PaginateQuery = {
@@ -1109,7 +1112,7 @@ describe('paginate', () => {
 
     it('should return result based on sort on one-to-many relation', async () => {
         const config: PaginateConfig<CatEntity> = {
-            relations: ['toys', 'toys.shop', 'toys.shop.address'],
+            relations: { toys: { shop: { address: true } } },
             sortableColumns: ['id', 'name', 'toys.id'],
             searchableColumns: ['name', 'toys.name'],
         }
@@ -1135,7 +1138,7 @@ describe('paginate', () => {
 
     it('should return result based on sort on one-to-one relation', async () => {
         const config: PaginateConfig<CatHomeEntity> = {
-            relations: ['cat', 'naptimePillow.brand'],
+            relations: { cat: true, naptimePillow: { brand: true } },
             sortableColumns: ['id', 'name'],
             searchableColumns: ['name', 'cat.name'],
         }
@@ -1190,7 +1193,7 @@ describe('paginate', () => {
 
     it('should load nested relations (array notation)', async () => {
         const config: PaginateConfig<CatEntity> = {
-            relations: ['home.pillows', 'home.naptimePillow.brand'],
+            relations: { home: { pillows: true, naptimePillow: { brand: true } } },
             sortableColumns: ['id', 'name'],
             searchableColumns: ['name'],
         }
@@ -1357,7 +1360,7 @@ describe('paginate', () => {
 
     it('should return all cats with a toys from the lovely shop', async () => {
         const config: PaginateConfig<CatEntity> = {
-            relations: ['toys', 'toys.shop'],
+            relations: { toys: { shop: true } },
             sortableColumns: ['id', 'name'],
             where: {
                 toys: {
@@ -1382,7 +1385,7 @@ describe('paginate', () => {
 
     it('should return all cats from shop where street name like 123', async () => {
         const config: PaginateConfig<CatEntity> = {
-            relations: ['toys', 'toys.shop', 'toys.shop.address'],
+            relations: { toys: { shop: { address: true } } },
             sortableColumns: ['id', 'name'],
             where: {
                 toys: {
@@ -1531,7 +1534,7 @@ describe('paginate', () => {
 
     it('should return result based on filter on one-to-one relation', async () => {
         const config: PaginateConfig<CatHomeEntity> = {
-            relations: ['cat', 'naptimePillow.brand'],
+            relations: { cat: true, naptimePillow: { brand: true } },
             sortableColumns: ['id', 'name'],
             filterableColumns: {
                 'cat.name': [FilterSuffix.NOT],
@@ -1560,7 +1563,7 @@ describe('paginate', () => {
 
     it('should return result based on $in filter on one-to-one relation', async () => {
         const config: PaginateConfig<CatHomeEntity> = {
-            relations: ['cat', 'naptimePillow.brand'],
+            relations: { cat: true, naptimePillow: { brand: true } },
             sortableColumns: ['id', 'name'],
             filterableColumns: {
                 'cat.age': [FilterOperator.IN],
@@ -1589,7 +1592,7 @@ describe('paginate', () => {
 
     it('should return result based on $btw filter on one-to-one relation', async () => {
         const config: PaginateConfig<CatHomeEntity> = {
-            relations: ['cat', 'naptimePillow.brand'],
+            relations: { cat: true, naptimePillow: { brand: true } },
             sortableColumns: ['id', 'name'],
             filterableColumns: {
                 'cat.age': [FilterOperator.BTW],
@@ -1645,7 +1648,7 @@ describe('paginate', () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id', 'name', 'size.height', 'size.length', 'size.width', 'toys.(size.height)'],
             searchableColumns: ['name'],
-            relations: ['home', 'toys', 'home.naptimePillow.brand'],
+            relations: { home: { naptimePillow: { brand: true } }, toys: true },
         }
         const query: PaginateQuery = {
             path: '',
@@ -1777,7 +1780,7 @@ describe('paginate', () => {
         const config: PaginateConfig<CatHomeEntity> = {
             sortableColumns: ['id', 'name', 'cat.(size.height)', 'cat.(size.length)', 'cat.(size.width)'],
             searchableColumns: ['name'],
-            relations: ['cat', 'naptimePillow.brand'],
+            relations: { cat: true, naptimePillow: { brand: true } },
         }
         const query: PaginateQuery = {
             path: '',
@@ -1885,7 +1888,7 @@ describe('paginate', () => {
         const config: PaginateConfig<CatHomeEntity> = {
             sortableColumns: ['id', 'name', 'cat.(size.height)', 'cat.(size.length)', 'cat.(size.width)'],
             searchableColumns: ['cat.(size.height)'],
-            relations: ['cat', 'naptimePillow.brand'],
+            relations: { cat: true, naptimePillow: { brand: true } },
         }
         const query: PaginateQuery = {
             path: '',
@@ -1950,7 +1953,7 @@ describe('paginate', () => {
             filterableColumns: {
                 'size.height': [FilterSuffix.NOT],
             },
-            relations: ['home', 'home.naptimePillow.brand'],
+            relations: { home: { naptimePillow: { brand: true } } },
         }
         const query: PaginateQuery = {
             path: '',
@@ -2032,7 +2035,7 @@ describe('paginate', () => {
 
     it('should return result based on filter on embedded on one-to-one relation', async () => {
         const config: PaginateConfig<CatHomeEntity> = {
-            relations: ['cat', 'naptimePillow.brand'],
+            relations: { cat: true, naptimePillow: { brand: true } },
             sortableColumns: ['id', 'name'],
             filterableColumns: {
                 'cat.(size.height)': [FilterOperator.EQ],
@@ -2058,7 +2061,7 @@ describe('paginate', () => {
 
     it('should return result based on $in filter on embedded on one-to-one relation', async () => {
         const config: PaginateConfig<CatHomeEntity> = {
-            relations: ['cat', 'naptimePillow.brand'],
+            relations: { cat: true, naptimePillow: { brand: true } },
             sortableColumns: ['id', 'name'],
             filterableColumns: {
                 'cat.(size.height)': [FilterOperator.IN],
@@ -2088,7 +2091,7 @@ describe('paginate', () => {
 
     it('should return result based on $btw filter on embedded on one-to-one relation', async () => {
         const config: PaginateConfig<CatHomeEntity> = {
-            relations: ['cat', 'naptimePillow.brand'],
+            relations: { cat: true, naptimePillow: { brand: true } },
             sortableColumns: ['id', 'name'],
             filterableColumns: {
                 'cat.(size.height)': [FilterOperator.BTW],
@@ -2358,7 +2361,7 @@ describe('paginate', () => {
             filterableColumns: {
                 'home.street': [FilterSuffix.NOT, FilterOperator.NULL],
             },
-            relations: ['home', 'home.naptimePillow.brand'],
+            relations: { home: { naptimePillow: { brand: true } } },
         }
         const query: PaginateQuery = {
             path: '',
@@ -2385,7 +2388,7 @@ describe('paginate', () => {
             filterableColumns: {
                 'home.street': [FilterOperator.NULL],
             },
-            relations: ['home', 'home.naptimePillow.brand'],
+            relations: { home: { naptimePillow: { brand: true } } },
         }
         const query: PaginateQuery = {
             path: '',
@@ -2409,6 +2412,8 @@ describe('paginate', () => {
     it('should return result based on null query on nested relation', async () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id'],
+            // Filtering a relation no longer hydrates it; request the chain explicitly to load it.
+            relations: { home: { naptimePillow: { brand: true } } },
             filterableColumns: {
                 'home.naptimePillow.brand.quality': [FilterOperator.NULL],
             },
@@ -3922,6 +3927,170 @@ describe('paginate', () => {
                 expect(result.data).toEqual(expect.arrayContaining([catHairs[0], catHairs[1]]))
                 expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.metadata.length=$in:5,20')
             })
+
+            // Operators other than $eq/$in/$contains use the `#>>` extraction path instead of
+            // JsonContains. That path keys the filter on the full `column.key` path, which the
+            // relation resolver used to reject ("No relation or embedded found"). Extraction
+            // operators must work on JSON key paths too.
+            it('should filter on a direct JSONB column using an extraction operator ($sw)', async () => {
+                const config: PaginateConfig<CatHairEntity> = {
+                    sortableColumns: ['id'],
+                    filterableColumns: {
+                        'metadata.length': [FilterOperator.SW],
+                    },
+                }
+                const query: PaginateQuery = {
+                    path: '',
+                    filter: {
+                        // length values are 5, 20, 0.5 → only '20' starts with '2'
+                        'metadata.length': '$sw:2',
+                    },
+                }
+
+                const result = await paginate<CatHairEntity>(query, catHairRepo, config)
+
+                expect(result.meta.filter).toStrictEqual({
+                    'metadata.length': '$sw:2',
+                })
+                expect(result.data).toStrictEqual([catHairs[1]])
+                expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.metadata.length=$sw:2')
+            })
+        })
+    }
+
+    if (process.env.DB === 'postgres') {
+        // Plain `json` columns (as opposed to `jsonb`) do not support the Postgres `@>`
+        // containment operator, so $eq/$in must be routed through `#>>` text extraction
+        // rather than TypeORM's JsonContains. These mirror the jsonb cases above.
+        describe('should be able to filter on json (non-jsonb) columns', () => {
+            it('should filter a direct json column with a single value', async () => {
+                const config: PaginateConfig<CatHairEntity> = {
+                    sortableColumns: ['id'],
+                    filterableColumns: {
+                        'metadataJson.length': true,
+                    },
+                }
+                const query: PaginateQuery = {
+                    path: '',
+                    filter: {
+                        'metadataJson.length': '$eq:5',
+                    },
+                }
+
+                const result = await paginate<CatHairEntity>(query, catHairRepo, config)
+
+                expect(result.meta.filter).toStrictEqual({
+                    'metadataJson.length': '$eq:5',
+                })
+                expect(result.data).toStrictEqual([catHairs[0]])
+                expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.metadataJson.length=$eq:5')
+            })
+
+            it('should filter a direct json column with multiple values', async () => {
+                const config: PaginateConfig<CatHairEntity> = {
+                    sortableColumns: ['id'],
+                    filterableColumns: {
+                        'metadataJson.length': true,
+                        'metadataJson.thickness': true,
+                    },
+                }
+                const query: PaginateQuery = {
+                    path: '',
+                    filter: {
+                        'metadataJson.length': '$eq:0.5',
+                        'metadataJson.thickness': '$eq:10',
+                    },
+                }
+
+                const result = await paginate<CatHairEntity>(query, catHairRepo, config)
+
+                expect(result.meta.filter).toStrictEqual({
+                    'metadataJson.length': '$eq:0.5',
+                    'metadataJson.thickness': '$eq:10',
+                })
+                expect(result.data).toStrictEqual([catHairs[2]])
+                expect(result.links.current).toBe(
+                    '?page=1&limit=20&sortBy=id:ASC&filter.metadataJson.length=$eq:0.5&filter.metadataJson.thickness=$eq:10'
+                )
+            })
+
+            it('should filter a direct json column using $in', async () => {
+                const config: PaginateConfig<CatHairEntity> = {
+                    sortableColumns: ['id'],
+                    filterableColumns: {
+                        'metadataJson.length': [FilterOperator.EQ, FilterOperator.IN],
+                    },
+                }
+                const query: PaginateQuery = {
+                    path: '',
+                    filter: {
+                        'metadataJson.length': '$in:5,20',
+                    },
+                }
+
+                const result = await paginate<CatHairEntity>(query, catHairRepo, config)
+
+                expect(result.meta.filter).toStrictEqual({
+                    'metadataJson.length': '$in:5,20',
+                })
+                expect(result.data).toHaveLength(2)
+                expect(result.data).toEqual(expect.arrayContaining([catHairs[0], catHairs[1]]))
+                expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.metadataJson.length=$in:5,20')
+            })
+
+            it('should filter a json column through a relation (self-referencing entity)', async () => {
+                const config: PaginateConfig<CatHairEntity> = {
+                    sortableColumns: ['id'],
+                    filterableColumns: {
+                        'underCoat.metadataJson.length': true,
+                    },
+                    relations: ['underCoat'],
+                }
+                const query: PaginateQuery = {
+                    path: '',
+                    filter: {
+                        'underCoat.metadataJson.length': '$eq:5',
+                    },
+                }
+
+                const result = await paginate<CatHairEntity>(query, catHairRepo, config)
+
+                expect(result.meta.filter).toStrictEqual({
+                    'underCoat.metadataJson.length': '$eq:5',
+                })
+                expect(result.data).toStrictEqual([underCoats[0]])
+                expect(result.links.current).toBe(
+                    '?page=1&limit=20&sortBy=id:ASC&filter.underCoat.metadataJson.length=$eq:5'
+                )
+            })
+
+            // Same extraction path as above, but on a camel-cased column. TypeORM escapes the
+            // `alias.column` token inside the `#>>` expression, so camel-casing is not itself a
+            // separate problem — this guards that extraction filtering keeps working on a
+            // realistic camel-cased json column.
+            it('should filter a camel-cased json column via an extraction operator ($sw)', async () => {
+                const config: PaginateConfig<CatHairEntity> = {
+                    sortableColumns: ['id'],
+                    filterableColumns: {
+                        'metadataJson.length': [FilterOperator.SW],
+                    },
+                }
+                const query: PaginateQuery = {
+                    path: '',
+                    filter: {
+                        // length values are 5, 20, 0.5 → only '20' starts with '2'
+                        'metadataJson.length': '$sw:2',
+                    },
+                }
+
+                const result = await paginate<CatHairEntity>(query, catHairRepo, config)
+
+                expect(result.meta.filter).toStrictEqual({
+                    'metadataJson.length': '$sw:2',
+                })
+                expect(result.data).toStrictEqual([catHairs[1]])
+                expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.metadataJson.length=$sw:2')
+            })
         })
     }
 
@@ -3929,7 +4098,7 @@ describe('paginate', () => {
         it('should return result sorted and filter by a virtual column in main entity', async () => {
             const config: PaginateConfig<CatHomeEntity> = {
                 sortableColumns: ['countCat'],
-                relations: ['cat', 'naptimePillow.brand'],
+                relations: { cat: true, naptimePillow: { brand: true } },
                 filterableColumns: {
                     countCat: [FilterOperator.GT],
                 },
@@ -3954,7 +4123,7 @@ describe('paginate', () => {
                 filterableColumns: {
                     'home.countCat': [FilterOperator.GT],
                 },
-                relations: ['home', 'home.naptimePillow.brand'],
+                relations: { home: { naptimePillow: { brand: true } } },
             }
             const query: PaginateQuery = {
                 path: '',
@@ -3978,7 +4147,7 @@ describe('paginate', () => {
         it('should return result sorted by a virtual column', async () => {
             const config: PaginateConfig<CatEntity> = {
                 sortableColumns: ['home.countCat'],
-                relations: ['home', 'home.naptimePillow.brand'],
+                relations: { home: { naptimePillow: { brand: true } } },
             }
             const query: PaginateQuery = {
                 path: '',
@@ -5276,7 +5445,7 @@ describe('paginate', () => {
             const result = await paginate(query, catRepo, {
                 sortableColumns: ['id', 'toys.id'],
                 select: ['*', 'toys.*', 'toys.shop.*', 'toys.shop.address.*'],
-                relations: ['toys', 'toys.shop', 'toys.shop.address'],
+                relations: { toys: { shop: { address: true } } },
             })
 
             expect(result.data[0]).toHaveProperty('id')
@@ -5453,7 +5622,7 @@ describe('paginate', () => {
                 // This test tests toMany relationships that are part of a deeper chain such as cat.home.pillows
                 const config: PaginateConfig<CatEntity> = {
                     sortableColumns: ['id'],
-                    relations: ['home.pillows'],
+                    relations: { home: { pillows: true } },
                     filterableColumns: {
                         'home.pillows.color': [FilterOperator.EQ],
                     },
@@ -5538,7 +5707,7 @@ describe('paginate', () => {
                 // This test tests absence filtering. Also asserts that the loaded relation is empty.
                 const config: PaginateConfig<CatEntity> = {
                     sortableColumns: ['id'],
-                    relations: ['home.pillows'],
+                    relations: { home: { pillows: true } },
                     filterableColumns: {
                         'home.pillows': [FilterQuantifier.NONE],
                     },
@@ -6044,6 +6213,56 @@ describe('paginate', () => {
                     )
                 })
             })
+        })
+    })
+
+    describe('Filtering across to-one relationship boundaries', () => {
+        let existsSpy
+
+        beforeAll(() => {
+            existsSpy = jest.spyOn(SelectQueryBuilder.prototype, 'andWhereExists')
+        })
+        beforeEach(() => existsSpy.mockClear())
+        afterAll(() => existsSpy.mockRestore())
+
+        it('should filter a to-one relation with an EXISTS subquery and not hydrate it', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id'],
+                filterableColumns: {
+                    'home.name': [FilterOperator.EQ],
+                },
+            }
+            const query: PaginateQuery = {
+                path: '',
+                filter: { 'home.name': '$eq:House' },
+            }
+
+            const result = await paginate<CatEntity>(query, catRepo, config)
+
+            expect(result.data.map((c) => c.id)).toStrictEqual([cats[1].id])
+            // The filter must not drag the relation into the result set.
+            expect(result.data[0]).not.toHaveProperty('home')
+            expect(existsSpy).toHaveBeenCalledTimes(1)
+        })
+
+        it('should filter a nested to-one relation chain with a single EXISTS', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id'],
+                filterableColumns: {
+                    'home.config': true,
+                    'home.street': [FilterOperator.EQ],
+                },
+            }
+            const query: PaginateQuery = {
+                path: '',
+                filter: { 'home.street': '$eq:Boulevard Avenue' },
+            }
+
+            const result = await paginate<CatEntity>(query, catRepo, config)
+
+            expect(result.data.map((c) => c.id)).toStrictEqual([cats[2].id])
+            expect(result.data[0]).not.toHaveProperty('home')
+            expect(existsSpy).toHaveBeenCalledTimes(1)
         })
     })
 })
