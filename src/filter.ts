@@ -41,6 +41,16 @@ import {
 import { EmbeddedMetadata } from 'typeorm/metadata/EmbeddedMetadata'
 import { RelationMetadata } from 'typeorm/metadata/RelationMetadata'
 import { addRelationsFromSchema } from './paginate'
+import {
+    buildDistanceExpression,
+    DistanceColumnConfig,
+    distanceColumnStem,
+    isDistanceColumn,
+    parseDistanceColumn,
+} from './distance'
+
+/** Per-column distance configuration, keyed by the name used in `<name>:$dist:lat,lng`. */
+export type DistanceColumns = Record<string, DistanceColumnConfig>
 
 export enum FilterOperator {
     EQ = '$eq',
@@ -231,31 +241,42 @@ export function generatePredicateCondition(
     ) as WherePredicateOperator
 }
 
-export function addWhereCondition<T>(qb: SelectQueryBuilder<T>, column: string, filter: ColumnFilters) {
-    const columnProperties = getPropertiesByColumnName(column)
-    const { isVirtualProperty, query: virtualQuery } = extractVirtualProperty(qb, columnProperties)
-    const isRelation = checkIsRelation(qb, columnProperties.propertyPath)
-    const isEmbedded = checkIsEmbedded(qb, columnProperties.propertyPath)
-    const isArray = checkIsArray(qb, columnProperties.propertyName)
+/** Looks up the `DistanceColumnConfig` for a distance column reference, throwing if unconfigured. */
+function resolveDistanceConfig(distanceColumns: DistanceColumns | undefined, column: string): DistanceColumnConfig {
+    const { name } = parseDistanceColumn(column)
+    const config = distanceColumns?.[name]
+    if (!config) {
+        throw new BadRequestException(`No 'distanceColumns' config for distance column "${name}".`)
+    }
+    return config
+}
 
-    const alias = fixColumnAlias(
-        columnProperties,
-        qb.alias,
-        isRelation,
-        isVirtualProperty,
-        isEmbedded,
-        virtualQuery,
-        qb
-    )
+export function addWhereCondition<T>(
+    qb: SelectQueryBuilder<T>,
+    column: string,
+    filter: ColumnFilters,
+    distanceColumns?: DistanceColumns
+) {
+    // A distance column (`name:$dist:lat,lng`) resolves to a computed scalar expression rather than
+    // an entity column; the ordinary value-side operator ($lt, $btw, …) is applied against it.
+    const distance = isDistanceColumn(column)
+    const columnProperties = getPropertiesByColumnName(column)
+    const { isVirtualProperty, query: virtualQuery } = distance
+        ? { isVirtualProperty: false, query: undefined }
+        : extractVirtualProperty(qb, columnProperties)
+    const isRelation = !distance && checkIsRelation(qb, columnProperties.propertyPath)
+    const isEmbedded = !distance && checkIsEmbedded(qb, columnProperties.propertyPath)
+    const isArray = !distance && checkIsArray(qb, columnProperties.propertyName)
+
+    const alias = distance
+        ? buildDistanceExpression(qb, resolveDistanceConfig(distanceColumns, column), parseDistanceColumn(column))
+        : fixColumnAlias(columnProperties, qb.alias, isRelation, isVirtualProperty, isEmbedded, virtualQuery, qb)
+
+    // `:$dist:` and `,` are not valid parameter-name characters, so sanitise for distance columns.
+    const paramColumn = distance ? column.replace(/[^a-zA-Z0-9_]/g, '_') : columnProperties.column
     filter[column].forEach((columnFilter: Filter, index: number) => {
-        const columnNamePerIteration = `${columnProperties.column}${index}`
-        const condition = generatePredicateCondition(
-            qb,
-            columnProperties.column,
-            columnFilter,
-            alias,
-            isVirtualProperty
-        )
+        const columnNamePerIteration = `${paramColumn}${index}`
+        const condition = generatePredicateCondition(qb, paramColumn, columnFilter, alias, isVirtualProperty)
         const parameters = fixQueryParam(alias, columnNamePerIteration, columnFilter, condition, {
             [columnNamePerIteration]: columnFilter.findOperator.value,
         })
@@ -354,13 +375,17 @@ export function parseFilter<T>(
         return {}
     }
     for (const column of Object.keys(query.filter)) {
-        if (!(column in filterableColumns)) {
+        // A distance column (`name:$dist:lat,lng`) is whitelisted by its stem (`name:$dist`); the
+        // origin varies per request so it can't be listed verbatim.
+        const distance = isDistanceColumn(column)
+        const allowKey = distance ? distanceColumnStem(column) : column
+        if (!(allowKey in filterableColumns)) {
             if (throwOnInvalidFilter) {
                 throw new BadRequestException(`Column '${column}' is not filterable`)
             }
             continue
         }
-        const allowedOperators = filterableColumns[column]
+        const allowedOperators = filterableColumns[allowKey]
         const input = query.filter[column]
         const statements = !Array.isArray(input) ? [input] : input
         for (const raw of statements) {
@@ -421,10 +446,16 @@ export function parseFilter<T>(
                 findOperator: undefined,
             }
 
-            const fixValue = fixColumnFilterValue(column, qb)
+            // Distance columns compare a computed metre value, so coerce to Number; their colon
+            // syntax has no entity metadata to classify and is never a JSONB path.
+            const fixValue = distance
+                ? (value: string) => (value != null && !isNaN(Number(value)) ? Number(value) : value)
+                : fixColumnFilterValue(column, qb)
 
             const columnProperties = getPropertiesByColumnName(column)
-            const jsonbResolution = resolveJsonbPath(qb, columnProperties.column)
+            const jsonbResolution = distance
+                ? { isJsonb: false as const, relationPath: [], jsonbColumn: '', jsonPath: [] }
+                : resolveJsonbPath(qb, columnProperties.column)
 
             switch (token.operator) {
                 case FilterOperator.BTW:
@@ -697,12 +728,13 @@ export function addFilter<T>(
         [column: string]: (FilterOperator | FilterSuffix | FilterQuantifier | FilterComparator)[] | true
     },
     opts: AddFilterOptions = {},
-    throwOnInvalidFilter = false
+    throwOnInvalidFilter = false,
+    distanceColumns?: DistanceColumns
 ) {
     const { subFilter = false } = opts
     const filter = parseFilter(query, filterableColumns, qb, throwOnInvalidFilter)
 
-    addDirectFilters(qb, filter, subFilter)
+    addDirectFilters(qb, filter, subFilter, distanceColumns)
     addToManySubFilters(qb, filter, query, filterableColumns, opts)
 
     const columnJoinMethods: ColumnJoinMethods = {}
@@ -732,22 +764,28 @@ export function addFilter<T>(
     return columnJoinMethods
 }
 
-export function addDirectFilters<T>(qb: SelectQueryBuilder<T>, filter: ColumnFilters, subFilter = false) {
+export function addDirectFilters<T>(
+    qb: SelectQueryBuilder<T>,
+    filter: ColumnFilters,
+    subFilter = false,
+    distanceColumns?: DistanceColumns
+) {
     const filterEntries = Object.entries(filter)
     const metadata = qb.expressionMap.mainAlias.metadata
 
-    // Top level: only root/embedded columns are direct WHERE clauses; every relation filter becomes
-    // an EXISTS subquery. Inside a subquery, to-one relations are joined locally and stay direct,
-    // and only to-many relations are lifted into nested EXISTS.
+    // Top level: only root/embedded/distance columns are direct WHERE clauses; every relation filter
+    // becomes an EXISTS subquery. Inside a subquery, to-one relations are joined locally and stay
+    // direct, and only to-many relations are lifted into nested EXISTS. Distance columns are always
+    // direct (they compare a computed scalar, never a relation).
     const findRelation = subFilter ? findFirstToManyRelationship : findFirstRelationship
-    const whereFilters = filterEntries.filter(([key]) => !findRelation(key, metadata))
+    const whereFilters = filterEntries.filter(([key]) => isDistanceColumn(key) || !findRelation(key, metadata))
     const orFilters = whereFilters.filter(([, value]) => value[0].comparator === '$or')
     const andFilters = whereFilters.filter(([, value]) => value[0].comparator === '$and')
 
     qb.andWhere(
         new Brackets((qb: SelectQueryBuilder<T>) => {
             for (const [column] of orFilters) {
-                addWhereCondition(qb, column, filter)
+                addWhereCondition(qb, column, filter, distanceColumns)
             }
         })
     )
@@ -755,7 +793,7 @@ export function addDirectFilters<T>(qb: SelectQueryBuilder<T>, filter: ColumnFil
     for (const [column] of andFilters) {
         qb.andWhere(
             new Brackets((qb: SelectQueryBuilder<T>) => {
-                addWhereCondition(qb, column, filter)
+                addWhereCondition(qb, column, filter, distanceColumns)
             })
         )
     }
