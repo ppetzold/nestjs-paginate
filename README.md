@@ -41,10 +41,8 @@ updateGlobalConfig({
   defaultOrigin: undefined,
   defaultLimit: 20,
   defaultMaxLimit: 100,
-});
+})
 ```
-
-
 
 ### Example
 
@@ -270,12 +268,12 @@ const paginateConfig: PaginateConfig<CatEntity> {
    * Description: TypeORM partial selection. Limit selection further by using `select` query param.
    * https://typeorm.io/select-query-builder#partial-selection
    * Note: if you do not contain the primary key in the select array, primary key will be added automatically.
-   * 
+   *
    * Wildcard support:
    * - Use '*' to select all columns from the main entity.
    * - Use 'relation.*' to select all columns from a relation.
    * - Use 'relation.subrelation.*' to select all columns from nested relations.
-   * 
+   *
    * Examples:
    * select: ['*'] - Selects all columns from main entity
    * select: ['id', 'name', 'toys.*'] - Selects id, name from main entity and all columns from toys relation
@@ -330,7 +328,7 @@ const paginateConfig: PaginateConfig<CatEntity> {
    * Type: RelationColumn<CatEntity>
    * Description: Indicates what relations of entity should be loaded.
    */
-  relations: [],
+  relations: {},
 
   /**
    * Required: false
@@ -495,7 +493,7 @@ http://localhost:3000/cats?filter.toys.name=$in:Mouse,String
 
 ```typescript
 const config: PaginateConfig<CatEntity> = {
-  relations: ['toys'],
+  relations: { toys: true },
   sortableColumns: ['id', 'name', 'toys.name'],
   filterableColumns: {
     'toys.name': [FilterOperator.IN],
@@ -511,7 +509,7 @@ const result = await paginate<CatEntity>(query, catRepo, config)
 const config: PaginateConfig<CatEntity> = {
   sortableColumns: ['id', 'name', 'toys.(size.height)', 'toys.(size.width)'],
   searchableColumns: ['name'],
-  relations: ['toys'],
+  relations: { toys: true },
 }
 ```
 
@@ -552,6 +550,7 @@ Quantifiers define how many related rows must satisfy the condition:
 - `$none`: no related rows match the condition
 
 ### Examples
+
 Assume `CatEntity` has a one‑to‑many relation `toys: CatToyEntity[]` where `CatToyEntity` has a string column `name`.
 
 - At least one toy named exactly "Ball":
@@ -584,46 +583,20 @@ Assume `CatEntity` has a one‑to‑many relation `toys: CatToyEntity[]` where `
   GET /cats?filter.toys.name=$any:$not:$eq:Squeaky
   ```
 
-### AND-mode: entity must have ALL of the specified related values
+### Requiring ALL of several related values
 
-Use the `$and` comparator to require that a parent entity has **all** of the specified related values.
-Each `$and` value produces a separate correlated EXISTS subquery, ANDed on the outer query.
+To require that a parent has **all** of several related values, use a [`filter=` expression](#filter-expressions-filter)
+with one term per value. Each relation term is an independent `EXISTS`, so ANDing them means
+"has a toy named Ball **and** has a toy named Mouse":
 
-Enable it in `filterableColumns`:
-
-```typescript
-filterableColumns: {
-  'toys.name': [FilterOperator.EQ, FilterComparator.AND],
-}
+```url
+GET /cats?filter=toys.name=$eq:Ball AND toys.name=$eq:Mouse
 ```
 
-- Cat must have **both** a toy named "Ball" **and** a toy named "Mouse":
+This also composes across independent relation paths, e.g. has a Ball toy and is friends with Garfield:
 
-  ```url
-  GET /cats?filter.toys.name=$and:Ball&filter.toys.name=$and:Mouse
-  ```
-
-- Cat must have a toy named "Ball" **and** be friends with a cat named "Garfield" (two independent to-many paths):
-
-  ```url
-  GET /cats?filter.toys.name=$and:Ball&filter.friends.name=$and:Garfield
-  ```
-
-**Restrictions and performance notes**:
-
-- `$and` may only be used on to-many relationship columns (one-to-many or many-to-many).
-- `$and` values may not be mixed with non-`$and` values on the same sub-column.
-- `$and` may not be combined with `$none` or `$all` quantifiers.
-- Each `$and` value adds one correlated EXISTS subquery. For N values and a relation path of depth D, this produces N × D joins. The default cap is 20 values per sub-column; override with `maxAndValues` in `PaginateConfig`.
-
-```typescript
-const config: PaginateConfig<CatEntity> = {
-  sortableColumns: ['id'],
-  filterableColumns: {
-    'toys.name': [FilterOperator.EQ, FilterComparator.AND],
-  },
-  maxAndValues: 10, // optional, default is 20
-}
+```url
+GET /cats?filter=toys.name=$eq:Ball AND friends.name=$eq:Garfield
 ```
 
 ## Usage with Eager Loading
@@ -678,7 +651,7 @@ or its nemesis's age when it has no best friend.
 const config: PaginateConfig<CatEntity> = {
   // Every column used in a group must be listed in sortableColumns.
   sortableColumns: ['id', 'bestFriend.age', 'nemesis.age'],
-  relations: ['bestFriend', 'nemesis'],
+  relations: { bestFriend: true, nemesis: true },
 }
 ```
 
@@ -739,27 +712,107 @@ const config: PaginateConfig<CatEntity> = {
 
 `?filter.roles=$contains:moderator,admin` where column `roles` is an array and contains the values `moderator` and `admin`
 
+### Filter expressions (`filter=`)
+
+The per-column `filter.<column>=` parameters above are always combined with `AND`. For
+arbitrary boolean logic, pass a single `filter=` expression instead. It uses the same
+column and `$op:value` syntax, combined with `AND`, `OR`, `NOT` (case-insensitive,
+precedence `NOT` > `AND` > `OR`) and parentheses:
+
+```
+?filter=color=$eq:black AND age=$gte:3
+?filter=(color=$eq:black OR color=$eq:white) AND NOT name=$eq:Leche
+?filter=home.name=$eq:House AND toys.name=$eq:String
+```
+
+- The columns and operators are validated against `filterableColumns`, exactly like the
+  per-column form. An unknown column or disallowed operator always returns `400 Bad Request`.
+- Relation columns are matched with correlated `EXISTS` subqueries, so they compose under
+  `OR`/`NOT` and never join the relation into the result set. `NOT toys.name=$eq:Ball` means
+  "no matching toy exists".
+- Root, embedded, [JSONB key-path](#jsonb-support), and [polymorphic (`~`)](#polymorphic-columns-)
+  columns are all valid leaves and apply as direct conditions. Every operator, suffix and
+  quantifier from the per-column form works unchanged (e.g. `age=$btw:3,5`, `age=$not:$null`,
+  `toys.name=$none:$eq:Ball`); JSONB filtering keeps its PostgreSQL/CockroachDB-only limitation.
+- A value containing whitespace or parentheses must be quoted with `"` or `'`:
+  `?filter=home.name=$eq:"Cat Mansion"`.
+
+Inside a quoted value, a backslash escapes a following quote or backslash (`\"`, `\'`, `\\`),
+so a value can contain either quote character:
+
+```
+?filter=name=$eq:"Milo \"the cat\""   # value: Milo "the cat"
+?filter=name=$eq:'it\'s mine'         # value: it's mine
+?filter=name=$eq:"a\"b\'c\\d"         # value: a"b'c\d
+```
+
+Any other backslash is kept literal, so Windows paths and regexes need no doubling
+(`?filter=path=$eq:"C:\Users"` → `C:\Users`). You can also switch quote styles instead of
+escaping — `?filter=name=$eq:'O'"'"'Malley'`-style concatenation still works — but the
+backslash form is usually clearer. Doubling a quote does **not** escape it
+(`"say ""hi"""` yields `say hi`). Remember to URL-encode the `filter=` value; the examples
+above are shown decoded for readability.
+
+The value-level `$not` suffix (negating a single comparison, e.g. `color=$not:$eq:white`) is
+distinct from the boolean `NOT` (negating a whole term or group).
+
+Because the expression is parsed recursively, an unbounded expression is a denial-of-service
+vector: a deeply nested or very wide payload can exhaust the call stack or blow up the
+generated SQL. Every leaf, `AND`/`OR`/`NOT` operator, and parenthesised group counts as one
+node, and the total is capped at **100** by default. Override the cap per endpoint with
+`filterExpressionMaxComplexity` in the config, or globally via `updateGlobalConfig({ defaultFilterExpressionMaxComplexity })`.
+An expression over the limit returns `400 Bad Request`.
+
+```typescript
+const config: PaginateConfig<CatEntity> = {
+  sortableColumns: ['id'],
+  filterableColumns: { color: true, name: true },
+  filterExpressionMaxComplexity: 50, // reject filter= expressions with more than 50 nodes
+}
+```
+
+### Polymorphic columns (`~`)
+
+A filter column may group several columns with `~` to filter on their `COALESCE` — the first
+non-null value per row (the same `~` syntax as polymorphic sorting). This works in both the
+`filter=` expression and the per-column form:
+
+```url
+?filter=bestFriend.age~nemesis.age=$eq:4
+?filter.bestFriend.age~nemesis.age=$gte:5
+```
+
+Each part must be a plain or **to-one** relation column (not embedded, virtual, JSONB, or to-many).
+Relation parts are left-joined automatically and are not added to the result set. Parts may be
+**nested** (`a.b.c.leaf`) as long as every segment before the leaf is a to-one relation; each hop is
+joined step by step, and a prefix shared across parts (e.g. two parts both starting `a.b`) reuses the
+same join rather than colliding:
+
+```url
+?filter=bestFriend.home.street~home.street=$eq:Downtown
+```
+
 ## JSONB Support
 
 You can sort, search, and filter on JSONB columns using dot notation to access nested fields.
 
 ### Database support matrix
 
-| Feature | PostgreSQL / CockroachDB | MySQL / MariaDB | SQLite |
-|---------|---|---|---|
-| **Sorting** (`sortableColumns`) | Yes (`#>>`) | Yes (`JSON_UNQUOTE(JSON_EXTRACT(...))`) | Yes (`json_extract`) |
-| **Searching** (`searchableColumns`) | Yes | Yes | Yes |
-| **Filtering** (`$eq`, `$in`, `$contains`) | Yes (`@>` containment) | No | No |
+| Feature                                   | PostgreSQL / CockroachDB | MySQL / MariaDB                         | SQLite               |
+| ----------------------------------------- | ------------------------ | --------------------------------------- | -------------------- |
+| **Sorting** (`sortableColumns`)           | Yes (`#>>`)              | Yes (`JSON_UNQUOTE(JSON_EXTRACT(...))`) | Yes (`json_extract`) |
+| **Searching** (`searchableColumns`)       | Yes                      | Yes                                     | Yes                  |
+| **Filtering** (`$eq`, `$in`, `$contains`) | Yes (`@>` containment)   | No                                      | No                   |
 
 > **Note:** Sorting and searching on JSONB paths is supported across all database engines — the library automatically uses the correct JSON extraction function for your DB. Filtering via `$eq`, `$in`, and `$contains` uses PostgreSQL's `@>` containment operator (via TypeORM's `JsonContains`) and is only supported on **PostgreSQL** and **CockroachDB**.
 
 ### Filtering operators (PostgreSQL / CockroachDB only)
 
-| Operator | Description |
-|----------|-------------|
+| Operator    | Description                                              |
+| ----------- | -------------------------------------------------------- |
 | `$eq`       | Exact match via containment (`col @> '{"key":"value"}'`) |
-| `$in`       | Match any of a comma-separated list of values |
-| `$contains` | Match if a JSON array contains the value |
+| `$in`       | Match any of a comma-separated list of values            |
+| `$contains` | Match if a JSON array contains the value                 |
 
 ### Direct JSONB column
 
@@ -781,7 +834,7 @@ where `settings` is a relation whose JSONB column `theme` is filtered.
 
 ```typescript
 const config: PaginateConfig<UserEntity> = {
-  relations: ['settings'],
+  relations: { settings: true },
   filterableColumns: {
     'settings.theme': [FilterOperator.EQ, FilterOperator.IN],
   },
@@ -817,29 +870,16 @@ Each value is expanded into its own `@>` condition joined with `OR`:
 ?filter.metadata.status=$not:$in:banned,suspended
 ```
 
-## Multi Filters
+## Combining filters on one column
 
-Multi filters are filters that can be applied to a single column with a comparator.
+Repeating a `filter.<column>=` parameter applies all of its conditions with **AND**, e.g. a range:
 
-### Examples
+`?filter.createdAt=$gt:2022-02-02&filter.createdAt=$lt:2022-02-10` — `createdAt` after `2022-02-02` **and** before `2022-02-10`
 
-`?filter.createdAt=$gt:2022-02-02&filter.createdAt=$lt:2022-02-10` where column `createdAt` is after `2022-02-02` **and** before `2022-02-10`
+For **OR** (within a column or across columns) and arbitrary boolean logic, use a
+[`filter=` expression](#filter-expressions-filter):
 
-`?filter.roles=$contains:moderator&filter.roles=$or:$contains:admin` where column `roles` is an array and contains `moderator` **or** `admin`
-
-`?filter.id=$gt:3&filter.id=$and:$lt:5&filter.id=$or:$eq:7` where column `id` is greater than `3` **and** less than `5` **or** equal to `7`
-
-**Note:** The `$and` comparators are not required. The above example is equivalent to:
-
-`?filter.id=$gt:3&filter.id=$lt:5&filter.id=$or:$eq:7`
-
-**Note:** The first comparator on the the first filter is ignored because the filters are grouped by the column name and chained with an `$and` to other filters.
-
-`...&filter.id=5&filter.id=$or:7&filter.name=Milo&...`
-
-is resolved to:
-
-`WHERE ... AND (id = 5 OR id = 7) AND name = 'Milo' AND ...`
+`?filter=id=$eq:5 OR id=$eq:7` — `id` equal to `5` **or** `7`
 
 ## Cursor-based Pagination
 
@@ -928,7 +968,6 @@ export function CustomSortBy(paginationConfig: PaginateConfig<any>) {
 Now you can create your version of the whole docs decorator and use it
 
 ```typescript
-
 const CustomApiPaginationQuery = (paginationConfig: PaginateConfig<any>) => {
   return applyDecorators(
     ...[
@@ -946,12 +985,9 @@ const CustomApiPaginationQuery = (paginationConfig: PaginateConfig<any>) => {
 function CustomPaginatedSwaggerDocs<DTO extends Type<unknown>>(dto: DTO, paginatedConfig: PaginateConfig<any>) {
   return applyDecorators(ApiOkPaginatedResponse(dto, paginatedConfig), CustomApiPaginationQuery(paginatedConfig))
 }
-
 ```
 
 You can use CustomPaginatedSwaggerDocs instead of default PaginatedSwaggerDocs
-
-
 
 ## Troubleshooting
 
