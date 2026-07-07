@@ -1,5 +1,12 @@
 import { mergeWith } from 'lodash'
-import { FindOperator, FindOptionsRelations, ObjectLiteral, Repository, SelectQueryBuilder } from 'typeorm'
+import {
+    EntityMetadata,
+    FindOperator,
+    FindOptionsRelations,
+    ObjectLiteral,
+    Repository,
+    SelectQueryBuilder,
+} from 'typeorm'
 import { ColumnMetadata } from 'typeorm/metadata/ColumnMetadata'
 import { OrmUtils } from 'typeorm/util/OrmUtils'
 
@@ -418,6 +425,123 @@ const isoDateRegExp = new RegExp(
 
 export function isISODate(str: string): boolean {
     return isoDateRegExp.test(str)
+}
+
+const isoDateOnlyRegExp = /^\d{4}-[01]\d-[0-3]\d$/
+
+/** True for a date-only string (`YYYY-MM-DD`), used to coerce filters on `date` columns whose
+ *  values carry no time component and therefore never match {@link isISODate}. */
+export function isISODateOnly(str: string): boolean {
+    return isoDateOnlyRegExp.test(str)
+}
+
+/**
+ * TypeORM column types whose values fit safely in a JavaScript number (an IEEE-754 double).
+ *
+ * `bigint`/`int8` and `decimal`/`numeric` are deliberately excluded: routing them through
+ * `Number()` silently loses precision past 2^53, and the Postgres driver returns them as strings
+ * anyway. Those are left as strings for the driver to bind and the database to compare.
+ */
+const NUMERIC_COLUMN_TYPES = new Set([
+    'number',
+    'int',
+    'int2',
+    'int4',
+    'integer',
+    'smallint',
+    'mediumint',
+    'tinyint',
+    'float',
+    'float4',
+    'float8',
+    'double',
+    'double precision',
+    'real',
+])
+
+/** Whether a filter value on a column of this type should be coerced to a JS number. */
+export function isNumberColumnType(type: unknown): boolean {
+    if (type === Number) return true
+    return typeof type === 'string' && NUMERIC_COLUMN_TYPES.has(type.toLowerCase())
+}
+
+const BOOLEAN_COLUMN_TYPES = new Set(['boolean', 'bool'])
+
+/** Whether a filter value on a column of this type should be coerced to a JS boolean. */
+export function isBooleanColumnType(type: unknown): boolean {
+    if (type === Boolean) return true
+    return typeof type === 'string' && BOOLEAN_COLUMN_TYPES.has(type.toLowerCase())
+}
+
+/**
+ * Date-only column type (`@Column('date')`), kept separate from {@link isDateColumnType}. Cursor
+ * pagination relies on `isDateColumnType` and calls `Date.getTime()` on the loaded value; a
+ * `date` column may surface as a plain string there, so it is only treated as temporal for filter
+ * value coercion, not for cursor generation.
+ */
+export function isDateOnlyColumnType(type: unknown): boolean {
+    return type === 'date'
+}
+
+/**
+ * True only for strings that represent a finite JS number. Rejects empty/whitespace-only input
+ * (which `Number('')` would turn into `0`) and anything non-numeric, so a value is never coerced
+ * to a number by accident.
+ */
+export function isFiniteNumericString(value: string): boolean {
+    if (typeof value !== 'string' || value.trim() === '') return false
+    return Number.isFinite(Number(value))
+}
+
+/**
+ * Parses the closed set of boolean tokens (`true`/`false`/`1`/`0`, case-insensitive). Returns
+ * `undefined` for anything else so a value that does not clearly denote a boolean is left as-is.
+ */
+export function parseBooleanToken(value: string): boolean | undefined {
+    switch (value.trim().toLowerCase()) {
+        case 'true':
+        case '1':
+            return true
+        case 'false':
+        case '0':
+            return false
+        default:
+            return undefined
+    }
+}
+
+/**
+ * Resolves the TypeORM column type for a (possibly nested) filter path, so a filter value can be
+ * coerced to the matching JavaScript type. Handles:
+ *   - root columns (`age`),
+ *   - embedded columns (`size.height`) via TypeORM's dotted property-path lookup, and
+ *   - relation columns, including nested chains (`toys.name`, `home.pillows.color`), by walking
+ *     the relation chain hop by hop to the leaf column.
+ *
+ * Returns `undefined` when the path cannot be resolved to a concrete column (e.g. a virtual/
+ * computed column with no backing column, or an unknown segment); callers then leave the value
+ * as a string.
+ */
+export function resolveColumnType(qb: SelectQueryBuilder<unknown>, column: string): unknown {
+    const metadata = qb?.expressionMap?.mainAlias?.metadata
+    if (!metadata) return undefined
+
+    // Fast path: a root or embedded column resolves directly by its dotted property path.
+    const direct = metadata.findColumnWithPropertyPath?.(column)
+    if (direct) return direct.type
+
+    // Otherwise walk the relation chain: every segment but the last is a relation hop.
+    const segments = column.split('.')
+    let current: EntityMetadata = metadata
+    for (const segment of segments.slice(0, -1)) {
+        const relation = current.relations?.find((r) => r.propertyPath === segment)
+        if (!relation) return undefined
+        current = relation.inverseEntityMetadata
+    }
+    const leaf = segments[segments.length - 1]
+    return (
+        current.findColumnWithPropertyPath?.(leaf)?.type ?? current.columns?.find((c) => c.propertyName === leaf)?.type
+    )
 }
 
 export function isRepository<T>(repo: unknown | Repository<T>): repo is Repository<T> {

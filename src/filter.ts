@@ -30,12 +30,19 @@ import {
     extractVirtualProperty,
     fixColumnAlias,
     getPropertiesByColumnName,
+    isBooleanColumnType,
     isDateColumnType,
+    isDateOnlyColumnType,
+    isFiniteNumericString,
     isISODate,
+    isISODateOnly,
+    isNumberColumnType,
     JoinMethod,
     JSON_COLUMN_TYPES,
     mergeRelationSchema,
+    parseBooleanToken,
     quoteColumn,
+    resolveColumnType,
     resolveJsonbPath,
 } from './helper'
 import { EmbeddedMetadata } from 'typeorm/metadata/EmbeddedMetadata'
@@ -323,17 +330,47 @@ export function parseFilterToken(raw?: string): FilterToken | null {
     return token
 }
 
+/**
+ * Builds a value coercer for a filter column by classifying the column's type from entity
+ * metadata, so a raw query-string token is bound as the JavaScript type the database expects
+ * (a type-strict driver such as better-sqlite3 will otherwise never match a string against a
+ * number/boolean/date column).
+ *
+ * Coercion is deliberately conservative: a value is only converted when the column type calls
+ * for it AND the value clearly denotes that type (a finite number, a closed boolean token set,
+ * an ISO date). Precision-sensitive types (bigint, decimal, numeric) are left as strings — see
+ * {@link isNumberColumnType}. When the type cannot be resolved (virtual/computed columns), the
+ * value is passed through unchanged.
+ */
 function fixColumnFilterValue<T>(column: string, qb: SelectQueryBuilder<T>, isJsonb = false) {
-    const columnProperties = getPropertiesByColumnName(column)
-    const virtualProperty = extractVirtualProperty(qb, columnProperties)
-    const columnType = virtualProperty.type
+    const columnType = resolveColumnType(qb, column)
 
-    return (value: string) => {
-        if ((isDateColumnType(columnType) || isJsonb) && isISODate(value)) {
+    return (value: string): string | number | boolean | Date => {
+        // Valueless operators (e.g. `$null` → IS NULL) pass no operand; never coerce them
+        // (parseBooleanToken/isISODate would throw on `undefined`).
+        if (value == null) return value
+        // Temporal columns: a full ISO timestamp is always accepted; a date-only string
+        // (YYYY-MM-DD) is accepted for datetime/timestamp and date columns. JSONB values also
+        // accept ISO timestamps. `isDateColumnType` is intentionally not broadened to the
+        // date-only type so cursor pagination (which calls Date.getTime()) stays unaffected.
+        const isTemporal = isDateColumnType(columnType) || isDateOnlyColumnType(columnType)
+        if ((isTemporal || isJsonb) && isISODate(value)) {
+            return new Date(value)
+        }
+        if (isTemporal && isISODateOnly(value)) {
             return new Date(value)
         }
 
-        if ((columnType === Number || columnType === 'number' || isJsonb) && !isNaN(Number(value))) {
+        // Boolean columns: only the closed token set (true/false/1/0) is coerced, so a value
+        // meant as text on a non-boolean column is never silently reinterpreted.
+        if (isBooleanColumnType(columnType)) {
+            const bool = parseBooleanToken(value)
+            if (bool !== undefined) return bool
+        }
+
+        // Numeric columns that fit a JS double (bigint/decimal excluded to preserve precision),
+        // plus numeric JSONB leaves.
+        if ((isNumberColumnType(columnType) || isJsonb) && isFiniteNumericString(value)) {
             return Number(value)
         }
 
