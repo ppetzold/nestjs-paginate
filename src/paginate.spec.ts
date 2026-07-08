@@ -3967,7 +3967,16 @@ describe('paginate', () => {
                 return ret
             })
 
-            expect(result.data).toStrictEqual(expectedResult)
+            // countCat ties (homeless cats share 0, homed cats share 1) and SQL leaves the
+            // intra-tie order unspecified — it varies by engine/version. Assert the primary sort
+            // is applied (countCat non-decreasing), then normalise the intra-tie order with a
+            // stable id key before the deep comparison.
+            const countOf = (cat: CatEntity) => cat.home?.countCat ?? 0
+            const counts = result.data.map(countOf)
+            expect(counts).toStrictEqual([...counts].sort((a, b) => a - b))
+            const byCountThenId = (rows: CatEntity[]) =>
+                [...rows].sort((a, b) => countOf(a) - countOf(b) || a.id - b.id)
+            expect(byCountThenId(result.data)).toStrictEqual(expectedResult)
             expect(result.links.last).toBeUndefined()
             expect(result.links.next).toBeUndefined()
             expect(result.links.current).toBe('?page=1&limit=20&sortBy=home.countCat:ASC')
