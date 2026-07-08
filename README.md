@@ -15,6 +15,7 @@ Pagination and filtering helper method for TypeORM repositories or query builder
 - Search across columns
 - Select columns
 - Filter using operators (`$eq`, `$not`, `$null`, `$in`, `$gt`, `$gte`, `$lt`, `$lte`, `$btw`, `$ilike`, `$sw`, `$contains`)
+- Filter and sort by distance from a point (`$dist`, Haversine / PostGIS / custom)
 - Include relations and nested relations
 - Virtual column support
 - Cursor-based pagination
@@ -666,6 +667,73 @@ Notes and limitations:
   and JSONB-path columns are rejected.
 - Polymorphic groups are **not supported with cursor pagination** (the COALESCE value
   cannot be encoded into a cursor) and will throw.
+
+## Distance filtering & sorting (`$dist`)
+
+`$dist` is a **column modifier**: unlike filter operators (`$eq`, `$btw`, …), which apply to a
+filter _value_, a column modifier applies to the column _reference_ itself and turns it into a
+derived scalar. `<name>:$dist:<lat>,<lng>` computes the distance from the origin `lat,lng`, and
+works anywhere a column is accepted — as a filter key and in `sortBy`. Because it resolves to a
+plain number, every value-side operator (`$lt`, `$lte`, `$gt`, `$btw`, …) and both sort directions
+work on it unchanged.
+
+Declare distance columns in `distanceColumns`, keyed by the `<name>` used in the query, then
+whitelist the `<name>:$dist` **stem** in `sortableColumns` / `filterableColumns` (the origin
+varies per request, so the full reference can't be listed verbatim):
+
+```typescript
+const config: PaginateConfig<PlaceEntity> = {
+  sortableColumns: ['id', 'location:$dist'],
+  filterableColumns: {
+    'location:$dist': [FilterOperator.LT, FilterOperator.LTE, FilterOperator.BTW],
+  },
+  distanceColumns: {
+    // Portable Haversine over two numeric columns — works on every database.
+    location: { lat: 'lat', lng: 'lng' },
+  },
+}
+```
+
+```
+# rows within 5 km of (50.85, 4.35), nearest first, then by name
+?filter.location:$dist:50.85,4.35=$lt:5000&sortBy=location:$dist:50.85,4.35:ASC&sortBy=name:ASC
+```
+
+### Distance strategies
+
+The strategy is chosen from the shape of each `DistanceColumnConfig`:
+
+| Config | Strategy | Result | Databases |
+| --- | --- | --- | --- |
+| `{ lat, lng }` | Haversine great-circle | metres | all |
+| `{ point }` | PostGIS `ST_Distance` over a `geometry`/`geography` column | metres | PostgreSQL/PostGIS |
+| `{ expression }` | your own SQL (takes precedence) | up to you | up to you |
+
+```typescript
+distanceColumns: {
+  // PostGIS: a geometry/geography column. `srid` defaults to 4326 (WGS 84).
+  geo: { point: 'coordinates', srid: 4326 },
+
+  // Custom expression, e.g. Manhattan distance. The context gives ready-to-use SQL
+  // references and the (validated) origin, so you compose whatever SQL you need.
+  taxicab: {
+    lat: 'lat',
+    lng: 'lng',
+    expression: ({ lat, lng, origin }) =>
+      `abs(${lat} - (${origin.lat})) + abs(${lng} - (${origin.lng}))`,
+  },
+}
+```
+
+### Notes
+
+- The origin (`lat,lng`) is validated as a pair of finite numbers and inlined as numeric SQL
+  literals — a non-numeric origin returns `400 Bad Request`.
+- A distance term is only applied when its `<name>:$dist` stem is whitelisted **and** a matching
+  `distanceColumns` entry exists; a whitelisted stem without config throws.
+- The `point` strategy requires a PostgreSQL/PostGIS connection and throws on other engines.
+- Distance columns are **not supported with cursor pagination** (the computed value cannot be
+  encoded into a cursor) and will throw.
 
 ## Filters
 

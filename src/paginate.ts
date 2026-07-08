@@ -21,6 +21,14 @@ import {
     FilterSuffix,
 } from './filter'
 import {
+    buildDistanceExpression,
+    ColumnModifier,
+    DistanceColumnConfig,
+    distanceColumnStem,
+    isDistanceColumn,
+    parseDistanceColumn,
+} from './distance'
+import {
     buildOptimizedCountQuery,
     checkIsEmbedded,
     checkIsRelation,
@@ -55,6 +63,7 @@ import globalConfig from './global-config'
 const logger: Logger = new Logger('nestjs-paginate')
 
 export { AddFilterOptions, FilterOperator, FilterSuffix }
+export { ColumnModifier, DistanceColumnConfig, DistanceExpressionContext } from './distance'
 export { buildOptimizedCountQuery }
 
 export class Paginated<T> {
@@ -92,7 +101,10 @@ export enum PaginationType {
 // see https://github.com/microsoft/TypeScript/issues/29729
 export interface PaginateConfig<T> {
     relations?: RelationSchemaInput<T>
-    sortableColumns: Column<T>[]
+    // (string & {}) keeps autocomplete for real columns while allowing derived column stems
+    // such as a `name:$dist` distance column.
+    // eslint-disable-next-line @typescript-eslint/ban-types
+    sortableColumns: (Column<T> | (string & {}))[]
     nullSort?: 'first' | 'last'
     searchableColumns?: Column<T>[]
     // eslint-disable-next-line @typescript-eslint/ban-types
@@ -102,6 +114,13 @@ export interface PaginateConfig<T> {
     defaultLimit?: number
     where?: FindOptionsWhere<T> | FindOptionsWhere<T>[]
     filterableColumns?: Partial<MappedColumns<T, (FilterOperator | FilterSuffix | FilterQuantifier)[] | true>>
+    /**
+     * Declares distance columns, keyed by the name used in `<name>:$dist:lat,lng`. Once declared,
+     * a distance column is filtered (`filter.<name>:$dist:lat,lng=$lt:5000`) and sorted
+     * (`sortBy=<name>:$dist:lat,lng:ASC`) by whitelisting its `<name>:$dist` stem in
+     * `filterableColumns` / `sortableColumns`.
+     */
+    distanceColumns?: Record<string, DistanceColumnConfig>
     loadEagerRelations?: boolean
     withDeleted?: boolean
     allowWithDeletedInQuery?: boolean
@@ -472,6 +491,12 @@ export async function paginate<T extends ObjectLiteral>(
                 if (column.length > 0 && column.every((c) => isEntityKey(config.sortableColumns, c))) {
                     sortBy.push(order as Order<T>)
                 }
+            } else if (isDistanceColumn(column)) {
+                // A distance column (`name:$dist:lat,lng`) is sortable when its `name:$dist` stem is
+                // whitelisted; the origin varies per request so it can't be listed verbatim.
+                if (isEntityKey(config.sortableColumns, distanceColumnStem(column))) {
+                    sortBy.push(order as Order<T>)
+                }
             } else if (isEntityKey(config.sortableColumns, column)) {
                 sortBy.push(order as Order<T>)
             }
@@ -479,7 +504,7 @@ export async function paginate<T extends ObjectLiteral>(
     }
 
     if (!sortBy.length) {
-        sortBy.push(...(config.defaultSortBy || [[config.sortableColumns[0], 'ASC']]))
+        sortBy.push(...(config.defaultSortBy || [[config.sortableColumns[0] as Column<T>, 'ASC']]))
     }
 
     // Polymorphic sort groups rely on a COALESCE expression in the SELECT/ORDER BY,
@@ -487,6 +512,12 @@ export async function paginate<T extends ObjectLiteral>(
     // rather than producing silently-wrong cursors.
     if (config.paginationType === PaginationType.CURSOR && sortBy.some(([column]) => Array.isArray(column))) {
         logAndThrowException('Polymorphic sort groups (using "~") are not supported with cursor pagination.')
+    }
+
+    // A distance sort compiles to a computed expression in the SELECT/ORDER BY that cannot be
+    // encoded into a cursor token; reject the combination rather than emit silently-wrong cursors.
+    if (config.paginationType === PaginationType.CURSOR && sortBy.some(([column]) => isDistanceColumn(column))) {
+        logAndThrowException('Distance columns (using "$dist") are not supported with cursor pagination.')
     }
 
     const searchBy: Column<T>[] = []
@@ -699,14 +730,22 @@ export async function paginate<T extends ObjectLiteral>(
 
     let filterJoinMethods = {}
     if (query.filter) {
-        filterJoinMethods = addFilter(queryBuilder, query, config.filterableColumns, {}, config.throwOnInvalidFilter)
+        filterJoinMethods = addFilter(
+            queryBuilder,
+            query,
+            config.filterableColumns,
+            {},
+            config.throwOnInvalidFilter,
+            config.distanceColumns
+        )
     }
     if (query.filterExpression) {
         addFilterExpression(
             queryBuilder,
             query.filterExpression,
             config.filterableColumns,
-            config.filterExpressionMaxComplexity ?? globalConfig.defaultFilterExpressionMaxComplexity
+            config.filterExpressionMaxComplexity ?? globalConfig.defaultFilterExpressionMaxComplexity,
+            config.distanceColumns
         )
     }
     const joinMethods = { ...filterJoinMethods, ...config.joinMethods }
@@ -733,6 +772,38 @@ export async function paginate<T extends ObjectLiteral>(
 
         for (const order of sortBy) {
             const [sortColumn, sortDirection] = order
+
+            // Distance sort: `name:$dist:lat,lng` sorts by the computed distance from the origin.
+            // The expression is selected under a distance alias and ordered on, so it reuses the
+            // same null-sort handling as any other column.
+            if (isDistanceColumn(sortColumn)) {
+                const parsed = parseDistanceColumn(sortColumn)
+                const distConfig = config.distanceColumns?.[parsed.name]
+                if (!distConfig) {
+                    logAndThrowException(`No 'distanceColumns' config for distance column "${parsed.name}".`)
+                }
+                const distanceExpr = buildDistanceExpression(queryBuilder, distConfig, parsed)
+                const distanceAlias = `${queryBuilder.alias}_${parsed.name}_${ColumnModifier.DIST}`
+                    .replace(/[^a-zA-Z0-9]/g, '_')
+                    .toLowerCase()
+                queryBuilder.addSelect(distanceExpr, distanceAlias)
+
+                if (isMySqlOrMariaDb) {
+                    if (nullSort) {
+                        const selectionAliasName = `${distanceAlias}IsNull`
+                        queryBuilder.addSelect(`${distanceExpr} ${nullSort}`, selectionAliasName)
+                        queryBuilder.addOrderBy(selectionAliasName)
+                    }
+                    queryBuilder.addOrderBy(distanceAlias, sortDirection)
+                } else {
+                    queryBuilder.addOrderBy(
+                        distanceAlias,
+                        sortDirection,
+                        nullSort as 'NULLS FIRST' | 'NULLS LAST' | undefined
+                    )
+                }
+                continue
+            }
 
             // Polymorphic sort: `colA~colB` sorts by COALESCE(colA, colB) — the first
             // non-null value per row. The grouped columns must be type-compatible.
