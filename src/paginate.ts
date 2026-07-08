@@ -12,7 +12,14 @@ import {
 } from 'typeorm'
 import { WherePredicateOperator } from 'typeorm/query-builder/WhereClause'
 import { PaginateQuery } from './decorator'
-import { addFilter, AddFilterOptions, FilterComparator, FilterOperator, FilterQuantifier, FilterSuffix } from './filter'
+import {
+    addFilter,
+    addFilterExpression,
+    AddFilterOptions,
+    FilterOperator,
+    FilterQuantifier,
+    FilterSuffix,
+} from './filter'
 import {
     buildDistanceExpression,
     ColumnModifier,
@@ -55,7 +62,7 @@ import globalConfig from './global-config'
 
 const logger: Logger = new Logger('nestjs-paginate')
 
-export { AddFilterOptions, FilterComparator, FilterOperator, FilterSuffix }
+export { AddFilterOptions, FilterOperator, FilterSuffix }
 export { ColumnModifier, DistanceColumnConfig, DistanceExpressionContext } from './distance'
 export { buildOptimizedCountQuery }
 
@@ -106,9 +113,7 @@ export interface PaginateConfig<T> {
     defaultSortBy?: SortBy<T>
     defaultLimit?: number
     where?: FindOptionsWhere<T> | FindOptionsWhere<T>[]
-    filterableColumns?: Partial<
-        MappedColumns<T, (FilterOperator | FilterSuffix | FilterQuantifier | FilterComparator)[] | true>
-    >
+    filterableColumns?: Partial<MappedColumns<T, (FilterOperator | FilterSuffix | FilterQuantifier)[] | true>>
     /**
      * Declares distance columns, keyed by the name used in `<name>:$dist:lat,lng`. Once declared,
      * a distance column is filtered (`filter.<name>:$dist:lat,lng=$lt:5000`) and sorted
@@ -116,7 +121,6 @@ export interface PaginateConfig<T> {
      * `filterableColumns` / `sortableColumns`.
      */
     distanceColumns?: Record<string, DistanceColumnConfig>
-    maxAndValues?: number
     loadEagerRelations?: boolean
     withDeleted?: boolean
     allowWithDeletedInQuery?: boolean
@@ -131,6 +135,12 @@ export interface PaginateConfig<T> {
     buildCountQuery?: (qb: SelectQueryBuilder<T>) => SelectQueryBuilder<any>
     optimizedCount?: boolean
     throwOnInvalidFilter?: boolean
+    /**
+     * Maximum number of nodes (leaves, AND/OR/NOT operators, and parenthesised groups) a
+     * single `filter=` expression may contain. Guards against denial-of-service via deeply
+     * nested or very wide expressions. Defaults to 100.
+     */
+    filterExpressionMaxComplexity?: number
 }
 
 export enum PaginationLimit {
@@ -724,10 +734,17 @@ export async function paginate<T extends ObjectLiteral>(
             queryBuilder,
             query,
             config.filterableColumns,
-            {
-                maxAndValues: config.maxAndValues,
-            },
+            {},
             config.throwOnInvalidFilter,
+            config.distanceColumns
+        )
+    }
+    if (query.filterExpression) {
+        addFilterExpression(
+            queryBuilder,
+            query.filterExpression,
+            config.filterableColumns,
+            config.filterExpressionMaxComplexity ?? globalConfig.defaultFilterExpressionMaxComplexity,
             config.distanceColumns
         )
     }
@@ -1227,7 +1244,23 @@ export function addRelationsFromSchema<T>(
         Object.keys(relations).forEach((relationName) => {
             const joinMethod =
                 joinMethods[parentRelation ? `${parentRelation}.${relationName}` : relationName] ?? defaultJoinMethod
-            queryBuilder[joinMethod](`${alias ?? prefix}.${relationName}`, `${alias ?? prefix}_${relationName}_rel`)
+            const joinAlias = `${alias ?? prefix}_${relationName}_rel`
+
+            // A prior step (e.g. a polymorphic `~` filter, which left-joins its relation parts on
+            // the main query builder before relations are loaded) may have already joined this
+            // relation under the same alias. Re-joining it duplicates the table and makes its
+            // columns ambiguous, so reuse the existing join — but still add the SELECT if this
+            // schema wants the relation hydrated (the earlier polymorphic join is unselected).
+            const alreadyJoined = queryBuilder.expressionMap.joinAttributes.some(
+                (attr) => attr.alias?.name === joinAlias
+            )
+            if (alreadyJoined) {
+                if (joinMethod === 'leftJoinAndSelect' || joinMethod === 'innerJoinAndSelect') {
+                    queryBuilder.addSelect(joinAlias)
+                }
+            } else {
+                queryBuilder[joinMethod](`${alias ?? prefix}.${relationName}`, joinAlias)
+            }
 
             // Check whether this is a non-terminal node with a relation schema to load
             const relationSchema = relations[relationName]

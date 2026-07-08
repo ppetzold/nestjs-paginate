@@ -19,6 +19,8 @@ export interface PaginateQuery {
     searchBy?: string[]
     search?: string
     filter?: { [column: string]: string | string[] }
+    /** Boolean filter expression from a single `filter=` query parameter. */
+    filterExpression?: string
     select?: string[]
     cursor?: string
     withDeleted?: boolean
@@ -122,6 +124,7 @@ export const Paginate = createParamDecorator((_data: unknown, ctx: ExecutionCont
         search: query.search ? query.search.toString() : undefined,
         searchBy,
         filter: Object.keys(filter).length ? filter : undefined,
+        filterExpression: isString(query.filter) ? query.filter : undefined,
         select,
         cursor: query.cursor ? query.cursor.toString() : undefined,
         withDeleted: query.withDeleted === 'true' ? true : query.withDeleted === 'false' ? false : undefined,

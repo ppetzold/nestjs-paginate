@@ -20,6 +20,7 @@ import {
 } from 'typeorm'
 import { WherePredicateOperator } from 'typeorm/query-builder/WhereClause'
 import { PaginateQuery } from './decorator'
+import { normalizeFilterExpression, NormalizedFilterExpression, parseFilterExpression } from './filter-expression'
 import {
     andWhereAllExist,
     andWhereNoneExist,
@@ -89,36 +90,10 @@ export function isQuantifier(value: unknown): value is FilterQuantifier {
     return values(FilterQuantifier).includes(value as any)
 }
 
+/** Internal: how a built `Filter` combines with the previous one (JSONB `$in` ORs its terms). */
 export enum FilterComparator {
     AND = '$and',
     OR = '$or',
-}
-
-export function isComparator(value: unknown): value is FilterComparator {
-    return values(FilterComparator).includes(value as any)
-}
-
-/**
- * Returns true when the raw filter string explicitly carries the `$and` comparator token.
- *
- * This is distinct from the default AND comparator that every token carries implicitly —
- * we only want to enter AND-mode when the user deliberately wrote `$and:` in the filter value.
- * Using `parseFilterToken` (rather than a naive substring split) ensures that `$and` embedded
- * inside a user value (e.g. `$eq:$and`) is not misidentified as the comparator.
- *
- * Must be called after `parseFilterToken` is defined (hoisting applies to function declarations).
- */
-export function hasExplicitAndComparator(raw: string): boolean {
-    const token = parseFilterToken(raw)
-    if (!token) return false
-    if (token.comparator !== FilterComparator.AND) return false
-    // The default token comparator is AND, so we must confirm the user actually wrote `$and` as a
-    // colon-delimited token segment. We reconstruct the consumed prefix (everything before the value)
-    // and check whether `$and` appears in it as a discrete segment.
-    // This correctly rejects `$eq:$and` (value = `$and`, prefix = `$eq:`) and accepts `$and:Ball`.
-    const valueSuffix = token.value !== undefined ? `:${token.value}` : ''
-    const prefix = valueSuffix ? raw.slice(0, raw.length - valueSuffix.length) : raw
-    return prefix.split(':').some((seg) => seg === FilterComparator.AND)
 }
 
 export const OperatorSymbolToFunction = new Map<
@@ -251,31 +226,105 @@ function resolveDistanceConfig(distanceColumns: DistanceColumns | undefined, col
     return config
 }
 
+/**
+ * Validates the parts of a polymorphic `a~b` column and left-joins any to-one relation parts
+ * (without selecting them). Must run on the main query builder — joins cannot be added from
+ * inside a `Brackets` where-callback. Each part must be a plain or to-one relation column.
+ *
+ * Relation parts may be nested (`a.b.c.leaf`): every segment before the leaf column is a hop that
+ * is joined step by step (the database cannot resolve a multi-level path in one join). Each hop is
+ * joined under a path-derived alias (`<parent>_<segment>_rel`) that matches exactly what
+ * `fixColumnAlias`/`buildPolymorphicCoalesce` reference for the leaf, and hops shared across parts
+ * (e.g. a common `a.b` prefix) reuse the already-created join by alias rather than colliding.
+ */
+export function preparePolymorphicColumn(qb: SelectQueryBuilder<any>, column: string) {
+    for (const part of column.split('~')) {
+        const props = getPropertiesByColumnName(part)
+        const { isVirtualProperty } = extractVirtualProperty(qb, props)
+        const isEmbedded = checkIsEmbedded(qb, props.propertyPath)
+        if (isVirtualProperty || isEmbedded || resolveJsonbPath(qb, props.column).isJsonb) {
+            throw new BadRequestException(
+                `Polymorphic filter groups (using "~") support only plain and to-one relation columns, not "${part}".`
+            )
+        }
+
+        // Every path segment except the trailing column is a relation hop to join.
+        const relationPath = part.split('.').slice(0, -1)
+        let parentAlias = qb.alias
+        let metadata = qb.expressionMap.mainAlias.metadata
+        for (const relationName of relationPath) {
+            const relation = metadata.relations.find((r) => r.propertyPath === relationName)
+            if (!relation) {
+                throw new BadRequestException(
+                    `Polymorphic filter groups (using "~") support only plain and to-one relation columns, not "${part}".`
+                )
+            }
+            if (relation.isOneToMany || relation.isManyToMany) {
+                throw new BadRequestException(
+                    `Polymorphic filter groups (using "~") support only to-one relations, not "${part}".`
+                )
+            }
+            const joinAlias = `${parentAlias}_${relationName}_rel`
+            if (!qb.expressionMap.joinAttributes.some((attr) => attr.alias?.name === joinAlias)) {
+                qb.leftJoin(`${parentAlias}.${relationName}`, joinAlias)
+            }
+            parentAlias = joinAlias
+            metadata = relation.inverseEntityMetadata
+        }
+    }
+}
+
+/**
+ * Builds `COALESCE(colA, colB, ...)` for a polymorphic column `colA~colB`. Identifiers are escaped
+ * because this raw expression is not escaped by the query builder. The parts must already have been
+ * validated and joined by `preparePolymorphicColumn`.
+ */
+function buildPolymorphicCoalesce(qb: SelectQueryBuilder<any>, column: string): string {
+    const escape = (identifier: string) => qb.connection.driver.escape(identifier)
+    const refs = column.split('~').map((part) => {
+        const props = getPropertiesByColumnName(part)
+        const isRelation = checkIsRelation(qb, props.propertyPath)
+        const ref = fixColumnAlias(props, qb.alias, isRelation, false, false, undefined, qb)
+        const separator = ref.indexOf('.')
+        return separator === -1 ? escape(ref) : `${escape(ref.slice(0, separator))}.${escape(ref.slice(separator + 1))}`
+    })
+    return `COALESCE(${refs.join(', ')})`
+}
+
 export function addWhereCondition<T>(
     qb: SelectQueryBuilder<T>,
     column: string,
     filter: ColumnFilters,
-    distanceColumns?: DistanceColumns
+    distanceColumns?: DistanceColumns,
+    paramKeySuffix = ''
 ) {
-    // A distance column (`name:$dist:lat,lng`) resolves to a computed scalar expression rather than
-    // an entity column; the ordinary value-side operator ($lt, $btw, …) is applied against it.
+    // A distance column (`name:$dist:lat,lng`) resolves to a computed scalar expression and a
+    // polymorphic column (`a~b`) to a COALESCE across columns; both bypass entity-column resolution
+    // and apply the ordinary value-side operator ($lt, $btw, …) against the derived expression.
     const distance = isDistanceColumn(column)
+    const isPolymorphic = column.includes('~') && !distance
+    const isDerived = distance || isPolymorphic
     const columnProperties = getPropertiesByColumnName(column)
-    const { isVirtualProperty, query: virtualQuery } = distance
+    const { isVirtualProperty, query: virtualQuery } = isDerived
         ? { isVirtualProperty: false, query: undefined }
         : extractVirtualProperty(qb, columnProperties)
-    const isRelation = !distance && checkIsRelation(qb, columnProperties.propertyPath)
-    const isEmbedded = !distance && checkIsEmbedded(qb, columnProperties.propertyPath)
-    const isArray = !distance && checkIsArray(qb, columnProperties.propertyName)
+    const isRelation = !isDerived && checkIsRelation(qb, columnProperties.propertyPath)
+    const isEmbedded = !isDerived && checkIsEmbedded(qb, columnProperties.propertyPath)
+    const isArray = !isDerived && checkIsArray(qb, columnProperties.propertyName)
 
     const alias = distance
         ? buildDistanceExpression(qb, resolveDistanceConfig(distanceColumns, column), parseDistanceColumn(column))
+        : isPolymorphic
+        ? buildPolymorphicCoalesce(qb, column)
         : fixColumnAlias(columnProperties, qb.alias, isRelation, isVirtualProperty, isEmbedded, virtualQuery, qb)
 
-    // `:$dist:` and `,` are not valid parameter-name characters, so sanitise for distance columns.
-    const paramColumn = distance ? column.replace(/[^a-zA-Z0-9_]/g, '_') : columnProperties.column
+    // `:$dist:`, `,` and `~` are not valid parameter-name characters, so sanitise for derived columns.
+    const paramColumn = isDerived ? column.replace(/[^a-zA-Z0-9_]/g, '_') : columnProperties.column
+
     filter[column].forEach((columnFilter: Filter, index: number) => {
-        const columnNamePerIteration = `${paramColumn}${index}`
+        // The suffix keeps parameter names unique when the same column appears in several
+        // leaves of a filter expression (e.g. `color=$eq:a OR color=$eq:b`).
+        const columnNamePerIteration = `${paramColumn}${index}${paramKeySuffix}`
         const condition = generatePredicateCondition(qb, paramColumn, columnFilter, alias, isVirtualProperty)
         const parameters = fixQueryParam(alias, columnNamePerIteration, columnFilter, condition, {
             [columnNamePerIteration]: columnFilter.findOperator.value,
@@ -309,19 +358,17 @@ export function parseFilterToken(raw?: string): FilterToken | null {
         value: raw,
     }
 
-    const MAX_OPERATOR = 5 // max 5 operator: $none:$and:$not:$eq:$null
+    const MAX_OPERATOR = 4 // max 4 operators: $none:$not:$eq:$null
     const OPERAND_SEPARATOR = ':'
 
     const matches = raw.split(OPERAND_SEPARATOR)
     const maxOperandCount = matches.length > MAX_OPERATOR ? MAX_OPERATOR : matches.length
-    const notValue: (FilterOperator | FilterSuffix | FilterComparator | FilterQuantifier)[] = []
+    const notValue: (FilterOperator | FilterSuffix | FilterQuantifier)[] = []
 
     for (let i = 0; i < maxOperandCount; i++) {
         const match = matches[i]
         if (isQuantifier(match)) {
             token.quantifier = match
-        } else if (isComparator(match)) {
-            token.comparator = match
         } else if (isSuffix(match)) {
             token.suffix = match
         } else if (isOperator(match)) {
@@ -344,10 +391,35 @@ export function parseFilterToken(raw?: string): FilterToken | null {
     return token
 }
 
+/**
+ * Resolves the type of a (possibly nested) relation column's leaf, e.g. `a.b.leaf`, by walking the
+ * relation chain hop by hop — `extractVirtualProperty` only resolves a single hop. Used to coerce
+ * polymorphic (`~`) filter values, whose raw COALESCE has no query-builder-typed parameter and so
+ * would otherwise compare as text on type-strict drivers (SQLite). Returns undefined if any hop or
+ * the leaf column can't be resolved.
+ */
+function resolveLeafColumnType(qb: SelectQueryBuilder<unknown>, column: string): unknown {
+    const segments = column.split('.')
+    const leaf = segments[segments.length - 1]
+    let metadata = qb?.expressionMap?.mainAlias?.metadata
+    for (const relationName of segments.slice(0, -1)) {
+        const relation = metadata?.relations.find((r) => r.propertyPath === relationName)
+        if (!relation) return undefined
+        metadata = relation.inverseEntityMetadata
+    }
+    return metadata?.columns?.find((c) => c.propertyName === leaf)?.type
+}
+
 function fixColumnFilterValue<T>(column: string, qb: SelectQueryBuilder<T>, isJsonb = false) {
-    const columnProperties = getPropertiesByColumnName(column)
-    const virtualProperty = extractVirtualProperty(qb, columnProperties)
-    const columnType = virtualProperty.type
+    const isPolymorphic = column.includes('~')
+    // A polymorphic `a~b` column has no metadata of its own; coerce values using its first part,
+    // so e.g. a numeric COALESCE compares numerically on type-strict drivers (SQLite). The first
+    // part may be nested (`a.b.leaf`), so walk the relation chain to the leaf's type.
+    const typeColumn = isPolymorphic ? column.split('~')[0] : column
+    const columnProperties = getPropertiesByColumnName(typeColumn)
+    const columnType = isPolymorphic
+        ? resolveLeafColumnType(qb, typeColumn)
+        : extractVirtualProperty(qb, columnProperties).type
 
     return (value: string) => {
         if ((isDateColumnType(columnType) || isJsonb) && isISODate(value)) {
@@ -365,7 +437,7 @@ function fixColumnFilterValue<T>(column: string, qb: SelectQueryBuilder<T>, isJs
 export function parseFilter<T>(
     query: PaginateQuery,
     filterableColumns?: {
-        [column: string]: (FilterOperator | FilterSuffix | FilterQuantifier | FilterComparator)[] | true
+        [column: string]: (FilterOperator | FilterSuffix | FilterQuantifier)[] | true
     },
     qb?: SelectQueryBuilder<T>,
     throwOnInvalidFilter = false
@@ -430,12 +502,6 @@ export function parseFilter<T>(
                     continue
                 }
                 if (token.quantifier !== FilterQuantifier.ANY && !allowedOperators.includes(token.quantifier)) {
-                    continue
-                }
-                // Gate the $and comparator: only allow it if explicitly listed in filterableColumns.
-                // The default token comparator is AND (used for normal andWhere), so we must check
-                // whether $and was explicitly present in the raw filter string, not just the token default.
-                if (!allowedOperators.includes(FilterComparator.AND) && hasExplicitAndComparator(raw)) {
                     continue
                 }
             }
@@ -699,19 +765,6 @@ function findExistsRootPath(
 
 export interface AddFilterOptions {
     /**
-     * Maximum number of `$and` values allowed per sub-column in a single to-many filter.
-     * Each value produces a separate correlated EXISTS subquery, so large values have a
-     * linear performance cost. Defaults to 20.
-     */
-    maxAndValues?: number
-    /**
-     * When false, skips the validation that rejects `$and` on non-to-many columns.
-     * Set to false when calling `addFilter` recursively for EXISTS sub-queries, where the
-     * entity metadata is the leaf entity and the to-many check would incorrectly throw.
-     * @internal
-     */
-    validateAndComparator?: boolean
-    /**
      * Set when `addFilter` is called recursively to build an EXISTS subquery. Inside a subquery
      * to-one relations are joined locally (they don't pollute the outer result set), so only
      * to-many relations are lifted into nested EXISTS. At the top level every relation filter
@@ -719,13 +772,19 @@ export interface AddFilterOptions {
      * @internal
      */
     subFilter?: boolean
+    /**
+     * Suffix appended to EXISTS subquery aliases and parameters to keep them unique across
+     * sibling filter-expression leaves on the same relation path.
+     * @internal
+     */
+    scope?: string | number
 }
 
 export function addFilter<T>(
     qb: SelectQueryBuilder<T>,
     query: PaginateQuery,
     filterableColumns?: {
-        [column: string]: (FilterOperator | FilterSuffix | FilterQuantifier | FilterComparator)[] | true
+        [column: string]: (FilterOperator | FilterSuffix | FilterQuantifier)[] | true
     },
     opts: AddFilterOptions = {},
     throwOnInvalidFilter = false,
@@ -733,6 +792,12 @@ export function addFilter<T>(
 ) {
     const { subFilter = false } = opts
     const filter = parseFilter(query, filterableColumns, qb, throwOnInvalidFilter)
+
+    // Polymorphic `a~b` columns need their relation parts joined on this query builder before the
+    // condition (added inside Brackets, which cannot add joins) references the COALESCE.
+    for (const key of Object.keys(filter)) {
+        if (key.includes('~')) preparePolymorphicColumn(qb, key)
+    }
 
     addDirectFilters(qb, filter, subFilter, distanceColumns)
     addToManySubFilters(qb, filter, query, filterableColumns, opts)
@@ -764,69 +829,145 @@ export function addFilter<T>(
     return columnJoinMethods
 }
 
+type ExpressionFilterableColumns = {
+    [column: string]: (FilterOperator | FilterSuffix | FilterQuantifier)[] | true
+}
+
+/**
+ * Applies a `filter=` boolean expression to the query. Each leaf is wrapped in its own
+ * `Brackets` so AND/OR/NOT compose uniformly. Root/embedded and polymorphic (`a~b`) leaves
+ * become direct conditions; relation leaves become correlated EXISTS (NOT EXISTS when negated).
+ */
+export function addFilterExpression<T>(
+    qb: SelectQueryBuilder<T>,
+    expression: string,
+    filterableColumns?: ExpressionFilterableColumns,
+    maxComplexity?: number,
+    distanceColumns?: DistanceColumns
+) {
+    const ast = normalizeFilterExpression(parseFilterExpression(expression, maxComplexity))
+    // Join the relation parts of any polymorphic `a~b` leaves up front (joins can't be added from
+    // inside the Brackets the leaves compile to).
+    for (const column of collectLeafColumns(ast)) {
+        if (column.includes('~')) preparePolymorphicColumn(qb, column)
+    }
+    qb.andWhere(compileFilterExpression(ast, filterableColumns, { next: 0 }, distanceColumns))
+}
+
+function collectLeafColumns(node: NormalizedFilterExpression): string[] {
+    return node.type === 'leaf' ? [node.column] : node.children.flatMap(collectLeafColumns)
+}
+
+function compileFilterExpression(
+    node: NormalizedFilterExpression,
+    filterableColumns: ExpressionFilterableColumns | undefined,
+    counter: { next: number },
+    distanceColumns?: DistanceColumns
+): Brackets {
+    if (node.type === 'leaf') {
+        const leafId = counter.next++
+        return new Brackets((qb: SelectQueryBuilder<any>) =>
+            applyExpressionLeaf(qb, node, filterableColumns, leafId, distanceColumns)
+        )
+    }
+    // Compile children eagerly so each leaf gets a stable id and unique parameter names.
+    const childBrackets = node.children.map((child) =>
+        compileFilterExpression(child, filterableColumns, counter, distanceColumns)
+    )
+    return new Brackets((qb: SelectQueryBuilder<any>) => {
+        childBrackets.forEach((childBracket, index) => {
+            if (index === 0 || node.type === 'and') {
+                qb.andWhere(childBracket)
+            } else {
+                qb.orWhere(childBracket)
+            }
+        })
+    })
+}
+
+function applyExpressionLeaf(
+    qb: SelectQueryBuilder<any>,
+    leaf: { column: string; value: string; negated: boolean },
+    filterableColumns: ExpressionFilterableColumns | undefined,
+    leafId: number,
+    distanceColumns?: DistanceColumns
+) {
+    const metadata = qb.expressionMap.mainAlias.metadata
+
+    // Polymorphic `a~b` and distance (`name:$dist:…`) columns are applied as direct conditions
+    // (handled by addWhereCondition below), never as an EXISTS.
+    if (!leaf.column.includes('~') && !isDistanceColumn(leaf.column) && findFirstRelationship(leaf.column, metadata)) {
+        // A relation leaf is a correlated EXISTS; its negation is NOT EXISTS, expressed with the
+        // $none quantifier. addFilter (top level) routes the relation through the EXISTS builder.
+        let value = leaf.value
+        if (leaf.negated) {
+            if (parseFilterToken(value)?.quantifier !== FilterQuantifier.ANY) {
+                throw new BadRequestException(
+                    `Cannot negate a quantified relation filter "${leaf.column}=${leaf.value}"`
+                )
+            }
+            value = `${FilterQuantifier.NONE}:${value}`
+        }
+        addFilter(qb, { filter: { [leaf.column]: value }, path: '' }, filterableColumns, { scope: leafId }, true)
+        return
+    }
+
+    // Expression terms always validate: silently dropping a leaf would change the boolean result.
+    const columnFilters = parseFilter({ filter: { [leaf.column]: leaf.value }, path: '' }, filterableColumns, qb, true)
+    // A JSONB key-path leaf (e.g. `metadata.length`) is re-keyed by parseFilter under its JSONB
+    // column (`metadata`), so drive the conditions off the keys parseFilter actually produced
+    // rather than assuming the leaf column is present verbatim.
+    for (const key of Object.keys(columnFilters)) {
+        if (leaf.negated) {
+            for (const filter of columnFilters[key]) {
+                filter.findOperator = Not(filter.findOperator)
+            }
+        }
+        addWhereCondition(qb, key, columnFilters, distanceColumns, `_e${leafId}`)
+    }
+}
+
 export function addDirectFilters<T>(
     qb: SelectQueryBuilder<T>,
     filter: ColumnFilters,
     subFilter = false,
     distanceColumns?: DistanceColumns
 ) {
-    const filterEntries = Object.entries(filter)
     const metadata = qb.expressionMap.mainAlias.metadata
 
-    // Top level: only root/embedded/distance columns are direct WHERE clauses; every relation filter
-    // becomes an EXISTS subquery. Inside a subquery, to-one relations are joined locally and stay
-    // direct, and only to-many relations are lifted into nested EXISTS. Distance columns are always
-    // direct (they compare a computed scalar, never a relation).
+    // Top level: only root/embedded/polymorphic/distance columns are direct WHERE clauses; every
+    // relation filter becomes an EXISTS subquery. Inside a subquery, to-one relations are joined
+    // locally and stay direct, and only to-many relations are lifted into nested EXISTS. Distance
+    // columns are always direct (they compare a computed scalar, never a relation).
     const findRelation = subFilter ? findFirstToManyRelationship : findFirstRelationship
-    const whereFilters = filterEntries.filter(([key]) => isDistanceColumn(key) || !findRelation(key, metadata))
-    const orFilters = whereFilters.filter(([, value]) => value[0].comparator === '$or')
-    const andFilters = whereFilters.filter(([, value]) => value[0].comparator === '$and')
-
-    qb.andWhere(
-        new Brackets((qb: SelectQueryBuilder<T>) => {
-            for (const [column] of orFilters) {
-                addWhereCondition(qb, column, filter, distanceColumns)
-            }
-        })
+    const directColumns = Object.keys(filter).filter(
+        (key) => key.includes('~') || isDistanceColumn(key) || !findRelation(key, metadata)
     )
 
-    for (const [column] of andFilters) {
+    // Columns are ANDed; each is wrapped in its own brackets so a column's own OR group
+    // (e.g. a JSONB `$in` expansion) stays self-contained.
+    for (const column of directColumns) {
         qb.andWhere(
-            new Brackets((qb: SelectQueryBuilder<T>) => {
-                addWhereCondition(qb, column, filter, distanceColumns)
-            })
+            new Brackets((bracket: SelectQueryBuilder<T>) =>
+                addWhereCondition(bracket, column, filter, distanceColumns)
+            )
         )
     }
 }
 
 /**
- * Adds correlated EXISTS subqueries to `qb` for all to-many relationship filters in `filter`.
- *
- * **AND-mode (`$and` comparator)**
- *
- * When a sub-column filter uses the `$and` comparator (e.g. `filter[toys.name]=$and:Ball`),
- * each distinct `$and` value produces a separate correlated EXISTS subquery, ANDed on the
- * outer query. This is the only correct way to express "entity has ALL of these related values"
- * — a single EXISTS with AND conditions on the same column is always false on a single row.
- *
- * **Performance note**: each `$and` value adds one correlated EXISTS with the full join chain
- * for that relation path. For a relation path of depth D and N `$and` values, this produces
- * N × D joins. The `maxAndValues` option (default 20) caps N to limit query complexity.
- *
- * **Restrictions**:
- * - `$and` may only be used on to-many relationship columns.
- * - `$and` values may not be mixed with non-`$and` values on the same sub-column.
- * - `$and` may not be combined with `$none` or `$all` quantifiers.
- * - `$and` may only be applied to a single sub-column per relation path at a time.
+ * Adds a correlated EXISTS subquery to `qb` for every relation-path filter, rooted at the first
+ * relation on each path. The path's `$any`/`$none`/`$all` quantifier decides whether it becomes
+ * EXISTS, NOT EXISTS, or an all-match check.
  */
 export function addToManySubFilters<T>(
     qb: SelectQueryBuilder<T>,
     filter: ColumnFilters,
     query: PaginateQuery,
     filterableColumns?: {
-        [column: string]: (FilterOperator | FilterSuffix | FilterQuantifier | FilterComparator)[] | true
+        [column: string]: (FilterOperator | FilterSuffix | FilterQuantifier)[] | true
     },
-    { maxAndValues = 20, validateAndComparator = true, subFilter = false }: AddFilterOptions = {}
+    { subFilter = false, scope = '' }: AddFilterOptions = {}
 ) {
     const dbType = qb.connection.options.type
     const quote = (column: string) => quoteColumn(column, ['mysql', 'mariadb'].includes(dbType))
@@ -837,30 +978,11 @@ export function addToManySubFilters<T>(
     // the first relation of any cardinality; inside a subquery only to-many relations are lifted out
     // (to-one relations are joined locally), preserving the existing to-many query shape.
     const findRoot = subFilter ? findFirstToManyRelationship : findExistsRootPath
-    const existsFilters = filterEntries.map(([key]) => findRoot(key, mainMetadata)).filter(Boolean)
+    const existsFilters = filterEntries
+        .map(([key]) => (key.includes('~') ? undefined : findRoot(key, mainMetadata)))
+        .filter(Boolean)
     // Find all the distinct relation starting paths
     const toManyPaths = [...new Set(existsFilters.map((f) => f.path.join('.')))]
-
-    // Validate that $and is not used on scalar (non-to-many) columns — it has no meaningful
-    // semantics there and would produce always-false conditions (e.g. WHERE name = 'a' AND name = 'b').
-    // Skip this validation when called recursively for EXISTS subqueries (validateAndComparator = false),
-    // because the sub-filter keys are already stripped of the relation prefix and the entity metadata
-    // is the leaf entity, so the to-many check would incorrectly throw.
-    if (validateAndComparator) {
-        for (const [key, rawValues] of Object.entries(query.filter ?? {})) {
-            const isToMany = findFirstToManyRelationship(key, mainMetadata) != null
-            if (!isToMany) {
-                const values = Array.isArray(rawValues) ? rawValues : [rawValues]
-                const hasAndValue = values.some((v) => hasExplicitAndComparator(v))
-                if (hasAndValue) {
-                    throw new Error(
-                        `The $and comparator can only be used on to-many relationship columns. ` +
-                            `Column "${key}" is not a to-many relationship.`
-                    )
-                }
-            }
-        }
-    }
 
     const toManyRelations = toManyPaths.map(
         (path) => [path, existsFilters.find((f) => f.path.join('.') === path).relation] as const
@@ -876,45 +998,22 @@ export function addToManySubFilters<T>(
         // Using the path (e.g. "toys" → "toys", "cat.toys" → "cat_toys") ensures that two
         // independent to-many paths in the same outer query never share alias or parameter names,
         // even when both use existsIndex=0 (OR-mode) or overlapping sub-column names.
-        const pathSlug = path.replace(/\./g, '_')
+        // `scope` keeps aliases/parameters unique when several filter-expression leaves build an
+        // EXISTS for the same relation path (e.g. `toys.name=$eq:a OR toys.name=$eq:b`).
+        const pathSlug = `${path.replace(/\./g, '_')}${scope === '' ? '' : `_x${scope}`}`
 
-        // 2. Extract sub-filters for this path.
-        // If any sub-filter entry uses the $and comparator, we must emit one correlated EXISTS
-        // subquery per value — because a single EXISTS with AND conditions on the same column
-        // (e.g. WHERE tag.id = A AND tag.id = B) is always false on a single row.
-        // We split $and values into individual sub-queries and AND them on the outer query.
+        // 2. Extract the sub-filters that apply to this relation path.
         const { subQuery, subFilterableColumns } = createSubFilter(query, filterableColumns, path)
 
-        // Collect $and filter values per sub-column so we can split them out.
-        const andValuesBySubColumn: { [subCol: string]: string[] } = {}
-        for (const [subCol, rawValues] of Object.entries(subQuery.filter ?? {})) {
-            const values = Array.isArray(rawValues) ? rawValues : [rawValues]
-            const andValues = values.filter((v) => hasExplicitAndComparator(v))
-            if (andValues.length >= 1) {
-                andValuesBySubColumn[subCol] = andValues
-            }
-        }
-
-        // Determine how many EXISTS subqueries to emit for this path.
-        // If there are $and values on any sub-column, we need one EXISTS per value (for those columns).
-        // Other sub-columns (OR-mode) are included in every EXISTS subquery unchanged.
-        const andSubColumns = Object.keys(andValuesBySubColumn)
-
-        // Build a helper that constructs and correlates a single EXISTS subquery for this path.
-        // existsIndex must be unique per EXISTS emitted for this path to avoid alias collisions
-        // when multiple EXISTS subqueries are added to the same outer query (AND-mode).
-        // The pathSlug is included in all aliases and parameter names so that two independent
-        // to-many paths (e.g. "toys" and "friends") never collide even when both use existsIndex=0.
-        const buildExistsQb = (extraSubQuery: PaginateQuery, existsIndex = 0) => {
-            const relAlias = (name: string, depth: number) => `_rel_${name}_${depth}_${pathSlug}_e${existsIndex}`
-            const juncAlias = (name: string, depth: number) => `_junc_${name}_${depth}_${pathSlug}_e${existsIndex}`
+        // Build and correlate the single EXISTS subquery for this path. `pathSlug` keeps its
+        // aliases and parameters from colliding with other relation paths in the same query.
+        const buildExistsQb = () => {
+            const relAlias = (name: string, depth: number) => `_rel_${name}_${depth}_${pathSlug}`
+            const juncAlias = (name: string, depth: number) => `_junc_${name}_${depth}_${pathSlug}`
             const leafAlias = relAlias(relationPath[relationPath.length - 1][0], relationPath.length - 1)
             const existsQb = qb.connection.createQueryBuilder(existsMetadata.target as any, leafAlias)
 
-            const subJoins = addFilter(existsQb, extraSubQuery, subFilterableColumns, {
-                validateAndComparator: false,
-                subFilter: true,
-            })
+            const subJoins = addFilter(existsQb, subQuery, subFilterableColumns, { subFilter: true })
 
             // Step 3: Add the sub relationship joins to the EXISTS subquery.
             const relationsSchema = mergeRelationSchema(createRelationSchema(Object.keys(subJoins)))
@@ -923,10 +1022,8 @@ export function addToManySubFilters<T>(
             // Step 4: Build the chain of joins that backtracks our toMany relationship to the root.
             buildSubqueryJoinChain(existsQb, relAlias, juncAlias)
 
-            // Step 5: Rename all parameters to include a path+index suffix, preventing collisions
-            // when multiple EXISTS subqueries share the outer query's parameter namespace.
-            const suffix = `_${pathSlug}_e${existsIndex}`
-            renameSubqueryParameters(existsQb, suffix)
+            // Step 5: Suffix the subquery's parameters so they don't collide with the outer query.
+            renameSubqueryParameters(existsQb, `_${pathSlug}`)
 
             return existsQb
         }
@@ -1152,120 +1249,14 @@ export function addToManySubFilters<T>(
             }
         }
 
-        if (andSubColumns.length > 0) {
-            // AND-mode: emit one EXISTS per $and value on each sub-column, ANDed on the outer query.
-            // OR-mode values on other sub-columns are included in every EXISTS subquery unchanged.
-            //
-            // Example: filter[tag.id]=$and:tagA&filter[tag.id]=$and:tagB produces:
-            //   AND EXISTS (SELECT 1 FROM tag JOIN junction ON ... WHERE tag.id = 'tagA' AND ...)
-            //   AND EXISTS (SELECT 1 FROM tag JOIN junction ON ... WHERE tag.id = 'tagB' AND ...)
-            //
-            // This is the only correct way to express "entity has ALL of these related values" —
-            // a single EXISTS with AND conditions on the same column is always false on a single row.
-
-            // $and comparator is incompatible with $none/$all quantifiers — the $and comparator
-            // already implies AND-mode (multiple correlated EXISTS), so combining it with a
-            // quantifier that changes the EXISTS semantics is a user error.
-            if (quantifier !== FilterQuantifier.ANY) {
-                throw new Error(
-                    `The $and comparator cannot be combined with the $${quantifier} quantifier on column ${path}. ` +
-                        `Use $any (the default) with $and, or use $${quantifier} without $and.`
-                )
-            }
-
-            // $and on multiple sub-columns produces a cartesian product of EXISTS subqueries,
-            // which has surprising semantics: each EXISTS asserts a separate row exists, not a
-            // single row matching all conditions. Disallow this to avoid silent incorrect results.
-            if (andSubColumns.length > 1) {
-                throw new Error(
-                    `The $and comparator cannot be used on multiple sub-columns of the same relation path ${path} simultaneously ` +
-                        `(found: ${andSubColumns.join(', ')}). Apply $and to a single sub-column at a time.`
-                )
-            }
-
-            // Build the base sub-query without the $and values (keeps OR-mode filters on other columns,
-            // and keeps any non-$and values on the $and sub-column itself).
-            //
-            // Note: OR-mode values on the $and sub-column (non-$and values mixed with $and values)
-            // are included in every EXISTS subquery as an additional filter. For example:
-            //   filter[toys.name]=$and:Ball&filter[toys.name]=$eq:Mouse
-            // produces EXISTS subqueries that each include `$eq:Mouse` as an additional condition.
-            // This means each EXISTS asserts: "a related row exists where name = 'Ball' AND name = 'Mouse'"
-            // (always false for a single row), which is likely not the intended behavior.
-            // Users should use only $and values or only OR-mode values on a given sub-column, not both.
-            const baseSubQuery: PaginateQuery = {
-                ...subQuery,
-                filter: Object.fromEntries(
-                    Object.entries(subQuery.filter ?? {}).flatMap(([col, rawValues]) => {
-                        if (!andSubColumns.includes(col)) {
-                            return [[col, rawValues]]
-                        }
-                        // Reject mixing $and values with non-$and (OR-mode) values on the same sub-column.
-                        // A mixed filter would produce EXISTS subqueries with conditions like
-                        // `name = 'Ball' AND name = 'Mouse'` (always false on a single row),
-                        // which silently returns empty results rather than the user's intent.
-                        const values = Array.isArray(rawValues) ? rawValues : [rawValues]
-                        const orValues = values.filter((v) => !hasExplicitAndComparator(v))
-                        if (orValues.length > 0) {
-                            throw new Error(
-                                `Cannot mix $and values with non-$and values on sub-column "${col}" of relation "${path}". ` +
-                                    `Use either all $and or no $and on a given sub-column.`
-                            )
-                        }
-                        return []
-                    })
-                ),
-            }
-
-            // For each $and value on the (single) sub-column, emit a separate EXISTS subquery.
-            // Multiple $and sub-columns are disallowed (throws above), so andSubColumns always
-            // has exactly one entry here.
-            const andSubCol = andSubColumns[0]
-            const andValues = andValuesBySubColumn[andSubCol]
-
-            // Validate that each $and value has an actual operand after the comparator.
-            // A bare `$and` (no colon separator) produces token.value = undefined, which
-            // would generate a malformed query. Require at least `$and:` with a value.
-            for (const v of andValues) {
-                const token = parseFilterToken(v)
-                if (!token || token.value === undefined) {
-                    throw new Error(
-                        `Invalid $and filter value "${v}" for column ${path}.${andSubCol}: ` +
-                            `$and must be followed by a value, e.g. "$and:Ball" or "$and:$eq:Ball".`
-                    )
-                }
-            }
-
-            if (andValues.length > maxAndValues) {
-                throw new Error(
-                    `Too many $and filter values for column ${path}.${andSubCol}: ${andValues.length} (max ${maxAndValues}). ` +
-                        `Reduce the number of $and values.`
-                )
-            }
-
-            for (const [comboIndex, v] of andValues.entries()) {
-                const singleValueSubQuery: PaginateQuery = {
-                    ...baseSubQuery,
-                    filter: {
-                        ...baseSubQuery.filter,
-                        [andSubCol]: v,
-                    },
-                }
-                const existsQb = buildExistsQb(singleValueSubQuery, comboIndex)
-                qb.andWhereExists(existsQb)
-            }
-        } else {
-            // OR-mode (default): one shared EXISTS subquery for all values on this path.
-            const existsQb = buildExistsQb(subQuery)
-
-            // 5. Add the EXISTS subquery to the main query
-            if (quantifier === FilterQuantifier.ANY) {
-                qb.andWhereExists(existsQb)
-            } else if (quantifier === FilterQuantifier.NONE) {
-                andWhereNoneExist(qb, existsQb)
-            } else if (quantifier === FilterQuantifier.ALL) {
-                andWhereAllExist(qb, existsQb)
-            }
+        // 5. Add the EXISTS subquery to the main query, applying the path's quantifier.
+        const existsQb = buildExistsQb()
+        if (quantifier === FilterQuantifier.ANY) {
+            qb.andWhereExists(existsQb)
+        } else if (quantifier === FilterQuantifier.NONE) {
+            andWhereNoneExist(qb, existsQb)
+        } else if (quantifier === FilterQuantifier.ALL) {
+            andWhereAllExist(qb, existsQb)
         }
     }
 }
@@ -1273,7 +1264,7 @@ export function addToManySubFilters<T>(
 export function createSubFilter(
     query: PaginateQuery,
     filterableColumns: {
-        [column: string]: (FilterOperator | FilterSuffix | FilterQuantifier | FilterComparator)[] | true
+        [column: string]: (FilterOperator | FilterSuffix | FilterQuantifier)[] | true
     },
     column: string
 ) {
@@ -1284,7 +1275,7 @@ export function createSubFilter(
         }
     }
     const subFilterableColumns: {
-        [column: string]: (FilterOperator | FilterSuffix | FilterQuantifier | FilterComparator)[] | true
+        [column: string]: (FilterOperator | FilterSuffix | FilterQuantifier)[] | true
     } = {}
     for (const [subColumn, filter] of Object.entries(filterableColumns)) {
         if (subColumn.startsWith(column + '.')) {
