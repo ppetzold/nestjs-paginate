@@ -1,4 +1,10 @@
-import { FilterComparator, parseFilter, parseFilterToken, translateLegacyFilterToExpression, TYPEORM_PARAM_REGEX } from './filter'
+import {
+    FilterComparator,
+    parseFilter,
+    parseFilterToken,
+    translateLegacyFilterToExpression,
+    TYPEORM_PARAM_REGEX,
+} from './filter'
 import { isISODate } from './helper'
 
 function createQueryBuilderMock(columns: Array<{ propertyName: string; type: unknown }>): any {
@@ -166,6 +172,8 @@ describe('translateLegacyFilterToExpression', () => {
             color: ['brown', '$or:white'],
             cutenessLevel: ['high', '$or:low'],
         })
-        expect(result).toBe('(name=Milo OR name=Garfield OR age=$null) AND (color=brown OR color=white) AND (cutenessLevel=high OR cutenessLevel=low)')
+        expect(result).toBe(
+            '(name=Milo OR name=Garfield OR age=$null) AND (color=brown OR color=white) AND (cutenessLevel=high OR cutenessLevel=low)'
+        )
     })
 })

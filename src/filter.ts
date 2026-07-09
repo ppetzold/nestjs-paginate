@@ -817,8 +817,8 @@ type ExpressionFilterableColumns = {
  * Returns `undefined` when the filter map is empty or has no non-empty entries.
  */
 export function translateLegacyFilterToExpression(filter: { [column: string]: string | string[] }): string | undefined {
-    const orLeaves: string[] = []       // leaves from OR-mode columns (global OR group)
-    const andGroupExprs: string[] = []  // column bracket expressions for AND-mode columns
+    const orLeaves: string[] = [] // leaves from OR-mode columns (global OR group)
+    const andGroupExprs: string[] = [] // column bracket expressions for AND-mode columns
 
     for (const column of Object.keys(filter)) {
         const rawValues = filter[column]
@@ -862,9 +862,7 @@ export function translateLegacyFilterToExpression(filter: { [column: string]: st
             let colExpr = terms[0].leaf
             for (let i = 1; i < terms.length; i++) {
                 colExpr =
-                    terms[i].comparator === 'or'
-                        ? `${colExpr} OR ${terms[i].leaf}`
-                        : `${colExpr} AND ${terms[i].leaf}`
+                    terms[i].comparator === 'or' ? `${colExpr} OR ${terms[i].leaf}` : `${colExpr} AND ${terms[i].leaf}`
             }
             // Wrap in parens when the column group contains OR so it stays self-contained.
             if (hasWithinOr && terms.length > 1) colExpr = `(${colExpr})`
