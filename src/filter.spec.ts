@@ -1,4 +1,4 @@
-import { FilterComparator, parseFilter, parseFilterToken, TYPEORM_PARAM_REGEX } from './filter'
+import { FilterComparator, parseFilter, parseFilterToken, translateLegacyFilterToExpression, TYPEORM_PARAM_REGEX } from './filter'
 import { isISODate } from './helper'
 
 function createQueryBuilderMock(columns: Array<{ propertyName: string; type: unknown }>): any {
@@ -87,5 +87,85 @@ describe('parameter rename regex (TYPEORM_PARAM_REGEX)', () => {
 
     it('handles jsonb cast: :param::jsonb is renamed correctly', () => {
         expect(rename('col @> :json::jsonb', '_e0')).toBe('col @> :json_e0::jsonb')
+    })
+})
+
+describe('translateLegacyFilterToExpression', () => {
+    it('returns undefined for empty filter', () => {
+        expect(translateLegacyFilterToExpression({})).toBeUndefined()
+    })
+
+    it('translates a single column with no comparator prefix', () => {
+        expect(translateLegacyFilterToExpression({ id: '$gt:3' })).toBe('id=$gt:3')
+    })
+
+    it('translates a single column with $and: prefix', () => {
+        expect(translateLegacyFilterToExpression({ 'toys.name': '$and:Ball' })).toBe('toys.name=Ball')
+    })
+
+    it('translates a single column with $or: prefix (single value, no parens needed)', () => {
+        expect(translateLegacyFilterToExpression({ id: '$or:$eq:7' })).toBe('id=$eq:7')
+    })
+
+    it('translates multiple values with mixed AND/OR within a column', () => {
+        const result = translateLegacyFilterToExpression({ id: ['$gt:3', '$and:$lt:5', '$or:$eq:7'] })
+        expect(result).toBe('(id=$gt:3 AND id=$lt:5 OR id=$eq:7)')
+    })
+
+    it('translates AND-only multiple values without wrapping in parens', () => {
+        const result = translateLegacyFilterToExpression({ 'toys.name': ['$and:Ball', '$and:Mouse'] })
+        expect(result).toBe('toys.name=Ball AND toys.name=Mouse')
+    })
+
+    it('quotes a token value that contains whitespace', () => {
+        const result = translateLegacyFilterToExpression({ 'toys.name': ['$and:Fuzzy Thing', '$and:Stuffed Mouse'] })
+        expect(result).toBe('toys.name="Fuzzy Thing" AND toys.name="Stuffed Mouse"')
+    })
+
+    it('wraps column group in parens when it contains OR', () => {
+        const result = translateLegacyFilterToExpression({
+            roles: ['$contains:moderator', '$or:$contains:admin'],
+        })
+        expect(result).toBe('(roles=$contains:moderator OR roles=$contains:admin)')
+    })
+
+    it('joins multiple columns with AND', () => {
+        const result = translateLegacyFilterToExpression({ id: '$gt:3', name: 'Milo' })
+        expect(result).toBe('id=$gt:3 AND name=Milo')
+    })
+
+    it('wraps OR column group when combined with other columns', () => {
+        const result = translateLegacyFilterToExpression({ id: ['5', '$or:7'], name: 'Milo' })
+        expect(result).toBe('(id=5 OR id=7) AND name=Milo')
+    })
+
+    it('handles relation AND-mode filters for multiple values', () => {
+        const result = translateLegacyFilterToExpression({
+            'toys.name': ['$and:Ball', '$and:Mouse'],
+        })
+        expect(result).toBe('toys.name=Ball AND toys.name=Mouse')
+    })
+
+    it('OR-mode single-value columns from different columns are merged into one OR group', () => {
+        const result = translateLegacyFilterToExpression({ name: '$or:Milo', color: '$or:white', age: '$btw:1,10' })
+        expect(result).toBe('(name=Milo OR color=white) AND age=$btw:1,10')
+    })
+
+    it('all OR-mode columns merge into a flat OR expression without AND', () => {
+        const result = translateLegacyFilterToExpression({
+            name: ['$or:Milo', '$or:Garfield'],
+            color: ['$or:brown', '$or:white'],
+        })
+        expect(result).toBe('name=Milo OR name=Garfield OR color=brown OR color=white')
+    })
+
+    it('OR group followed by AND terms produces correctly grouped expression', () => {
+        const result = translateLegacyFilterToExpression({
+            name: ['$or:Milo', '$or:Garfield'],
+            age: '$or:$null',
+            color: ['brown', '$or:white'],
+            cutenessLevel: ['high', '$or:low'],
+        })
+        expect(result).toBe('(name=Milo OR name=Garfield OR age=$null) AND (color=brown OR color=white) AND (cutenessLevel=high OR cutenessLevel=low)')
     })
 })

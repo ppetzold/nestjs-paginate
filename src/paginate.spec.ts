@@ -13,12 +13,14 @@ import { ToyShopAddressEntity } from './__tests__/toy-shop-address.entity'
 import { ToyShopEntity } from './__tests__/toy-shop.entity'
 import { PaginateQuery } from './decorator'
 import {
+    FilterComparator,
     FilterOperator,
     FilterQuantifier,
     FilterSuffix,
     isOperator,
     isSuffix,
     OperatorSymbolToFunction,
+    parseFilterToken,
 } from './filter'
 import {
     buildOptimizedCountQuery,
@@ -6113,4 +6115,309 @@ describe('paginate', () => {
             })
         })
     }
+
+    describe('translateLegacyFilter', () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            defaultSortBy: [['id', 'ASC']],
+            filterableColumns: { color: true, name: true, 'toys.name': true },
+            translateLegacyFilter: true,
+        }
+
+        it('translates a simple per-column filter with no comparator prefix', async () => {
+            const result = await paginate<CatEntity>(
+                { path: '', filter: { color: '$eq:brown' } } as PaginateQuery,
+                catRepo,
+                config
+            )
+            expect(result.data.map((c) => c.name)).toStrictEqual(['Milo', 'Baby'])
+        })
+
+        it('translates $or: prefix to OR within a column', async () => {
+            const result = await paginate<CatEntity>(
+                { path: '', filter: { color: ['$eq:black', '$or:$eq:ginger'] } } as PaginateQuery,
+                catRepo,
+                config
+            )
+            expect(result.data.map((c) => c.name)).toStrictEqual(['Garfield', 'Shadow', 'Adam'])
+        })
+
+        it('translates $and: prefix to AND within a column', async () => {
+            const result = await paginate<CatEntity>(
+                { path: '', filter: { name: ['$eq:Milo', '$and:$eq:Milo'] } } as PaginateQuery,
+                catRepo,
+                config
+            )
+            expect(result.data.map((c) => c.name)).toStrictEqual(['Milo'])
+        })
+
+        it('translates AND-mode relation filters (old $and: multi-value)', async () => {
+            // Old syntax: filter.toys.name=$and:Fuzzy Thing&filter.toys.name=$and:Stuffed Mouse
+            // Only Milo has both toys.
+            const result = await paginate<CatEntity>(
+                { path: '', filter: { 'toys.name': ['$and:Fuzzy Thing', '$and:Stuffed Mouse'] } } as PaginateQuery,
+                catRepo,
+                config
+            )
+            expect(result.data.map((c) => c.name)).toStrictEqual(['Milo'])
+        })
+
+        it('ANDs results across multiple columns', async () => {
+            const result = await paginate<CatEntity>(
+                { path: '', filter: { color: '$eq:brown', name: '$eq:Milo' } } as PaginateQuery,
+                catRepo,
+                config
+            )
+            expect(result.data.map((c) => c.name)).toStrictEqual(['Milo'])
+        })
+
+        it('respects the global defaultTranslateLegacyFilter flag', async () => {
+            const configWithoutFlag: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id'],
+                defaultSortBy: [['id', 'ASC']],
+                filterableColumns: { color: true },
+            }
+            updateGlobalConfig({ defaultTranslateLegacyFilter: true })
+            try {
+                const result = await paginate<CatEntity>(
+                    { path: '', filter: { color: '$eq:brown' } } as PaginateQuery,
+                    catRepo,
+                    configWithoutFlag
+                )
+                expect(result.data.map((c) => c.name)).toStrictEqual(['Milo', 'Baby'])
+            } finally {
+                updateGlobalConfig({ defaultTranslateLegacyFilter: false })
+            }
+        })
+
+        it('per-endpoint translateLegacyFilter: false overrides a global true', async () => {
+            const configDisabled: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id'],
+                defaultSortBy: [['id', 'ASC']],
+                filterableColumns: { color: true },
+                translateLegacyFilter: false,
+            }
+            updateGlobalConfig({ defaultTranslateLegacyFilter: true })
+            try {
+                // Without translation, $eq:brown is treated as the literal value (no comparator),
+                // which parseFilterToken handles normally — color=$eq:brown still works but via
+                // the regular filter path.
+                const result = await paginate<CatEntity>(
+                    { path: '', filter: { color: '$eq:brown' } } as PaginateQuery,
+                    catRepo,
+                    configDisabled
+                )
+                expect(result.data.map((c) => c.name)).toStrictEqual(['Milo', 'Baby'])
+            } finally {
+                updateGlobalConfig({ defaultTranslateLegacyFilter: false })
+            }
+        })
+    })
+
+    for (const cc of [FilterComparator.AND, FilterComparator.OR, '']) {
+        const comparator = cc === '' ? FilterComparator.AND : cc
+        const cSrt = cc === '' ? cc : `${comparator}:`
+        it.each([
+            {
+                string: cSrt + '$ilike:value',
+                tokens: { comparator, operator: '$ilike', suffix: undefined, value: 'value' },
+            },
+            { string: cSrt + '$eq:value', tokens: { comparator, operator: '$eq', suffix: undefined, value: 'value' } },
+            {
+                string: cSrt + '$eq:val:ue',
+                tokens: { comparator, operator: '$eq', suffix: undefined, value: 'val:ue' },
+            },
+            {
+                string: cSrt + '$in:value1,value2,value3',
+                tokens: { comparator, operator: '$in', suffix: undefined, value: 'value1,value2,value3' },
+            },
+            {
+                string: cSrt + '$not:$in:value1:a,value2:b,value3:c',
+                tokens: { comparator, operator: '$in', suffix: '$not', value: 'value1:a,value2:b,value3:c' },
+            },
+            { string: cSrt + 'value', tokens: { comparator, operator: '$eq', suffix: undefined, value: 'value' } },
+            { string: cSrt + 'val:ue', tokens: { comparator, operator: '$eq', suffix: undefined, value: 'val:ue' } },
+            { string: cSrt + '$not:value', tokens: { comparator, operator: '$eq', suffix: '$not', value: 'value' } },
+            {
+                string: cSrt + '$eq:$not:value',
+                tokens: { comparator, operator: '$eq', suffix: '$not', value: 'value' },
+            },
+            {
+                string: cSrt + '$eq:$null',
+                tokens: { comparator, operator: '$null', suffix: undefined, value: undefined },
+            },
+            { string: cSrt + '$null', tokens: { comparator, operator: '$null', suffix: undefined, value: undefined } },
+            { string: cSrt + '', tokens: { comparator, operator: '$eq', suffix: undefined, value: '' } },
+            {
+                string: cSrt + '$eq:$not:$in:value',
+                tokens: { comparator, operator: '$in', suffix: '$not', value: 'value' },
+            },
+            {
+                string: cSrt + '$eq:$not:value:$in',
+                tokens: { comparator, operator: '$eq', suffix: '$not', value: 'value:$in' },
+            },
+            {
+                string: cSrt + '$eq:$not:$null:value:$in',
+                tokens: { comparator, operator: '$null', suffix: '$not', value: undefined },
+            },
+        ])('should get filter tokens for "$string"', ({ string, tokens }) => {
+            expect(parseFilterToken(string)).toStrictEqual({ quantifier: '$any', ...tokens })
+        })
+    }
+
+    it('should return result based on or between range filter', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            filterableColumns: {
+                age: [FilterOperator.BTW],
+            },
+            translateLegacyFilter: true,
+        }
+        const query: PaginateQuery = {
+            path: '',
+            filter: {
+                age: ['$btw:4,5', '$or:$btw:5,6'],
+            },
+        }
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        expect(result.data).toStrictEqual([cats[0], cats[1], cats[2], cats[6]])
+        expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.age=$btw:4,5&filter.age=$or:$btw:5,6')
+    })
+
+    it('should return result based on or with all cats', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            filterableColumns: {
+                age: true,
+            },
+            translateLegacyFilter: true,
+        }
+        const query: PaginateQuery = {
+            path: '',
+            filter: {
+                age: ['$null', '$or:$not:$eq:$null'],
+            },
+        }
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        expect(result.data).toStrictEqual([...cats])
+        expect(result.links.current).toBe(
+            '?page=1&limit=20&sortBy=id:ASC&filter.age=$null&filter.age=$or:$not:$eq:$null'
+        )
+    })
+
+    it('should return result based on two ors and an and with two cats', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            filterableColumns: {
+                age: [FilterOperator.BTW],
+                name: true,
+                color: true,
+            },
+            translateLegacyFilter: true,
+        }
+        const query: PaginateQuery = {
+            path: '',
+            filter: {
+                name: '$or:Milo',
+                color: '$or:white',
+                age: '$btw:1,10',
+            },
+        }
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        expect(result.data).toStrictEqual(
+            cats.filter((cat) => (cat.name === 'Milo' || cat.color === 'white') && cat.age)
+        )
+        expect(result.links.current).toBe(
+            '?page=1&limit=20&sortBy=id:ASC&filter.name=$or:Milo&filter.color=$or:white&filter.age=$btw:1,10'
+        )
+    })
+
+    it('should return result based on two multifilters chained together with and operator', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            filterableColumns: {
+                name: true,
+                color: true,
+            },
+            translateLegacyFilter: true,
+        }
+        const query: PaginateQuery = {
+            path: '',
+            filter: {
+                name: ['Milo', '$or:Garfield'],
+                color: ['brown', '$or:white'],
+            },
+        }
+        const result = await paginate<CatEntity>(query, catRepo, config)
+        const expected = cats.filter(
+            (cat) =>
+                (cat.name === 'Milo' || cat.name === 'Garfield') && (cat.color === 'brown' || cat.color === 'white')
+        )
+        expect(result.data).toStrictEqual(expected)
+        expect(result.links.current).toBe(
+            '?page=1&limit=20&sortBy=id:ASC&filter.name=Milo&filter.name=$or:Garfield&filter.color=brown&filter.color=$or:white'
+        )
+    })
+
+    it('should return result based on two multifilters chained together with or operator', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            filterableColumns: {
+                name: true,
+                color: true,
+            },
+            translateLegacyFilter: true,
+        }
+        const query: PaginateQuery = {
+            path: '',
+            filter: {
+                name: ['$or:Milo', '$or:Garfield'],
+                color: ['$or:brown', '$or:white'],
+            },
+        }
+        const result = await paginate<CatEntity>(query, catRepo, config)
+        const expected = cats.filter(
+            (cat) => cat.name === 'Milo' || cat.name === 'Garfield' || cat.color === 'brown' || cat.color === 'white'
+        )
+        expect(result.data).toStrictEqual(expected)
+        expect(result.links.current).toBe(
+            '?page=1&limit=20&sortBy=id:ASC&filter.name=$or:Milo&filter.name=$or:Garfield&filter.color=$or:brown&filter.color=$or:white'
+        )
+    })
+
+    it('should return result based on filters chained together with and operators and or operators', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            filterableColumns: {
+                name: true,
+                color: true,
+                age: true,
+                cutenessLevel: true,
+            },
+            translateLegacyFilter: true,
+        }
+        const query: PaginateQuery = {
+            path: '',
+            filter: {
+                name: ['$or:Milo', '$or:Garfield'],
+                age: '$or:$null',
+                color: ['brown', '$or:white'],
+                cutenessLevel: [CutenessLevel.HIGH, `$or:${CutenessLevel.LOW}`],
+            },
+        }
+        const result = await paginate<CatEntity>(query, catRepo, config)
+        const expected = cats.filter(
+            (cat) =>
+                (cat.name === 'Milo' || cat.name === 'Garfield' || cat.age === null) &&
+                (cat.color === 'brown' || cat.color === 'white') &&
+                (cat.cutenessLevel === CutenessLevel.HIGH || cat.cutenessLevel === CutenessLevel.LOW)
+        )
+        expect(result.data).toStrictEqual(expected)
+        expect(result.links.current).toBe(
+            '?page=1&limit=20&sortBy=id:ASC&filter.name=$or:Milo&filter.name=$or:Garfield&filter.age=$or:$null&filter.color=brown&filter.color=$or:white&filter.cutenessLevel=high&filter.cutenessLevel=$or:low'
+        )
+    })
 })

@@ -330,17 +330,19 @@ export function parseFilterToken(raw?: string): FilterToken | null {
         value: raw,
     }
 
-    const MAX_OPERATOR = 4 // max 4 operators: $none:$not:$eq:$null
+    const MAX_OPERATOR = 5 // max 4 operators: $none:$not:$eq:$null
     const OPERAND_SEPARATOR = ':'
 
     const matches = raw.split(OPERAND_SEPARATOR)
     const maxOperandCount = matches.length > MAX_OPERATOR ? MAX_OPERATOR : matches.length
-    const notValue: (FilterOperator | FilterSuffix | FilterQuantifier)[] = []
+    const notValue: (FilterOperator | FilterSuffix | FilterQuantifier | FilterComparator)[] = []
 
     for (let i = 0; i < maxOperandCount; i++) {
         const match = matches[i]
         if (isQuantifier(match)) {
             token.quantifier = match
+        } else if (isComparator(match)) {
+            token.comparator = match
         } else if (isSuffix(match)) {
             token.suffix = match
         } else if (isOperator(match)) {
@@ -405,7 +407,9 @@ function fixColumnFilterValue<T>(column: string, qb: SelectQueryBuilder<T>, isJs
         return value
     }
 }
-
+export function isComparator(value: unknown): value is FilterComparator {
+    return values(FilterComparator).includes(value as any)
+}
 export function parseFilter<T>(
     query: PaginateQuery,
     filterableColumns?: {
@@ -792,6 +796,95 @@ export function addFilter<T>(
 
 type ExpressionFilterableColumns = {
     [column: string]: (FilterOperator | FilterSuffix | FilterQuantifier)[] | true
+}
+
+/**
+ * Translates a legacy per-column filter map (using the removed `$and:`/`$or:` comparator
+ * prefixes) into a `filter=` boolean expression string compatible with the current expression
+ * engine.
+ *
+ * **OR-mode columns** — a column whose first filter value starts with `$or:` — contribute all
+ * their leaves to a single global OR group (matching the old behaviour where each `$or:` value
+ * was added with `orWhere` at the outer query level). **AND-mode columns** — whose first value
+ * has no `$or:` prefix — build a per-column bracket expression (respecting within-column
+ * comparators) that is AND-joined with everything else.
+ *
+ * The global OR group, if present, is wrapped in `()` when AND-mode terms follow it, so that
+ * `(A OR B) AND C` is generated rather than relying on SQL-precedence ambiguity.
+ *
+ * Values containing whitespace or parentheses are quoted for the expression tokenizer.
+ *
+ * Returns `undefined` when the filter map is empty or has no non-empty entries.
+ */
+export function translateLegacyFilterToExpression(filter: { [column: string]: string | string[] }): string | undefined {
+    const orLeaves: string[] = []       // leaves from OR-mode columns (global OR group)
+    const andGroupExprs: string[] = []  // column bracket expressions for AND-mode columns
+
+    for (const column of Object.keys(filter)) {
+        const rawValues = filter[column]
+        const values = Array.isArray(rawValues) ? rawValues : [rawValues]
+
+        const terms: Array<{ comparator: 'and' | 'or'; leaf: string }> = []
+        for (const raw of values) {
+            if (raw === undefined || raw === null) continue
+            let comparator: 'and' | 'or' = 'and'
+            let token = raw
+            if (raw.startsWith('$or:')) {
+                comparator = 'or'
+                token = raw.slice('$or:'.length)
+            } else if (raw.startsWith('$and:')) {
+                comparator = 'and'
+                token = raw.slice('$and:'.length)
+            }
+            // The expression tokenizer splits on whitespace and parentheses, so a value that
+            // contains either must be quoted. Wrapping the whole token (including any operator
+            // prefix such as `$eq:`) in double quotes is safe: the tokenizer strips the outer
+            // quotes and passes the raw content to parseFilterToken unchanged.
+            const needsQuoting = /[\s()]/.test(token)
+            const leafValue = needsQuoting ? `"${token.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"` : token
+            terms.push({ comparator, leaf: `${column}=${leafValue}` })
+        }
+
+        if (terms.length === 0) continue
+
+        const firstIsOr = terms[0].comparator === 'or'
+
+        if (firstIsOr) {
+            // OR-mode column: every leaf joins the global OR group (replicating the old
+            // behaviour where each value was added via `orWhere` at the top-level query).
+            for (const term of terms) {
+                orLeaves.push(term.leaf)
+            }
+        } else {
+            // AND-mode column: build the per-column expression respecting within-column
+            // comparators, then AND-join it with the rest of the expression.
+            const hasWithinOr = terms.slice(1).some((t) => t.comparator === 'or')
+            let colExpr = terms[0].leaf
+            for (let i = 1; i < terms.length; i++) {
+                colExpr =
+                    terms[i].comparator === 'or'
+                        ? `${colExpr} OR ${terms[i].leaf}`
+                        : `${colExpr} AND ${terms[i].leaf}`
+            }
+            // Wrap in parens when the column group contains OR so it stays self-contained.
+            if (hasWithinOr && terms.length > 1) colExpr = `(${colExpr})`
+            andGroupExprs.push(colExpr)
+        }
+    }
+
+    if (orLeaves.length === 0 && andGroupExprs.length === 0) return undefined
+
+    const parts: string[] = []
+    if (orLeaves.length > 0) {
+        const orExpr = orLeaves.join(' OR ')
+        // Wrap OR group in parens when AND terms follow to make the grouping explicit.
+        parts.push(andGroupExprs.length > 0 ? `(${orExpr})` : orExpr)
+    }
+    for (const andExpr of andGroupExprs) {
+        parts.push(andExpr)
+    }
+
+    return parts.join(' AND ')
 }
 
 /**
