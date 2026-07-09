@@ -96,29 +96,42 @@ export function isEntityKey<T>(entityColumns: Column<T>[], column: string): colu
 export const positiveNumberOrDefault = (value: number | undefined, defaultValue: number, minValue: 0 | 1 = 0) =>
     value === undefined || value < minValue ? defaultValue : value
 
-export type ColumnProperties = { propertyPath?: string; propertyName: string; isNested: boolean; column: string }
+export type ColumnProperties = {
+    propertyPath?: string
+    propertyName: string
+    isNested: boolean
+    column: string
+    /**
+     * The dot path of the embedded column, when the column was written with the `(...)` notation,
+     * e.g. `size.height` for `toys.(size.height)`. Undefined when no embedded notation is used.
+     */
+    embeddedPath?: string
+}
+
+const stripEmbeddedParentheses = (path: string) => path.replace('(', '').replace(')', '')
 
 export function getPropertiesByColumnName(column: string): ColumnProperties {
-    const propertyPath = column.split('.')
-    if (propertyPath.length > 1) {
-        const propertyNamePath = propertyPath.slice(1)
-        let isNested = false,
-            propertyName = propertyNamePath.join('.')
+    const segments = column.split('.')
+    if (segments.length === 1) {
+        return { propertyName: segments[0], isNested: false, column: segments[0] }
+    }
 
-        if (!propertyName.startsWith('(') && propertyNamePath.length > 1) {
-            isNested = true
-        }
+    // The `(...)` notation opens on the segment where the embedded path starts, so every segment
+    // before it is a relation. Without the notation only the last segment is a column.
+    const embeddedStart = segments.findIndex((segment) => segment.startsWith('('))
+    const embeddedPath =
+        embeddedStart === -1 ? undefined : stripEmbeddedParentheses(segments.slice(embeddedStart).join('.'))
+    const relationSegments = embeddedStart === -1 ? segments.slice(0, -1) : segments.slice(0, embeddedStart)
 
-        propertyName = propertyName.replace('(', '').replace(')', '')
+    const propertyPath = stripEmbeddedParentheses(segments[0])
+    const propertyName = stripEmbeddedParentheses(segments.slice(1).join('.'))
 
-        return {
-            propertyPath: propertyPath[0],
-            propertyName, // the join is in case of an embedded entity
-            isNested,
-            column: `${propertyPath[0]}.${propertyName}`,
-        }
-    } else {
-        return { propertyName: propertyPath[0], isNested: false, column: propertyPath[0] }
+    return {
+        propertyPath,
+        propertyName,
+        isNested: relationSegments.length > 1,
+        column: `${propertyPath}.${propertyName}`,
+        embeddedPath,
     }
 }
 
@@ -376,11 +389,14 @@ export function fixColumnAlias(
         } else if ((isVirtualProperty && !query) || properties.isNested) {
             if (properties.propertyName.includes('.')) {
                 const propertyPath = properties.propertyName.split('.')
+                // An embedded path is part of the column, not of the relation chain, so it must not
+                // be turned into join aliases.
+                const columnSegments = properties.embeddedPath?.split('.').length ?? 1
                 const nestedRelations = propertyPath
-                    .slice(0, -1)
+                    .slice(0, -columnSegments)
                     .map((v) => `${v}_rel`)
                     .join('_')
-                const nestedCol = propertyPath[propertyPath.length - 1]
+                const nestedCol = propertyPath.slice(-columnSegments).join('.')
 
                 return `${alias}_${properties.propertyPath}_rel_${nestedRelations}.${nestedCol}`
             } else {
