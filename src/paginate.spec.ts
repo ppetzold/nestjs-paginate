@@ -96,6 +96,9 @@ describe('paginate', () => {
                 dataSource = new DataSource({
                     ...dbOptions,
                     type: 'mariadb',
+                    // Store/read dates in UTC so the fixed cursor tokens in the cursor
+                    // tests are correct regardless of the host machine's timezone.
+                    timezone: 'Z',
                     host: process.env.DB_HOST || 'localhost',
                     port: +process.env.MARIA_DB_PORT || 3306,
                     username: process.env.DB_USERNAME || 'root',

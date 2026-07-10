@@ -112,10 +112,10 @@ export interface PaginateConfig<T> {
      * alternative.
      *
      * Only columns actually referenced by the request (via `filter.*`, a `filter=` expression, or
-     * `sortBy`) are considered — this does not open every possible path, it simply skips the
-     * allowlist check for shallow-enough ones. An explicit {@link filterableColumns} entry always
-     * takes precedence, so per-column operator restrictions still apply even within the allowed
-     * depth.
+     * `sortBy`) and resolvable against the entity metadata are considered — this does not open every
+     * possible path, it simply skips the allowlist check for shallow-enough real columns. An
+     * explicit {@link filterableColumns} entry always takes precedence, so per-column operator
+     * restrictions still apply even within the allowed depth.
      */
     allowDepth?: number
     loadEagerRelations?: boolean
