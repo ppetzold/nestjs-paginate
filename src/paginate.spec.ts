@@ -3946,12 +3946,19 @@ describe('paginate', () => {
 
         it('should return result sorted by a virtual column', async () => {
             const config: PaginateConfig<CatEntity> = {
-                sortableColumns: ['home.countCat'],
+                sortableColumns: ['home.countCat', 'id'],
                 relations: { home: { naptimePillow: { brand: true } } },
             }
             const query: PaginateQuery = {
+                // `home.countCat` is 1 for the three cats that have a home and null for the four
+                // that do not, so it alone leaves both groups tied. Break the tie on `id` to pin a
+                // single valid ordering; without it the database may return either group in any
+                // order and the assertion below only passes by accident.
                 path: '',
-                sortBy: [['home.countCat', 'ASC']],
+                sortBy: [
+                    ['home.countCat', 'ASC'],
+                    ['id', 'ASC'],
+                ],
             }
 
             const result = await paginate<CatEntity>(query, catRepo, config)
@@ -3970,7 +3977,7 @@ describe('paginate', () => {
             expect(result.data).toStrictEqual(expectedResult)
             expect(result.links.last).toBeUndefined()
             expect(result.links.next).toBeUndefined()
-            expect(result.links.current).toBe('?page=1&limit=20&sortBy=home.countCat:ASC')
+            expect(result.links.current).toBe('?page=1&limit=20&sortBy=home.countCat:ASC&sortBy=id:ASC')
         })
     })
 
