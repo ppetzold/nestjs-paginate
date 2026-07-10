@@ -33,6 +33,7 @@ import {
     getPropertiesByColumnName,
     isDateColumnType,
     isISODate,
+    isRelationPath,
     JoinMethod,
     JSON_COLUMN_TYPES,
     mergeRelationSchema,
@@ -406,6 +407,20 @@ function fixColumnFilterValue<T>(column: string, qb: SelectQueryBuilder<T>, isJs
     }
 }
 
+/**
+ * Whether a token is a bare `$any` / `$none` quantifier: no suffix, no explicit operator, no value.
+ * `$any` and `$none` parse to the default `$eq` operator with an undefined value, which is what
+ * distinguishes them from `$null` (operator `$null`) and from `$eq:5` (value `'5'`).
+ */
+function isBareQuantifier(token: FilterToken): boolean {
+    return (
+        token.suffix === undefined &&
+        token.operator === FilterOperator.EQ &&
+        token.value === undefined &&
+        (token.quantifier === FilterQuantifier.ANY || token.quantifier === FilterQuantifier.NONE)
+    )
+}
+
 export function parseFilter<T>(
     query: PaginateQuery,
     filterableColumns?: {
@@ -428,9 +443,24 @@ export function parseFilter<T>(
         const allowedOperators = filterableColumns[column]
         const input = query.filter[column]
         const statements = !Array.isArray(input) ? [input] : input
+        const relationColumn = qb ? isRelationPath(qb, column) : false
         for (const raw of statements) {
             const token = parseFilterToken(raw)
             if (!token) {
+                continue
+            }
+            // A relation column names the relation itself, so there is nothing to compare a value
+            // against; only presence (`$any`) and absence (`$none`) are meaningful. Any other token
+            // would silently contribute no condition to the relation's EXISTS subquery and so
+            // degrade to a bare `$any`, inverting the meaning of e.g. `$null`.
+            if (relationColumn && !isBareQuantifier(token)) {
+                if (throwOnInvalidFilter) {
+                    throw new BadRequestException(
+                        `Column '${column}' is a relation and can only be filtered with the ` +
+                            `'${FilterQuantifier.ANY}' or '${FilterQuantifier.NONE}' quantifier ` +
+                            `(e.g. 'filter.${column}=${FilterQuantifier.NONE}'), but got '${raw}'`
+                    )
+                }
                 continue
             }
             if (allowedOperators === true) {

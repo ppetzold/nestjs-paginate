@@ -5536,6 +5536,113 @@ describe('paginate', () => {
                 expect(result.data[4].home).toBeNull()
             })
 
+            // A relation column names the relation itself, not a value, so `$any` and `$none` are
+            // the only meaningful filters on it. This holds for to-one relations just as it does
+            // for to-many ones.
+            it('should find all cats without a home ($none on a to-one relation)', async () => {
+                const config: PaginateConfig<CatEntity> = {
+                    sortableColumns: ['id'],
+                    filterableColumns: { home: [FilterQuantifier.NONE] },
+                }
+                const query: PaginateQuery = { path: '', filter: { home: '$none' } }
+
+                const result = await paginate<CatEntity>(query, catRepo, config)
+
+                expect(result.data.map((cat) => cat.id)).toStrictEqual([cats[3].id, cats[4].id, cats[5].id, cats[6].id])
+            })
+
+            it('should find all cats with a home ($any on a to-one relation)', async () => {
+                const config: PaginateConfig<CatEntity> = {
+                    sortableColumns: ['id'],
+                    filterableColumns: { home: [FilterQuantifier.ANY] },
+                }
+                const query: PaginateQuery = { path: '', filter: { home: '$any' } }
+
+                const result = await paginate<CatEntity>(query, catRepo, config)
+
+                expect(result.data.map((cat) => cat.id)).toStrictEqual([cats[0].id, cats[1].id, cats[2].id])
+            })
+
+            it('should find all cats without any toys ($none on a to-many relation)', async () => {
+                const config: PaginateConfig<CatEntity> = {
+                    sortableColumns: ['id'],
+                    filterableColumns: { toys: [FilterQuantifier.NONE] },
+                }
+                const query: PaginateQuery = { path: '', filter: { toys: '$none' } }
+
+                const result = await paginate<CatEntity>(query, catRepo, config)
+
+                // Only cats 0 and 1 own toys.
+                expect(result.data.map((cat) => cat.id)).toStrictEqual(cats.slice(2).map((cat) => cat.id))
+            })
+
+            it('should reject $null on a relation column', async () => {
+                const config: PaginateConfig<CatEntity> = {
+                    sortableColumns: ['id'],
+                    filterableColumns: { home: true },
+                    throwOnInvalidFilter: true,
+                }
+                const query: PaginateQuery = { path: '', filter: { home: '$null' } }
+
+                await expect(paginate<CatEntity>(query, catRepo, config)).rejects.toThrow(
+                    /'home' is a relation and can only be filtered with the '\$any' or '\$none' quantifier/
+                )
+            })
+
+            it('should drop $null on a relation column rather than degrade it to $any', async () => {
+                const config: PaginateConfig<CatEntity> = {
+                    sortableColumns: ['id'],
+                    filterableColumns: { home: true },
+                }
+                const query: PaginateQuery = { path: '', filter: { home: '$null' } }
+
+                const result = await paginate<CatEntity>(query, catRepo, config)
+
+                // The condition never reaches the relation's EXISTS subquery, so an unhandled token
+                // would silently become a bare `$any` — i.e. "has a home", the exact inverse. The
+                // filter must be dropped whole instead.
+                expect(result.data.map((cat) => cat.id)).toStrictEqual(cats.map((cat) => cat.id))
+            })
+
+            it('should reject a value operator on a relation column', async () => {
+                const config: PaginateConfig<CatEntity> = {
+                    sortableColumns: ['id'],
+                    filterableColumns: { home: true },
+                    throwOnInvalidFilter: true,
+                }
+                const query: PaginateQuery = { path: '', filter: { home: '$eq:5' } }
+
+                await expect(paginate<CatEntity>(query, catRepo, config)).rejects.toThrow(/is a relation/)
+            })
+
+            it('should reject a quantifier that carries a value on a relation column', async () => {
+                const config: PaginateConfig<CatEntity> = {
+                    sortableColumns: ['id'],
+                    filterableColumns: { 'home.pillows': [FilterQuantifier.NONE] },
+                    throwOnInvalidFilter: true,
+                }
+                const query: PaginateQuery = { path: '', filter: { 'home.pillows': '$none:red' } }
+
+                await expect(paginate<CatEntity>(query, catRepo, config)).rejects.toThrow(
+                    /'home.pillows' is a relation/
+                )
+            })
+
+            it('should still filter a column of a relation with $null', async () => {
+                const config: PaginateConfig<CatEntity> = {
+                    sortableColumns: ['id'],
+                    relations: { home: true },
+                    filterableColumns: { 'home.street': [FilterOperator.NULL] },
+                    throwOnInvalidFilter: true,
+                }
+                const query: PaginateQuery = { path: '', filter: { 'home.street': '$null' } }
+
+                const result = await paginate<CatEntity>(query, catRepo, config)
+
+                // `home.street` is a column, not a relation: cat 0's home has a null street.
+                expect(result.data.map((cat) => cat.id)).toStrictEqual([cats[0].id])
+            })
+
             it('should find all cats without red pillows in their home', async () => {
                 // This test tests absence filtering with a single criterium.
                 const config: PaginateConfig<CatEntity> = {
