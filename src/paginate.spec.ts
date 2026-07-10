@@ -5576,6 +5576,32 @@ describe('paginate', () => {
                 expect(result.data.map((cat) => cat.id)).toStrictEqual(cats.slice(2).map((cat) => cat.id))
             })
 
+            it('should find all cats without friends ($none on an owning many-to-many relation)', async () => {
+                const config: PaginateConfig<CatEntity> = {
+                    sortableColumns: ['id'],
+                    filterableColumns: { friends: [FilterQuantifier.NONE] },
+                }
+                const query: PaginateQuery = { path: '', filter: { friends: '$none' } }
+
+                const result = await paginate<CatEntity>(query, catRepo, config)
+
+                // Only cat 0 (Milo) befriended anyone.
+                expect(result.data.map((cat) => cat.id)).toStrictEqual(cats.slice(1).map((cat) => cat.id))
+            })
+
+            it('should find all cats nobody befriended ($none on an inverse many-to-many relation)', async () => {
+                const config: PaginateConfig<CatEntity> = {
+                    sortableColumns: ['id'],
+                    filterableColumns: { friendOf: [FilterQuantifier.NONE] },
+                }
+                const query: PaginateQuery = { path: '', filter: { friendOf: '$none' } }
+
+                const result = await paginate<CatEntity>(query, catRepo, config)
+
+                // Cats 1..6 are all friends of cat 0; nobody befriended cat 0.
+                expect(result.data.map((cat) => cat.id)).toStrictEqual([cats[0].id])
+            })
+
             it('should reject $null on a relation column', async () => {
                 const config: PaginateConfig<CatEntity> = {
                     sortableColumns: ['id'],
