@@ -200,6 +200,29 @@ export function parseFilterExpression(
     return parse(tokenize(input), maxComplexity)
 }
 
+/**
+ * Parses a `filter=` expression and returns the column of every leaf term (duplicates included,
+ * in source order). Used to discover which columns a request references so depth-based allowlisting
+ * (`PaginateConfig.allowDepth`) can consider them without enumerating each one.
+ */
+export function collectFilterExpressionColumns(
+    input: string,
+    maxComplexity: number = DEFAULT_FILTER_EXPRESSION_MAX_COMPLEXITY
+): string[] {
+    const columns: string[] = []
+    const walk = (node: FilterExpression) => {
+        if (node.type === 'leaf') {
+            columns.push(node.column)
+        } else if (node.type === 'not') {
+            walk(node.child)
+        } else {
+            node.children.forEach(walk)
+        }
+    }
+    walk(parseFilterExpression(input, maxComplexity))
+    return columns
+}
+
 /** Pushes every NOT down onto the leaves via De Morgan, leaving only AND/OR groups. */
 export function normalizeFilterExpression(node: FilterExpression, negated = false): NormalizedFilterExpression {
     switch (node.type) {

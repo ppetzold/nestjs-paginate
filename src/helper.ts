@@ -1,6 +1,8 @@
 import { mergeWith } from 'lodash'
 import { FindOperator, FindOptionsRelations, ObjectLiteral, Repository, SelectQueryBuilder } from 'typeorm'
 import { ColumnMetadata } from 'typeorm/metadata/ColumnMetadata'
+import { EmbeddedMetadata } from 'typeorm/metadata/EmbeddedMetadata'
+import { EntityMetadata } from 'typeorm/metadata/EntityMetadata'
 import { OrmUtils } from 'typeorm/util/OrmUtils'
 
 /**
@@ -260,6 +262,39 @@ export interface JsonbPathResolution {
  * emits `<column> ::jsonb @> :value`, which casts a `json` column to `jsonb` for free.
  */
 export const JSON_COLUMN_TYPES = ['jsonb', 'json']
+
+/**
+ * Whether a dot-path resolves to a real column, relation or embedded on the entity.
+ *
+ * Follows relations into their inverse entity and embeddeds into their own metadata; a JSON(B)
+ * column terminates the walk, since its trailing segments are a JSON key path rather than
+ * relations. A polymorphic `~` group resolves when every alternative does.
+ */
+export function resolvesToColumn(metadata: EntityMetadata | EmbeddedMetadata, column: string): boolean {
+    if (column.includes('~')) {
+        return column.split('~').every((alternative) => resolvesToColumn(metadata, alternative))
+    }
+
+    const [segment, ...rest] = column.split('.')
+    const name = segment.replace(/[()]/g, '')
+    const deeper = rest.join('.')
+
+    const relation = metadata.relations.find((r) => r.propertyName === name)
+    if (relation) {
+        return rest.length === 0 || resolvesToColumn(relation.inverseEntityMetadata, deeper)
+    }
+
+    const embedded = metadata.embeddeds.find((e) => e.propertyName === name)
+    if (embedded) {
+        return rest.length > 0 && resolvesToColumn(embedded, deeper)
+    }
+
+    const columnMetadata = metadata.columns.find((c) => c.propertyName === name)
+    if (!columnMetadata) {
+        return false
+    }
+    return rest.length === 0 || JSON_COLUMN_TYPES.includes(columnMetadata.type as string)
+}
 
 /**
  * Walks the dot-separated `column` path through TypeORM entity metadata to determine
