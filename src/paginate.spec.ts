@@ -5602,6 +5602,35 @@ describe('paginate', () => {
                 expect(result.data.map((cat) => cat.id)).toStrictEqual([cats[0].id])
             })
 
+            it('should find cats whose home has a naptime pillow ($any down a to-one chain)', async () => {
+                const config: PaginateConfig<CatEntity> = {
+                    sortableColumns: ['id'],
+                    filterableColumns: { 'home.naptimePillow': [FilterQuantifier.ANY] },
+                }
+                const query: PaginateQuery = { path: '', filter: { 'home.naptimePillow': '$any' } }
+
+                const result = await paginate<CatEntity>(query, catRepo, config)
+
+                // Only the Mansion (cat 2) has a naptime pillow; Box and House have none, and
+                // cats 3..6 have no home at all.
+                expect(result.data.map((cat) => cat.id)).toStrictEqual([cats[2].id])
+            })
+
+            it('should find cats whose home has no naptime pillow ($none down a to-one chain)', async () => {
+                const config: PaginateConfig<CatEntity> = {
+                    sortableColumns: ['id'],
+                    filterableColumns: { 'home.naptimePillow': [FilterQuantifier.NONE] },
+                }
+                const query: PaginateQuery = { path: '', filter: { 'home.naptimePillow': '$none' } }
+
+                const result = await paginate<CatEntity>(query, catRepo, config)
+
+                // Everyone except the Mansion's cat — a cat with no home has no naptime pillow either.
+                expect(result.data.map((cat) => cat.id)).toStrictEqual(
+                    cats.filter((cat) => cat.id !== cats[2].id).map((cat) => cat.id)
+                )
+            })
+
             it('should reject $null on a relation column', async () => {
                 const config: PaginateConfig<CatEntity> = {
                     sortableColumns: ['id'],
