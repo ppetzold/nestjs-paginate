@@ -1,5 +1,12 @@
 import { mergeWith } from 'lodash'
-import { FindOperator, FindOptionsRelations, ObjectLiteral, Repository, SelectQueryBuilder } from 'typeorm'
+import {
+    EntityMetadata,
+    FindOperator,
+    FindOptionsRelations,
+    ObjectLiteral,
+    Repository,
+    SelectQueryBuilder,
+} from 'typeorm'
 import { ColumnMetadata } from 'typeorm/metadata/ColumnMetadata'
 import { OrmUtils } from 'typeorm/util/OrmUtils'
 
@@ -574,4 +581,49 @@ export function buildOptimizedCountQuery<T extends ObjectLiteral>(qb: SelectQuer
 
     qb.expressionMap.joinAttributes = joins.filter((join) => kept.has(join.alias.name))
     return qb
+}
+
+/**
+ * Walks `column` through the entity metadata and reports what it terminates on: a relation, or a
+ * column of a given type. Anything that does not resolve — an embedded path, a virtual column, a
+ * JSON key path, a computed expression — reports neither, and is left to the caller's allowlist.
+ */
+function resolveTerminal(metadata: EntityMetadata, column: string): { isRelation?: true; columnType?: string } {
+    const parts = column.split('.')
+    let meta = metadata
+    for (let i = 0; i < parts.length; i++) {
+        const relation = meta.relations.find((r) => r.propertyPath === parts[i])
+        if (relation) {
+            if (i === parts.length - 1) return { isRelation: true }
+            meta = relation.inverseEntityMetadata
+            continue
+        }
+        const col = meta.columns.find((c) => c.propertyName === parts[i])
+        if (!col || i !== parts.length - 1) return {}
+        return { columnType: col.type as string }
+    }
+    return {}
+}
+
+/**
+ * Whether a row can be ordered by `column` — whether it names one comparable value.
+ *
+ * A path that ends on a relation names no value of its own, and TypeORM compiles it to an ORDER BY
+ * over a column its paginated DISTINCT subquery never selects (`column distinctAlias.__root_<fk>
+ * does not exist`). A Postgres `json` column has no ordering operators at all. Ordering *through* a
+ * to-many (`toys.id`) names a value and stays allowed.
+ */
+export function isOrderableColumn(metadata: EntityMetadata, column: string): boolean {
+    const { isRelation, columnType } = resolveTerminal(metadata, column)
+    return !isRelation && columnType !== 'json'
+}
+
+/**
+ * Whether `column` names a Postgres `json` column itself rather than a key path into one. Such a
+ * column has no equality or comparison operators — there is no `json = unknown` — so a value filter
+ * on it cannot be compiled at all. A key path (`col.key`) is read out as text and is fine, as is
+ * `$null`. `jsonb`, which does have those operators, is unaffected.
+ */
+export function isBareJsonColumn(metadata: EntityMetadata, column: string): boolean {
+    return resolveTerminal(metadata, column).columnType === 'json'
 }

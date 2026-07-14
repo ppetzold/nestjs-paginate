@@ -34,6 +34,7 @@ import {
     getQueryUrlComponents,
     isDateColumnType,
     isEntityKey,
+    isOrderableColumn,
     isFindOperator,
     isISODate,
     isNil,
@@ -468,11 +469,15 @@ export async function paginate<T extends ObjectLiteral>(
             }
             // A polymorphic group (e.g. `colA~colB`) is valid only when every
             // column in the group is sortable.
+            // A column that names no single value (a relation, a `json` blob) cannot be ordered
+            // by: TypeORM would compile it to SQL the database rejects. Drop it like any other
+            // unsortable column rather than emit a query that cannot run.
+            const sortable = (c: string) => isEntityKey(config.sortableColumns, c) && isOrderableColumn(metadata, c)
             if (Array.isArray(column)) {
-                if (column.length > 0 && column.every((c) => isEntityKey(config.sortableColumns, c))) {
+                if (column.length > 0 && column.every(sortable)) {
                     sortBy.push(order as Order<T>)
                 }
-            } else if (isEntityKey(config.sortableColumns, column)) {
+            } else if (sortable(column)) {
                 sortBy.push(order as Order<T>)
             }
         }
