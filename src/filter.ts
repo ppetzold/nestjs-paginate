@@ -995,6 +995,20 @@ export function addToManySubFilters<T>(
                     // --- Intermediate Join ---
                     const parentAlias = relAlias(relationPath[i - 1][0], i - 1)
                     const childAlias = relAlias(relationPath[i][0], i)
+                    if (parentMeta.isManyToMany) {
+                        // A ManyToMany has no foreign key to join on: the pairing lives in the
+                        // junction table, which has to be joined between child and parent. Without
+                        // it the ON condition below would be empty (`joinColumns` is empty on the
+                        // inverse side), degrading the join to a cross product that matches any row.
+                        joinManyToManyToParent(
+                            existsQb,
+                            parentMeta,
+                            childAlias,
+                            parentAlias,
+                            juncAlias(relationPath[i][0], i)
+                        )
+                        continue
+                    }
                     const childRelationMetadata = parentMeta.inverseRelation
                     const joinCols = childRelationMetadata.joinColumns
                     const onConditions = joinCols
@@ -1013,6 +1027,50 @@ export function addToManySubFilters<T>(
                     correlateManyToManyOrFk(existsQb, parentMeta, relAlias, juncAlias)
                 }
             }
+        }
+
+        /**
+         * JOINs an intermediate ManyToMany into the EXISTS subquery: the junction table, and then
+         * the entity that declares the relation. The column roles are the same as at the root
+         * (see correlateManyToManyOrFk), except the far side is another joined alias rather than
+         * the main query's.
+         */
+        function joinManyToManyToParent(
+            existsQb: SelectQueryBuilder<any>,
+            parentMeta: RelationMetadata,
+            childAlias: string,
+            parentAlias: string,
+            junctionAlias: string
+        ) {
+            if (!parentMeta.isOwning && !parentMeta.inverseRelation) {
+                throw new Error(
+                    `Cannot build EXISTS subquery for ManyToMany relation "${path}": ` +
+                        `the relation has no inverse side defined. ` +
+                        `Ensure the @ManyToMany decorator on the inverse entity references this relation.`
+                )
+            }
+            // Junction metadata lives only on the owning side, whichever side the filter came from.
+            const joinMeta = parentMeta.isOwning ? parentMeta : parentMeta.inverseRelation
+            const toChildCols = parentMeta.isOwning ? joinMeta.inverseJoinColumns : joinMeta.joinColumns
+            const toParentCols = parentMeta.isOwning ? joinMeta.joinColumns : joinMeta.inverseJoinColumns
+
+            const on = (cols: typeof toChildCols, alias: string) =>
+                cols
+                    .map(
+                        (jc) =>
+                            `${quote(junctionAlias)}.${quote(jc.databaseName)} = ${quote(alias)}.${quote(
+                                jc.referencedColumn.databaseName
+                            )}`
+                    )
+                    .join(' AND ')
+
+            const junctionMeta = joinMeta.junctionEntityMetadata
+            existsQb.innerJoin(
+                junctionMeta.target ?? junctionMeta.tableName,
+                junctionAlias,
+                on(toChildCols, childAlias)
+            )
+            existsQb.innerJoin(parentMeta.entityMetadata.target, parentAlias, on(toParentCols, parentAlias))
         }
 
         /**
