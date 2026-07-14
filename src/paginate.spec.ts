@@ -3859,16 +3859,35 @@ describe('paginate', () => {
                 expect(result.data.every((hair) => hair.metadataJson === null)).toBe(true)
             })
 
-            it('should not order by a json column', async () => {
+            it.each(['metadata', 'metadataJson'] as const)('should order by a %s column', async (column) => {
+                // `jsonb` has a total order and `json` has none, but the cast between them is exact,
+                // so both sort. Postgres would otherwise fail with `could not identify an ordering
+                // operator for type json`.
                 const config: PaginateConfig<CatHairEntity> = {
-                    sortableColumns: ['id', 'metadataJson'],
+                    sortableColumns: ['id', column],
                     defaultSortBy: [['id', 'ASC']],
                 }
-                const query: PaginateQuery = { path: '', sortBy: [['metadataJson', 'DESC']] }
+                const query: PaginateQuery = { path: '', sortBy: [[column, 'DESC']] }
 
                 const result = await paginate<CatHairEntity>(query, catHairRepo, config)
 
-                expect(result.meta.sortBy).toStrictEqual([['id', 'ASC']])
+                expect(result.meta.sortBy).toStrictEqual([[column, 'DESC']])
+                expect(result.data.length).toBeGreaterThan(0)
+            })
+
+            it('should not let an un-whitelisted $eq reach an array column (#1109)', async () => {
+                // `$eq:1` against `text[]` is `malformed array literal`. It reached the database
+                // because `$eq` bypassed the allowlist entirely (#1111).
+                const config: PaginateConfig<CatHairEntity> = {
+                    sortableColumns: ['id'],
+                    filterableColumns: { colors: [FilterOperator.CONTAINS] },
+                    throwOnInvalidFilter: true,
+                }
+                const query: PaginateQuery = { path: '', filter: { colors: '$eq:1' } }
+
+                await expect(paginate<CatHairEntity>(query, catHairRepo, config)).rejects.toThrow(
+                    "Filter operator '$eq' is not allowed for column 'colors'"
+                )
             })
         })
 

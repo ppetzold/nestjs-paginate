@@ -606,16 +606,25 @@ function resolveTerminal(metadata: EntityMetadata, column: string): { isRelation
 }
 
 /**
- * Whether a row can be ordered by `column` — whether it names one comparable value.
+ * Whether a row can be ordered by `column` — whether it names one value.
  *
  * A path that ends on a relation names no value of its own, and TypeORM compiles it to an ORDER BY
  * over a column its paginated DISTINCT subquery never selects (`column distinctAlias.__root_<fk>
- * does not exist`). A Postgres `json` column has no ordering operators at all. Ordering *through* a
- * to-many (`toys.id`) names a value and stays allowed.
+ * does not exist`). Ordering *through* a to-many (`toys.id`) does name a value and stays allowed,
+ * as does a `json` column, which is ordered as `jsonb` (see orderableColumnExpression).
  */
 export function isOrderableColumn(metadata: EntityMetadata, column: string): boolean {
-    const { isRelation, columnType } = resolveTerminal(metadata, column)
-    return !isRelation && columnType !== 'json'
+    return !resolveTerminal(metadata, column).isRelation
+}
+
+/**
+ * Whether ordering by `column` needs it cast. Postgres `json` has no ordering operators, `jsonb`
+ * has a total order, and the cast between them is exact — so a `json` column is ordered as `jsonb`
+ * rather than refused, and sorts like the `jsonb` column beside it.
+ */
+export function needsJsonbSortCast(qb: SelectQueryBuilder<unknown>, column: string): boolean {
+    if (!['postgres', 'cockroachdb'].includes(qb.connection.options.type)) return false
+    return resolveTerminal(qb.expressionMap.mainAlias.metadata, column).columnType === 'json'
 }
 
 /**
