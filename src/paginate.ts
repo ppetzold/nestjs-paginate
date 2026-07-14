@@ -834,15 +834,20 @@ export async function paginate<T extends ObjectLiteral>(
             }
 
             if (!Array.isArray(order[0]) && needsJsonbSortCast(queryBuilder, order[0] as string)) {
-                // The cast makes this a raw expression, which the query builder no longer escapes
-                // for us — so escape the identifier here, or Postgres folds it to lower case.
+                // Select the cast expression under an alias and order by that, the way a virtual or
+                // jsonb-path sort does. Ordering by the expression itself would not survive
+                // pagination: `take` wraps the query in a DISTINCT subquery, and the query builder
+                // resolves each ORDER BY back to a selected column — an identifier it did not
+                // escape itself is not one it can find ("__root" alias was not found).
                 const escape = (identifier: string) => queryBuilder.connection.driver.escape(identifier)
                 const separator = alias.indexOf('.')
                 const quoted =
                     separator === -1
                         ? escape(alias)
                         : `${escape(alias.slice(0, separator))}.${escape(alias.slice(separator + 1))}`
-                alias = `${quoted}::jsonb`
+                const jsonSortAlias = `${alias.replace(/[^a-zA-Z0-9]/g, '_')}_json_sort`.toLowerCase()
+                queryBuilder.addSelect(`${quoted}::jsonb`, jsonSortAlias)
+                alias = jsonSortAlias
             }
 
             if (isMySqlOrMariaDb) {

@@ -3875,6 +3875,25 @@ describe('paginate', () => {
                 expect(result.data.length).toBeGreaterThan(0)
             })
 
+            it.each(['metadata', 'metadataJson'] as const)(
+                'should order by a %s column with a relation joined and paginated',
+                async (column) => {
+                    // `take` + a join wraps the query in a DISTINCT subquery, and every ORDER BY has
+                    // to resolve back to a selected column. A raw cast expression does not.
+                    const config: PaginateConfig<CatHairEntity> = {
+                        sortableColumns: ['id', column],
+                        relations: { underCoat: true },
+                        defaultLimit: 2,
+                    }
+                    const query: PaginateQuery = { path: '', limit: 2, sortBy: [[column, 'DESC']] }
+
+                    const result = await paginate<CatHairEntity>(query, catHairRepo, config)
+
+                    expect(result.meta.sortBy).toStrictEqual([[column, 'DESC']])
+                    expect(result.data.length).toBe(2)
+                }
+            )
+
             it('should not let an un-whitelisted $eq reach an array column (#1109)', async () => {
                 // `$eq:1` against `text[]` is `malformed array literal`. It reached the database
                 // because `$eq` bypassed the allowlist entirely (#1111).
