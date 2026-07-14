@@ -5609,6 +5609,26 @@ describe('paginate', () => {
                 expect(result.data[0].id).toBe(cats[0].id)
             })
 
+            it('should find cats whose best friend has Garfield as a friend (to-one then ManyToMany)', async () => {
+                const config: PaginateConfig<CatEntity> = {
+                    sortableColumns: ['id'],
+                    filterableColumns: {
+                        'bestFriend.friends.name': [FilterOperator.EQ],
+                    },
+                }
+                const query: PaginateQuery = {
+                    filter: {
+                        'bestFriend.friends.name': '$eq:Garfield',
+                    },
+                    path: '',
+                }
+
+                const result = await paginate<CatEntity>(query, catRepo, config)
+                // Milo (cats[0]) is the only cat with friends, and Adam (cats[6]) is the only cat
+                // whose bestFriend is Milo.
+                expect(result.data.map((cat) => cat.id)).toStrictEqual([cats[6].id])
+            })
+
             it('should find cats that are a friend of Milo (ManyToMany inverse side)', async () => {
                 // cats[0] (Milo) has friends cats[1..6]; so cats[1..6] have Milo in their friendOf relation.
                 // Filtering on friendOf.name = 'Milo' should return cats[1..6].
