@@ -31,6 +31,7 @@ import {
     extractVirtualProperty,
     fixColumnAlias,
     getPropertiesByColumnName,
+    isBareJsonColumn,
     isDateColumnType,
     isISODate,
     JoinMethod,
@@ -428,9 +429,23 @@ export function parseFilter<T>(
         const allowedOperators = filterableColumns[column]
         const input = query.filter[column]
         const statements = !Array.isArray(input) ? [input] : input
+        // A `json` column has no equality or comparison operators in Postgres, so a value filter on
+        // the column itself compiles to SQL that cannot run (`operator does not exist: json = unknown`).
+        // Only its emptiness is askable; its contents are reached through a key path. This holds
+        // whatever the allowlist says — the blanket `true` included.
+        const bareJson = qb ? isBareJsonColumn(qb.expressionMap.mainAlias.metadata, column) : false
         for (const raw of statements) {
             const token = parseFilterToken(raw)
             if (!token) {
+                continue
+            }
+            if (bareJson && token.operator !== FilterOperator.NULL) {
+                if (throwOnInvalidFilter) {
+                    throw new BadRequestException(
+                        `Column '${column}' is a json column and cannot be compared as a value; ` +
+                            `filter a key path (e.g. '${column}.<key>') or use '$null'`
+                    )
+                }
                 continue
             }
             if (allowedOperators === true) {
@@ -449,11 +464,16 @@ export function parseFilter<T>(
                     continue
                 }
             } else {
-                if (
-                    token.operator &&
-                    token.operator !== FilterOperator.EQ &&
-                    !allowedOperators.includes(token.operator)
-                ) {
+                // `$eq` is the implicit default operator: it is what a suffix negates (`$not:John`)
+                // and what a quantifier quantifies (`$none:red`), named or not. A whitelisted
+                // modifier therefore licenses the `$eq` it modifies, or `[FilterSuffix.NOT]` and
+                // `[FilterQuantifier.NONE]` would be undeclarable. It licenses no more than that:
+                // a standalone `$eq`, bare or spelled out, is whitelisted like any other operator.
+                const licensedByModifier =
+                    token.operator === FilterOperator.EQ &&
+                    ((!!token.suffix && allowedOperators.includes(token.suffix)) ||
+                        allowedOperators.includes(token.quantifier))
+                if (token.operator && !licensedByModifier && !allowedOperators.includes(token.operator)) {
                     if (throwOnInvalidFilter) {
                         throw new BadRequestException(
                             `Filter operator '${token.operator}' is not allowed for column '${column}'`

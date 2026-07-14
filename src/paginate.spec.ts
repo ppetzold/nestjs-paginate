@@ -2495,6 +2495,73 @@ describe('paginate', () => {
         )
     })
 
+    it('should not order by a column that names no single value', async () => {
+        // `home` is a relation and `toys` a collection: neither has a value of its own to order by,
+        // and TypeORM compiles either into an ORDER BY over a column the paginated DISTINCT
+        // subquery never selects. Fall back to the default sort instead of emitting dead SQL.
+        for (const column of ['home', 'toys'] as const) {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id', column],
+                defaultSortBy: [['id', 'ASC']],
+            }
+            const query: PaginateQuery = { path: '', sortBy: [[column, 'DESC']] }
+
+            const result = await paginate<CatEntity>(query, catRepo, config)
+
+            expect(result.meta.sortBy).toStrictEqual([['id', 'ASC']])
+            expect(result.data.map((cat) => cat.id)).toStrictEqual(cats.map((cat) => cat.id))
+        }
+    })
+
+    it('should still order through a to-many relation (a column past it names a value)', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id', 'toys.id'],
+            relations: { toys: true },
+            defaultSortBy: [['id', 'ASC']],
+        }
+        const query: PaginateQuery = { path: '', sortBy: [['toys.id', 'DESC']] }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        expect(result.meta.sortBy).toStrictEqual([['toys.id', 'DESC']])
+    })
+
+    it('should throw when $eq is not whitelisted, even spelled implicitly as a bare value', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            filterableColumns: {
+                age: [FilterOperator.GT],
+            },
+            throwOnInvalidFilter: true,
+        }
+
+        for (const filter of ['$eq:5', '5']) {
+            const query: PaginateQuery = { path: '', filter: { age: filter } }
+            await expect(paginate<CatEntity>(query, catRepo, config)).rejects.toThrow(
+                "Filter operator '$eq' is not allowed for column 'age'"
+            )
+        }
+    })
+
+    it('should allow the $eq a whitelisted modifier negates or quantifies, named or not', async () => {
+        // `$not`/`$none` have no meaning without an operator to modify, and `$eq` is the implicit
+        // default — so whitelisting the modifier has to license the `$eq` it applies to.
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            filterableColumns: {
+                name: [FilterSuffix.NOT],
+            },
+            throwOnInvalidFilter: true,
+        }
+
+        for (const filter of ['$not:Garfield', '$not:$eq:Garfield']) {
+            const query: PaginateQuery = { path: '', filter: { name: filter } }
+            const result = await paginate<CatEntity>(query, catRepo, config)
+            expect(result.data.map((cat) => cat.name)).not.toContain('Garfield')
+            expect(result.data.length).toBe(cats.length - 1)
+        }
+    })
+
     it('should silently ignore non-configured filter operator when throwOnInvalidFilter is false (default)', async () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id'],
@@ -3762,6 +3829,87 @@ describe('paginate', () => {
         // Plain `json` columns (as opposed to `jsonb`) do not support the Postgres `@>`
         // containment operator, so $eq/$in must be routed through `#>>` text extraction
         // rather than TypeORM's JsonContains. These mirror the jsonb cases above.
+        describe('a json column itself is not a value', () => {
+            it('should reject a value filter on the json column rather than emit invalid SQL', async () => {
+                // Postgres has no `json = unknown`: comparing the column itself cannot be compiled,
+                // whatever the allowlist permits — `true` included.
+                const config: PaginateConfig<CatHairEntity> = {
+                    sortableColumns: ['id'],
+                    filterableColumns: { metadataJson: true },
+                    throwOnInvalidFilter: true,
+                }
+                const query: PaginateQuery = { path: '', filter: { metadataJson: '$eq:5' } }
+
+                await expect(paginate<CatHairEntity>(query, catHairRepo, config)).rejects.toThrow(
+                    /'metadataJson' is a json column and cannot be compared as a value/
+                )
+            })
+
+            it('should still ask a json column for emptiness', async () => {
+                const config: PaginateConfig<CatHairEntity> = {
+                    sortableColumns: ['id'],
+                    filterableColumns: { metadataJson: [FilterOperator.NULL] },
+                    throwOnInvalidFilter: true,
+                }
+                const query: PaginateQuery = { path: '', filter: { metadataJson: '$null' } }
+
+                const result = await paginate<CatHairEntity>(query, catHairRepo, config)
+
+                expect(result.data.length).toBeGreaterThan(0)
+                expect(result.data.every((hair) => hair.metadataJson === null)).toBe(true)
+            })
+
+            it.each(['metadata', 'metadataJson'] as const)('should order by a %s column', async (column) => {
+                // `jsonb` has a total order and `json` has none, but the cast between them is exact,
+                // so both sort. Postgres would otherwise fail with `could not identify an ordering
+                // operator for type json`.
+                const config: PaginateConfig<CatHairEntity> = {
+                    sortableColumns: ['id', column],
+                    defaultSortBy: [['id', 'ASC']],
+                }
+                const query: PaginateQuery = { path: '', sortBy: [[column, 'DESC']] }
+
+                const result = await paginate<CatHairEntity>(query, catHairRepo, config)
+
+                expect(result.meta.sortBy).toStrictEqual([[column, 'DESC']])
+                expect(result.data.length).toBeGreaterThan(0)
+            })
+
+            it.each(['metadata', 'metadataJson'] as const)(
+                'should order by a %s column with a relation joined and paginated',
+                async (column) => {
+                    // `take` + a join wraps the query in a DISTINCT subquery, and every ORDER BY has
+                    // to resolve back to a selected column. A raw cast expression does not.
+                    const config: PaginateConfig<CatHairEntity> = {
+                        sortableColumns: ['id', column],
+                        relations: { underCoat: true },
+                        defaultLimit: 2,
+                    }
+                    const query: PaginateQuery = { path: '', limit: 2, sortBy: [[column, 'DESC']] }
+
+                    const result = await paginate<CatHairEntity>(query, catHairRepo, config)
+
+                    expect(result.meta.sortBy).toStrictEqual([[column, 'DESC']])
+                    expect(result.data.length).toBe(2)
+                }
+            )
+
+            it('should not let an un-whitelisted $eq reach an array column (#1109)', async () => {
+                // `$eq:1` against `text[]` is `malformed array literal`. It reached the database
+                // because `$eq` bypassed the allowlist entirely (#1111).
+                const config: PaginateConfig<CatHairEntity> = {
+                    sortableColumns: ['id'],
+                    filterableColumns: { colors: [FilterOperator.CONTAINS] },
+                    throwOnInvalidFilter: true,
+                }
+                const query: PaginateQuery = { path: '', filter: { colors: '$eq:1' } }
+
+                await expect(paginate<CatHairEntity>(query, catHairRepo, config)).rejects.toThrow(
+                    "Filter operator '$eq' is not allowed for column 'colors'"
+                )
+            })
+        })
+
         describe('should be able to filter on json (non-jsonb) columns', () => {
             it('should filter a direct json column with a single value', async () => {
                 const config: PaginateConfig<CatHairEntity> = {
