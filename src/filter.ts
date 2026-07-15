@@ -1308,10 +1308,7 @@ export function addToManySubFilters<T>(
                 const barePathSlug = `${pathSlug}_norow`
                 const bareRelAlias = (name: string, depth: number) => `_rel_${name}_${depth}_${barePathSlug}`
                 const bareJuncAlias = (name: string, depth: number) => `_junc_${name}_${depth}_${barePathSlug}`
-                const bareLeafAlias = bareRelAlias(
-                    relationPath[relationPath.length - 1][0],
-                    relationPath.length - 1
-                )
+                const bareLeafAlias = bareRelAlias(relationPath[relationPath.length - 1][0], relationPath.length - 1)
                 const bareQb = qb.connection.createQueryBuilder(existsMetadata.target as any, bareLeafAlias)
                 buildSubqueryJoinChain(bareQb, bareRelAlias, bareJuncAlias)
                 renameSubqueryParameters(bareQb, `_${barePathSlug}`)
