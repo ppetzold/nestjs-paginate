@@ -1282,10 +1282,48 @@ export function addToManySubFilters<T>(
             }
         }
 
+        // Detect whether any sub-filter value is a bare IS NULL check (without $not).
+        // In the old JOIN-based approach a LEFT JOIN produced NULL columns for missing relation
+        // rows, so `IS NULL` also matched assets that had no relation row at all. Replicate that
+        // behaviour with EXISTS by wrapping the subquery as:
+        //   (EXISTS(conditioned) OR NOT EXISTS(bare FK correlation))
+        const hasNullFilter = Object.values(subQuery.filter ?? {}).some((vals) => {
+            const arr = Array.isArray(vals) ? vals : [vals]
+            return arr.some((v) => {
+                if (typeof v !== 'string') return false
+                const token = parseFilterToken(v)
+                return token?.operator === FilterOperator.NULL && token?.suffix !== FilterSuffix.NOT
+            })
+        })
+
         // 5. Add the EXISTS subquery to the main query, applying the path's quantifier.
         const existsQb = buildExistsQb()
         if (quantifier === FilterQuantifier.ANY) {
-            qb.andWhereExists(existsQb)
+            if (hasNullFilter) {
+                // Build a bare correlated subquery with just the FK correlation (no filter
+                // conditions) to test whether any relation row exists at all. Then emit:
+                //   AND (EXISTS(filtered) OR NOT EXISTS(bare))
+                // so that assets with no relation row satisfy the IS NULL condition, matching
+                // the behaviour of the old LEFT JOIN approach.
+                const barePathSlug = `${pathSlug}_norow`
+                const bareRelAlias = (name: string, depth: number) => `_rel_${name}_${depth}_${barePathSlug}`
+                const bareJuncAlias = (name: string, depth: number) => `_junc_${name}_${depth}_${barePathSlug}`
+                const bareLeafAlias = bareRelAlias(
+                    relationPath[relationPath.length - 1][0],
+                    relationPath.length - 1
+                )
+                const bareQb = qb.connection.createQueryBuilder(existsMetadata.target as any, bareLeafAlias)
+                buildSubqueryJoinChain(bareQb, bareRelAlias, bareJuncAlias)
+                renameSubqueryParameters(bareQb, `_${barePathSlug}`)
+                const [existsCondition, existsParams] = qb['getExistsCondition'](existsQb)
+                const [bareCondition, bareParams] = qb['getExistsCondition'](bareQb)
+                qb.andWhere(`(${existsCondition} OR NOT ${bareCondition})`, {
+                    ...existsParams,
+                    ...bareParams,
+                })
+            } else {
+                qb.andWhereExists(existsQb)
+            }
         } else if (quantifier === FilterQuantifier.NONE) {
             andWhereNoneExist(qb, existsQb)
         } else if (quantifier === FilterQuantifier.ALL) {

@@ -2386,6 +2386,8 @@ describe('paginate', () => {
     })
 
     it('should return result based on null query on relation', async () => {
+        // $null on a relation column also matches entities with no relation row at all
+        // (LEFT JOIN semantics: a missing row produces NULL columns, satisfying IS NULL).
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id'],
             filterableColumns: {
@@ -2401,21 +2403,27 @@ describe('paginate', () => {
         }
 
         const result = await paginate<CatEntity>(query, catRepo, config)
-        const expectedResult = [0].map((i) => {
-            const ret = Object.assign(clone(cats[i]), { home: Object.assign(clone(catHomes[i])) })
-            ret.home.countCat = 1
-            delete ret.home.cat
-            return ret
-        })
+        // cats[0]: home exists with null street → matches EXISTS
+        // cats[3-6]: no home row → match NOT EXISTS(bare)
+        const catWithHome = Object.assign(clone(cats[0]), { home: Object.assign(clone(catHomes[0])) })
+        catWithHome.home.countCat = 1
+        delete catWithHome.home.cat
+        const expectedResult = [
+            catWithHome,
+            Object.assign(clone(cats[3]), { home: null }),
+            Object.assign(clone(cats[4]), { home: null }),
+            Object.assign(clone(cats[5]), { home: null }),
+            Object.assign(clone(cats[6]), { home: null }),
+        ]
 
         expect(result.data).toStrictEqual(expectedResult)
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.home.street=$null')
     })
 
     it('should return result based on null query on nested relation', async () => {
+        // $null on a nested relation column also matches entities with no root relation row.
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id'],
-            // Filtering a relation no longer hydrates it; request the chain explicitly to load it.
             relations: { home: { naptimePillow: { brand: true } } },
             filterableColumns: {
                 'home.naptimePillow.brand.quality': [FilterOperator.NULL],
@@ -2429,17 +2437,67 @@ describe('paginate', () => {
         }
 
         const result = await paginate<CatEntity>(query, catRepo, config)
-        const expectedResult = [2].map((i) => {
-            const ret = Object.assign(clone(cats[i]), { home: Object.assign(clone(catHomes[i])) })
-            ret.home.countCat = 1
-            delete ret.home.cat
-            return ret
-        })
+        // cats[2]: home → naptimePillow → brand (quality=null) → matches EXISTS
+        // cats[3-6]: no home row → match NOT EXISTS(bare home)
+        // cats[0,1]: have a home but no naptimePillow, so EXISTS fails AND bare home EXISTS → excluded
+        const catWithHome = Object.assign(clone(cats[2]), { home: Object.assign(clone(catHomes[2])) })
+        catWithHome.home.countCat = 1
+        delete catWithHome.home.cat
+        const expectedResult = [
+            catWithHome,
+            Object.assign(clone(cats[3]), { home: null }),
+            Object.assign(clone(cats[4]), { home: null }),
+            Object.assign(clone(cats[5]), { home: null }),
+            Object.assign(clone(cats[6]), { home: null }),
+        ]
 
         expect(result.data).toStrictEqual(expectedResult)
         expect(result.links.current).toBe(
             '?page=1&limit=20&sortBy=id:ASC&filter.home.naptimePillow.brand.quality=$null'
         )
+    })
+
+    it('should include entities with no relation row when combining $eq and $or:$null on a relation column', async () => {
+        // Reproduces the old LEFT JOIN behaviour: filter.home.street=$eq:Mainstreet combined
+        // with filter.home.street=$or:$null should return cats whose home.street is 'Mainstreet'
+        // OR whose home.street is null OR who have no home row at all.
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            filterableColumns: {
+                'home.street': [FilterOperator.EQ, FilterOperator.NULL],
+            },
+            relations: { home: true },
+        }
+        const query: PaginateQuery = {
+            path: '',
+            filter: {
+                'home.street': ['$eq:Mainstreet', '$or:$null'],
+            },
+        }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+        // cats[0]: home with null street → matches (IS NULL)
+        // cats[1]: home with street='Mainstreet' → matches ($eq:Mainstreet)
+        // cats[3-6]: no home row → match NOT EXISTS(bare) via the $null branch
+        const cat0 = Object.assign(clone(cats[0]), { home: clone(catHomes[0]) })
+        cat0.home.countCat = 1
+        delete cat0.home.cat
+        delete cat0.home.naptimePillow
+        const cat1 = Object.assign(clone(cats[1]), { home: clone(catHomes[1]) })
+        cat1.home.countCat = 1
+        delete cat1.home.cat
+        delete cat1.home.naptimePillow
+
+        const expectedResult = [
+            cat0,
+            cat1,
+            Object.assign(clone(cats[3]), { home: null }),
+            Object.assign(clone(cats[4]), { home: null }),
+            Object.assign(clone(cats[5]), { home: null }),
+            Object.assign(clone(cats[6]), { home: null }),
+        ]
+
+        expect(result.data).toStrictEqual(expectedResult)
     })
 
     it('should throw BadRequestException when filtering on non-filterable column and throwOnInvalidFilter is true', async () => {
