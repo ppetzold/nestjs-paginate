@@ -103,14 +103,17 @@ export const Paginate = createParamDecorator((_data: unknown, ctx: ExecutionCont
     )
     const select = parseParam<string>(query.select, multipleAndCommaSplit)
 
+    // `filter.*` is the documented query format. Accept `filters.*` as a
+    // backwards-compatible alias as well: some API gateways/plural query DTOs
+    // use that spelling, and silently ignoring it makes pagination appear unfiltered.
     const filter = mapKeys(
         pickBy(
             query,
             (param, name) =>
-                name.includes('filter.') &&
+                (name.includes('filter.') || name.includes('filters.')) &&
                 (isString(param) || (Array.isArray(param) && (param as any[]).every((p) => isString(p))))
         ) as Dictionary<string | string[]>,
-        (_param, name) => name.replace('filter.', '')
+        (_param, name) => name.replace(name.includes('filter.') ? 'filter.' : 'filters.', '')
     )
 
     return {

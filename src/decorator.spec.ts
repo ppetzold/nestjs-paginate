@@ -178,6 +178,18 @@ describe('Decorator', () => {
         })
     })
 
+    it('should accept filters.* as an alias for filter.*', () => {
+        const context = expressContextFactory({
+            'filters.profile.status': '$in:active,pending',
+        })
+
+        const result: PaginateQuery = decoratorfactory(null, context)
+
+        expect(result.filter).toStrictEqual({
+            'profile.status': '$in:active,pending',
+        })
+    })
+
     it('should parse polymorphic (~) sort groups into column arrays', () => {
         const context = expressContextFactory({
             sortBy: ['bestFriend.age~nemesis.age:ASC', 'name:DESC'],
