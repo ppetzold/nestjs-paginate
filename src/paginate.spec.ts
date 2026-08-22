@@ -87,9 +87,9 @@ describe('paginate', () => {
                     type: 'postgres',
                     host: process.env.DB_HOST || 'localhost',
                     port: +process.env.POSTGRESS_DB_PORT || 5432,
-                    username: process.env.DB_USERNAME || 'root',
-                    password: process.env.DB_PASSWORD || 'pass',
-                    database: process.env.DB_DATABASE || 'test',
+                    username: 'root',
+                    password: 'pass',
+                    database: 'test',
                 })
                 break
             case 'mariadb':
@@ -942,6 +942,141 @@ describe('paginate', () => {
             await expect(paginate<CatEntity>(query, catRepo, config)).rejects.toThrow(
                 'Polymorphic sort groups (using "~") support only plain and relation columns'
             )
+        })
+    })
+
+    describe('wildcard sortable columns (*)', () => {
+        it('should sort by a relation column matched by a wildcard', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id', 'bestFriend.*'],
+                relations: { bestFriend: true },
+            }
+
+            const query: PaginateQuery = {
+                path: '',
+                sortBy: [['bestFriend.age', 'ASC']],
+            }
+
+            const result = await paginate<CatEntity>(query, catRepo, config)
+
+            expect(result.meta.sortBy).toStrictEqual([['bestFriend.age', 'ASC']])
+
+            const nonNullAges = result.data
+                .map((cat) => cat.bestFriend?.age ?? null)
+                .filter((age): age is number => age !== null)
+
+            expect(nonNullAges).toStrictEqual([...nonNullAges].sort((a, b) => a - b))
+        })
+
+        it('should sort by a nested relation column matched by a wildcard', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id', 'bestFriend.bestFriend.*'],
+                relations: {
+                    bestFriend: {
+                        bestFriend: true,
+                    },
+                },
+            }
+
+            const query: PaginateQuery = {
+                path: '',
+                sortBy: [['bestFriend.bestFriend.name', 'ASC']],
+            }
+
+            const result = await paginate<CatEntity>(query, catRepo, config)
+
+            expect(result.meta.sortBy).toStrictEqual([['bestFriend.bestFriend.name', 'ASC']])
+        })
+
+        it('should ignore a relation column that does not exist when using a wildcard', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id', 'bestFriend.*'],
+                relations: { bestFriend: true },
+                defaultSortBy: [['id', 'ASC']],
+            }
+
+            const query: PaginateQuery = {
+                path: '',
+                sortBy: [['bestFriend.doesNotExist', 'ASC']],
+            }
+
+            const result = await paginate<CatEntity>(query, catRepo, config)
+
+            expect(result.meta.sortBy).toStrictEqual([['id', 'ASC']])
+        })
+
+        it('should not treat a different relation path as matching a wildcard', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id', 'bestFriend.*'],
+                relations: { bestFriend: true },
+                defaultSortBy: [['id', 'ASC']],
+            }
+
+            const query: PaginateQuery = {
+                path: '',
+                sortBy: [['nemesis.age', 'ASC']],
+            }
+
+            const result = await paginate<CatEntity>(query, catRepo, config)
+
+            expect(result.meta.sortBy).toStrictEqual([['id', 'ASC']])
+        })
+
+        it('should sort by a JSONB path matched by a wildcard', async () => {
+            const config: PaginateConfig<CatHairEntity> = {
+                sortableColumns: ['id', 'metadata.*'],
+            }
+
+            const query: PaginateQuery = {
+                path: '',
+                sortBy: [['metadata.length', 'ASC']],
+            }
+
+            const result = await paginate<CatHairEntity>(query, catHairRepo, config)
+
+            expect(result.meta.sortBy).toStrictEqual([['metadata.length', 'ASC']])
+
+            const values = result.data.map((catHair) => catHair.metadata?.length ?? null)
+
+            const sortedValues = [...values].sort((a, b) => {
+                if (a === null && b === null) return 0
+                if (a === null) return 1
+                if (b === null) return -1
+
+                // Numeric JSONB values are now cast to numeric in SQL, so sort mathematically
+                return a - b
+            })
+
+            expect(values).toStrictEqual(sortedValues)
+        })
+
+        it('should ignore a JSONB path that is not matched by the wildcard', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id', 'snapshot.*'],
+                defaultSortBy: [['id', 'ASC']],
+            }
+
+            const query: PaginateQuery = {
+                path: '',
+                sortBy: [['otherField.value', 'ASC']],
+            }
+
+            const result = await paginate<CatEntity>(query, catRepo, config)
+
+            expect(result.meta.sortBy).toStrictEqual([['id', 'ASC']])
+        })
+
+        it('should sort by a deeply nested relation column matched by a wildcard', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id', 'bestFriend.*'],
+                relations: { bestFriend: { bestFriend: true } },
+            }
+
+            const query: PaginateQuery = { path: '', sortBy: [['bestFriend.bestFriend.name', 'ASC']] }
+
+            const result = await paginate<CatEntity>(query, catRepo, config)
+
+            expect(result.meta.sortBy).toStrictEqual([['bestFriend.bestFriend.name', 'ASC']])
         })
     })
 

@@ -79,7 +79,8 @@ export type RelationColumn<T> = Extract<
     }[Column<T>]
 >
 
-export type Order<T> = [Column<T> | Column<T>[], 'ASC' | 'DESC']
+// eslint-disable-next-line @typescript-eslint/ban-types
+export type Order<T> = [Column<T> | Column<T>[] | (string & {}), 'ASC' | 'DESC']
 export type SortBy<T> = Order<T>[]
 
 // eslint-disable-next-line @typescript-eslint/ban-types
@@ -89,7 +90,8 @@ export type RelationSchemaInput<T = any> = FindOptionsRelations<T> | RelationCol
 // eslint-disable-next-line @typescript-eslint/ban-types
 export type RelationSchema<T = any> = { [relation in Column<T> | (string & {})]: true }
 
-export function isEntityKey<T>(entityColumns: Column<T>[], column: string): column is Column<T> {
+// eslint-disable-next-line @typescript-eslint/ban-types
+export function isEntityKey<T>(entityColumns: (Column<T> | (string & {}))[], column: string): column is Column<T> {
     return !!entityColumns.find((c) => c === column)
 }
 

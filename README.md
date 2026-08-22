@@ -234,6 +234,18 @@ const paginateConfig: PaginateConfig<CatEntity> {
    * Required: true (must have a minimum of one column)
    * Type: (keyof CatEntity)[]
    * Description: These are the columns that are valid to be sorted by.
+   *
+   * Wildcard support:
+   * - Use a trailing `.*` to allow sorting by descendant paths dynamically.
+   * - The wildcard must be the final path segment.
+   * - It matches one or more descendant segments.
+   *
+   * Examples:
+   * - `latestTelemetry.snapshot.*` allows sorting by
+   *   `latestTelemetry.snapshot.status` and
+   *   `latestTelemetry.snapshot.vehicle.speed`.
+   *
+   * Exact entries take precedence over wildcard entries.
    */
   sortableColumns: ['id', 'name', 'color'],
 
@@ -666,6 +678,36 @@ Notes and limitations:
   and JSONB-path columns are rejected.
 - Polymorphic groups are **not supported with cursor pagination** (the COALESCE value
   cannot be encoded into a cursor) and will throw.
+
+## Wildcard sortable columns
+
+You can use a trailing `.\*` in `sortableColumns` to allow sorting by dynamic descendant paths without explicitly listing every path.
+
+### Code
+
+```typescript
+const config: PaginateConfig<CatEntity> = {
+  sortableColumns: ['id', 'latestTelemetry.snapshot.*'],
+}
+```
+
+This allows sorting by any descendant path under latestTelemetry.snapshot, such as:
+
+### Endpoint
+
+```
+http://localhost:3000/cats?sortBy=latestTelemetry.snapshot.status:ASC
+```
+
+or
+
+```
+http://localhost:3000/cats?sortBy=latestTelemetry.snapshot.vehicle.speed:DESC
+```
+
+The wildcard must be the final path segment. It matches one or more descendant segments, so latestTelemetry.snapshot.\* matches latestTelemetry.snapshot.status and latestTelemetry.snapshot.vehicle.speed, but does not match latestTelemetry.snapshot itself.
+
+Exact sortable column entries take precedence over wildcard entries.
 
 ## Filters
 
