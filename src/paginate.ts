@@ -231,6 +231,7 @@ function isWildcardColumn(column: string, pattern: string): boolean {
 
 function isWildcardSortableColumn<T>(
     column: string,
+    // eslint-disable-next-line @typescript-eslint/ban-types
     sortableColumns: (Column<T> | (string & {}))[],
     queryBuilder: SelectQueryBuilder<T>
 ): boolean {
