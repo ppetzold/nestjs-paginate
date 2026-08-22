@@ -916,35 +916,14 @@ export async function paginate<T extends ObjectLiteral>(
                       )
 
                 if (isJsonbPath && dbType === 'postgres') {
-                    const rawJsonExpr = subqueryExpr
-                    const jsonPath = jsonbResolution.jsonPath
-
-                    // Handle both snapshot.metric.value AND snapshot.metric
-                    let altPathExpr = rawJsonExpr
-                    if (jsonPath.length > 0 && jsonPath[jsonPath.length - 1] !== 'value') {
-                        const props = getPropertiesByColumnName(sortColumn as string)
-                        const relPrefix = props.column.split('.').slice(0, -jsonPath.length).join('.')
-                        const relationAlias = fixColumnAlias(
-                            { ...props, column: relPrefix },
-                            queryBuilder.alias,
-                            isRelation,
-                            false,
-                            false,
-                            undefined,
-                            queryBuilder
-                        )
-                        const extendedPath = [...jsonPath, 'value'].join(',')
-                        altPathExpr = `${relationAlias} #>> '{${extendedPath}}'`
-                    }
-
-                    const valExpr =
-                        altPathExpr !== rawJsonExpr ? `COALESCE(${altPathExpr}, ${rawJsonExpr})` : rawJsonExpr
-
-                    subqueryExpr = `CASE WHEN (${valExpr}) ~ '^-?[0-9]+(\\.[0-9]+)?$' THEN CAST(${valExpr} AS numeric) ELSE NULL END`
+                    subqueryExpr = `CASE WHEN (${subqueryExpr}) ~ '^-?[0-9]+(\\.[0-9]+)?$' THEN CAST(${subqueryExpr} AS numeric) ELSE NULL END`
                 }
 
                 const rawAlias = isJsonbPath
-                    ? `${queryBuilder.alias}_j_${columnProperties.column.replace(/[^a-zA-Z0-9]/g, '_')}_s`.toLowerCase()
+                    ? `${queryBuilder.alias}_j_${columnProperties.column.replace(
+                          /[^a-zA-Z0-9]/g,
+                          '_'
+                      )}_s`.toLowerCase()
                     : `${alias}_vc_sort`.toLowerCase()
 
                 const vcSortAlias = rawAlias.length > 55 ? rawAlias.slice(0, 55) : rawAlias
