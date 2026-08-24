@@ -262,7 +262,7 @@ export interface JsonbPathResolution {
  * `#>>` path extraction works on both, and TypeORM's `JsonContains` ($eq/$in/$contains)
  * emits `<column> ::jsonb @> :value`, which casts a `json` column to `jsonb` for free.
  */
-export const JSON_COLUMN_TYPES = ['jsonb', 'json']
+export const JSON_COLUMN_TYPES = ['jsonb', 'json', 'simple-json']
 
 /**
  * Walks the dot-separated `column` path through TypeORM entity metadata to determine
@@ -344,17 +344,11 @@ export function fixColumnAlias(
     }
 
     if (jsonbResolution && jsonbResolution.isJsonb) {
-        const baseColumnProperties = getPropertiesByColumnName(
-            [...jsonbResolution.relationPath, jsonbResolution.jsonbColumn].join('.')
-        )
-        const baseAlias = fixColumnAlias(
-            baseColumnProperties,
-            alias,
-            jsonbResolution.relationPath.length > 0,
-            isVirtualProperty,
-            isEmbedded,
-            query
-        )
+        const relationAlias =
+            jsonbResolution.relationPath.length > 0
+                ? `${alias}_${jsonbResolution.relationPath.join('_rel_')}_rel`
+                : alias
+        const baseAlias = `${relationAlias}.${jsonbResolution.jsonbColumn}`
 
         if (jsonbResolution.jsonPath.length === 0) {
             return baseAlias
