@@ -1082,7 +1082,7 @@ describe('paginate', () => {
         it('should sort by a nested JSON value using a wildcard sortable column', async () => {
             const config: PaginateConfig<CatEntity> = {
                 sortableColumns: ['home.config.*'],
-                relations: ['home']
+                relations: ['home'],
             }
 
             const query: PaginateQuery = {

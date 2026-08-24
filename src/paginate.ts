@@ -44,7 +44,6 @@ import {
     mergeRelationSchema,
     Order,
     positiveNumberOrDefault,
-    quoteColumn,
     RelationSchema,
     RelationSchemaInput,
     resolveJsonbPath,
@@ -229,11 +228,7 @@ function isWildcardColumn(column: string, pattern: string): boolean {
     return prefix.length > 0 && column.startsWith(`${prefix}.`)
 }
 
-function isValidRelationWildcard<T>(
-    column: string,
-    pattern: string,
-    queryBuilder: SelectQueryBuilder<T>
-): boolean {
+function isValidRelationWildcard<T>(column: string, pattern: string, queryBuilder: SelectQueryBuilder<T>): boolean {
     const relationPath = pattern.slice(0, -2).split('.')
     const columnParts = column.split('.')
 
@@ -273,21 +268,17 @@ function isValidRelationWildcard<T>(
 
     return (
         propertyName !== undefined &&
-        metadata.columns.some(
-            (columnMetadata) =>
-                columnMetadata.propertyName === propertyName
-        )
+        metadata.columns.some((columnMetadata) => columnMetadata.propertyName === propertyName)
     )
 }
 
 function isWildcardSortableColumn<T>(
     column: string,
+    // eslint-disable-next-line @typescript-eslint/ban-types
     sortableColumns: (Column<T> | (string & {}))[],
     queryBuilder: SelectQueryBuilder<T>
 ): boolean {
-    const pattern = sortableColumns.find((sortableColumn) =>
-        isWildcardColumn(column, String(sortableColumn))
-    )
+    const pattern = sortableColumns.find((sortableColumn) => isWildcardColumn(column, String(sortableColumn)))
 
     if (!pattern) {
         return false
@@ -301,15 +292,12 @@ function isWildcardSortableColumn<T>(
         return jsonbResolution.jsonPath.length > 0
     }
 
-    return isValidRelationWildcard(
-        column,
-        patternString,
-        queryBuilder
-    )
+    return isValidRelationWildcard(column, patternString, queryBuilder)
 }
 
 function isSortableColumn<T>(
     column: string,
+    // eslint-disable-next-line @typescript-eslint/ban-types
     sortableColumns: (Column<T> | (string & {}))[],
     queryBuilder: SelectQueryBuilder<T>
 ): boolean {
@@ -317,11 +305,7 @@ function isSortableColumn<T>(
         return true
     }
 
-    return isWildcardSortableColumn(
-        column,
-        sortableColumns,
-        queryBuilder
-    )
+    return isWildcardSortableColumn(column, sortableColumns, queryBuilder)
 }
 
 export async function paginate<T extends ObjectLiteral>(
@@ -578,23 +562,11 @@ export async function paginate<T extends ObjectLiteral>(
             if (Array.isArray(column)) {
                 if (
                     column.length > 0 &&
-                    column.every((c) =>
-                        isSortableColumn(
-                            c,
-                            config.sortableColumns,
-                            queryBuilder
-                        )
-                    )
+                    column.every((c) => isSortableColumn(c, config.sortableColumns, queryBuilder))
                 ) {
                     sortBy.push(order as Order<T>)
                 }
-            } else if (
-                isSortableColumn(
-                    column,
-                    config.sortableColumns,
-                    queryBuilder
-                )
-            ) {
+            } else if (isSortableColumn(column, config.sortableColumns, queryBuilder)) {
                 sortBy.push(order as Order<T>)
             }
         }
@@ -927,22 +899,13 @@ export async function paginate<T extends ObjectLiteral>(
                     return undefined
                 }
 
-                const fullJsonbPath = [
-                    ...(resolution.relationPath || []),
-                    resolution.jsonbColumn,
-                ].join('.')
+                const fullJsonbPath = [...(resolution.relationPath || []), resolution.jsonbColumn].join('.')
 
                 const baseProperties = getPropertiesByColumnName(fullJsonbPath)
 
-                const isRelation = checkIsRelation(
-                    queryBuilder,
-                    baseProperties.propertyPath
-                )
+                const isRelation = checkIsRelation(queryBuilder, baseProperties.propertyPath)
 
-                const isEmbedded = checkIsEmbedded(
-                    queryBuilder,
-                    baseProperties.propertyPath
-                )
+                const isEmbedded = checkIsEmbedded(queryBuilder, baseProperties.propertyPath)
 
                 const baseAlias = fixColumnAlias(
                     baseProperties,
@@ -971,16 +934,10 @@ export async function paginate<T extends ObjectLiteral>(
                 let subqueryExpr: string
 
                 if (isJsonbPath && dbType === 'postgres') {
-                    const jsonbExpression = buildJsonbPathExpression(
-                        queryBuilder,
-                        columnProperties.column
-                    )
-
+                    const jsonbExpression = buildJsonbPathExpression(queryBuilder, columnProperties.column)
 
                     if (!jsonbExpression) {
-                        logAndThrowException(
-                            `Unable to resolve JSONB path "${columnProperties.column}".`
-                        )
+                        logAndThrowException(`Unable to resolve JSONB path "${columnProperties.column}".`)
                     }
 
                     subqueryExpr = `
@@ -1003,21 +960,12 @@ export async function paginate<T extends ObjectLiteral>(
                 }
 
                 const rawAlias = isJsonbPath
-                    ? `${queryBuilder.alias}_j_${columnProperties.column.replace(
-                        /[^a-zA-Z0-9]/g,
-                        '_'
-                    )}_s`.toLowerCase()
+                    ? `${queryBuilder.alias}_j_${columnProperties.column.replace(/[^a-zA-Z0-9]/g, '_')}_s`.toLowerCase()
                     : `${alias}_vc_sort`.toLowerCase()
 
-                const vcSortAlias =
-                    rawAlias.length > 55
-                        ? rawAlias.slice(0, 55)
-                        : rawAlias
+                const vcSortAlias = rawAlias.length > 55 ? rawAlias.slice(0, 55) : rawAlias
 
-                queryBuilder.addSelect(
-                    subqueryExpr,
-                    vcSortAlias
-                )
+                queryBuilder.addSelect(subqueryExpr, vcSortAlias)
 
                 alias = vcSortAlias
             }
@@ -1026,21 +974,14 @@ export async function paginate<T extends ObjectLiteral>(
                 if (nullSort) {
                     const selectionAliasName = `${alias.replace(/\./g, '_')}IsNull`
 
-                    queryBuilder.addSelect(
-                        `${alias} ${nullSort}`,
-                        selectionAliasName
-                    )
+                    queryBuilder.addSelect(`${alias} ${nullSort}`, selectionAliasName)
 
                     queryBuilder.addOrderBy(selectionAliasName)
                 }
 
                 queryBuilder.addOrderBy(alias, order[1])
             } else {
-                queryBuilder.addOrderBy(
-                    alias,
-                    order[1],
-                    nullSort as 'NULLS FIRST' | 'NULLS LAST' | undefined
-                )
+                queryBuilder.addOrderBy(alias, order[1], nullSort as 'NULLS FIRST' | 'NULLS LAST' | undefined)
             }
         }
     }
