@@ -930,9 +930,9 @@ export async function paginate<T extends ObjectLiteral>(
                 queryBuilder
             )
 
-            if ((isVirtualProperty && virtualQuery && !isMySqlOrMariaDb) || isJsonbPath) {
-                let subqueryExpr: string
+            let subqueryExpr: string | undefined
 
+            if ((isVirtualProperty && virtualQuery && !isMySqlOrMariaDb) || isJsonbPath) {
                 if (isJsonbPath && dbType === 'postgres') {
                     const jsonbExpression = buildJsonbPathExpression(queryBuilder, columnProperties.column)
 
@@ -972,9 +972,10 @@ export async function paginate<T extends ObjectLiteral>(
 
             if (isMySqlOrMariaDb) {
                 if (nullSort) {
+                    const nullExpr = subqueryExpr ?? alias
                     const selectionAliasName = `${alias.replace(/\./g, '_')}IsNull`
 
-                    queryBuilder.addSelect(`${alias} ${nullSort}`, selectionAliasName)
+                    queryBuilder.addSelect(`${nullExpr} ${nullSort}`, selectionAliasName)
 
                     queryBuilder.addOrderBy(selectionAliasName)
                 }

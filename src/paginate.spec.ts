@@ -1023,27 +1023,26 @@ describe('paginate', () => {
         })
 
         it('should sort by a JSONB path matched by a wildcard', async () => {
-            const config: PaginateConfig<CatHairEntity> = {
-                sortableColumns: ['id', 'metadata.*'],
+            const config: PaginateConfig<CatHomeEntity> = {
+                sortableColumns: ['id', 'config.*'],
             }
 
             const query: PaginateQuery = {
                 path: '',
-                sortBy: [['metadata.length', 'ASC']],
+                sortBy: [['config.fontsize', 'ASC']],
             }
 
-            const result = await paginate<CatHairEntity>(query, catHairRepo, config)
+            const result = await paginate<CatHomeEntity>(query, catHomeRepo, config)
 
-            expect(result.meta.sortBy).toStrictEqual([['metadata.length', 'ASC']])
+            expect(result.meta.sortBy).toStrictEqual([['config.fontsize', 'ASC']])
 
-            const values = result.data.map((catHair) => catHair.metadata?.length ?? null)
+            const values = result.data.map((catHair) => catHair.config?.fontsize ?? null)
 
             const sortedValues = [...values].sort((a, b) => {
                 if (a === null && b === null) return 0
                 if (a === null) return 1
                 if (b === null) return -1
 
-                // Numeric JSONB values are now cast to numeric in SQL, so sort mathematically
                 return a - b
             })
 
@@ -1083,6 +1082,7 @@ describe('paginate', () => {
             const config: PaginateConfig<CatEntity> = {
                 sortableColumns: ['home.config.*'],
                 relations: ['home'],
+                nullSort: 'last',
             }
 
             const query: PaginateQuery = {
