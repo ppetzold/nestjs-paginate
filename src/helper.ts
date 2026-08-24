@@ -254,6 +254,7 @@ export interface JsonbPathResolution {
     jsonbColumn: string
     /** Key path inside the JSON value (may be empty for a top-level JSONB filter) */
     jsonPath: string[]
+    column?: string
 }
 
 /**

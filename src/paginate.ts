@@ -229,9 +229,59 @@ function isWildcardColumn(column: string, pattern: string): boolean {
     return prefix.length > 0 && column.startsWith(`${prefix}.`)
 }
 
+function isValidRelationWildcard<T>(
+    column: string,
+    pattern: string,
+    queryBuilder: SelectQueryBuilder<T>
+): boolean {
+    const relationPath = pattern.slice(0, -2).split('.')
+    const columnParts = column.split('.')
+
+    if (columnParts.length <= relationPath.length) {
+        return false
+    }
+
+    if (!relationPath.every((part, index) => columnParts[index] === part)) {
+        return false
+    }
+
+    let metadata = queryBuilder.expressionMap.mainAlias.metadata
+
+    for (const relation of relationPath) {
+        const relationMetadata = metadata.findRelationWithPropertyPath(relation)
+
+        if (!relationMetadata) {
+            return false
+        }
+
+        metadata = relationMetadata.inverseEntityMetadata
+    }
+
+    const remaining = columnParts.slice(relationPath.length)
+
+    for (const relation of remaining.slice(0, -1)) {
+        const relationMetadata = metadata.findRelationWithPropertyPath(relation)
+
+        if (!relationMetadata) {
+            return false
+        }
+
+        metadata = relationMetadata.inverseEntityMetadata
+    }
+
+    const propertyName = remaining.at(-1)
+
+    return (
+        propertyName !== undefined &&
+        metadata.columns.some(
+            (columnMetadata) =>
+                columnMetadata.propertyName === propertyName
+        )
+    )
+}
+
 function isWildcardSortableColumn<T>(
     column: string,
-    // eslint-disable-next-line @typescript-eslint/ban-types
     sortableColumns: (Column<T> | (string & {}))[],
     queryBuilder: SelectQueryBuilder<T>
 ): boolean {
@@ -245,14 +295,12 @@ function isWildcardSortableColumn<T>(
 
     const patternString = String(pattern)
 
-    // JSONB wildcard
     const jsonbResolution = resolveJsonbPath(queryBuilder, column)
 
     if (jsonbResolution.isJsonb) {
         return jsonbResolution.jsonPath.length > 0
     }
 
-    // Relation wildcard
     return isValidRelationWildcard(
         column,
         patternString,
@@ -260,43 +308,15 @@ function isWildcardSortableColumn<T>(
     )
 }
 
-function isValidRelationWildcard<T>(
-    column: string,
-    pattern: string,
-    queryBuilder: SelectQueryBuilder<T>
-): boolean {
-    const relationPath = pattern.slice(0, -2).split('.')
-    let metadata = queryBuilder.expressionMap.mainAlias.metadata
-
-    for (const relation of relationPath) {
-        const relationMetadata = metadata.findRelationWithPropertyPath(relation)
-        if (!relationMetadata) return false
-        metadata = relationMetadata.inverseEntityMetadata
-    }
-
-    const remaining = column.split('.').slice(relationPath.length)
-    for (const relation of remaining.slice(0, -1)) {
-        const relationMetadata = metadata.findRelationWithPropertyPath(relation)
-        if (!relationMetadata) return false
-        metadata = relationMetadata.inverseEntityMetadata
-    }
-
-    const propertyName = remaining.at(-1)!
-    return metadata.columns.some((col) => col.propertyName === propertyName)
-}
-
 function isSortableColumn<T>(
     column: string,
-    // eslint-disable-next-line @typescript-eslint/ban-types
     sortableColumns: (Column<T> | (string & {}))[],
     queryBuilder: SelectQueryBuilder<T>
 ): boolean {
-    // Existing exact-column behavior.
     if (isEntityKey(sortableColumns as Column<T>[], column)) {
         return true
     }
 
-    // Wildcard behavior.
     return isWildcardSortableColumn(
         column,
         sortableColumns,
@@ -550,11 +570,11 @@ export async function paginate<T extends ObjectLiteral>(
     if (query.sortBy) {
         for (const order of query.sortBy) {
             const [column, direction] = order
+
             if (!['ASC', 'DESC'].includes(direction)) {
                 continue
             }
-            // A polymorphic group (e.g. `colA~colB`) is valid only when every
-            // column in the group is sortable.
+
             if (Array.isArray(column)) {
                 if (
                     column.length > 0 &&
@@ -893,6 +913,50 @@ export async function paginate<T extends ObjectLiteral>(
             const jsonbResolution = resolveJsonbPath(queryBuilder, columnProperties.column)
             const isJsonbPath = jsonbResolution.isJsonb && jsonbResolution.jsonPath.length > 0
 
+            const buildJsonbPathExpression = (
+                queryBuilder: SelectQueryBuilder<T>,
+                column: string
+            ): string | undefined => {
+                const resolution = resolveJsonbPath(queryBuilder, column)
+
+                if (!resolution.isJsonb || resolution.jsonPath.length === 0) {
+                    return undefined
+                }
+
+                if (dbType !== 'postgres') {
+                    return undefined
+                }
+
+                const fullJsonbPath = [
+                    ...(resolution.relationPath || []),
+                    resolution.jsonbColumn,
+                ].join('.')
+
+                const baseProperties = getPropertiesByColumnName(fullJsonbPath)
+
+                const isRelation = checkIsRelation(
+                    queryBuilder,
+                    baseProperties.propertyPath
+                )
+
+                const isEmbedded = checkIsEmbedded(
+                    queryBuilder,
+                    baseProperties.propertyPath
+                )
+
+                const baseAlias = fixColumnAlias(
+                    baseProperties,
+                    queryBuilder.alias,
+                    isRelation,
+                    false,
+                    isEmbedded,
+                    undefined,
+                    queryBuilder
+                )
+
+                return `${baseAlias} #>> '{${resolution.jsonPath.join(',')}}'`
+            }
+
             let alias = fixColumnAlias(
                 columnProperties,
                 queryBuilder.alias,
@@ -904,46 +968,79 @@ export async function paginate<T extends ObjectLiteral>(
             )
 
             if ((isVirtualProperty && virtualQuery && !isMySqlOrMariaDb) || isJsonbPath) {
-                let subqueryExpr = isJsonbPath
-                    ? alias
-                    : fixColumnAlias(
-                          columnProperties,
-                          queryBuilder.alias,
-                          isRelation,
-                          isVirtualProperty,
-                          isEmbedded,
-                          virtualQuery,
-                          queryBuilder
-                      )
+                let subqueryExpr: string
 
                 if (isJsonbPath && dbType === 'postgres') {
-                    subqueryExpr = `CASE WHEN (${subqueryExpr}) ~ '^-?[0-9]+(\\.[0-9]+)?$' THEN CAST(${subqueryExpr} AS numeric) ELSE NULL END`
+                    const jsonbExpression = buildJsonbPathExpression(
+                        queryBuilder,
+                        columnProperties.column
+                    )
+
+
+                    if (!jsonbExpression) {
+                        logAndThrowException(
+                            `Unable to resolve JSONB path "${columnProperties.column}".`
+                        )
+                    }
+
+                    subqueryExpr = `
+                        CASE
+                            WHEN ${jsonbExpression} ~ '^-?[0-9]+(\\.[0-9]+)?$'
+                            THEN CAST(${jsonbExpression} AS numeric)
+                            ELSE NULL
+                        END
+                    `
+                } else {
+                    subqueryExpr = fixColumnAlias(
+                        columnProperties,
+                        queryBuilder.alias,
+                        isRelation,
+                        isVirtualProperty,
+                        isEmbedded,
+                        virtualQuery,
+                        queryBuilder
+                    )
                 }
 
                 const rawAlias = isJsonbPath
                     ? `${queryBuilder.alias}_j_${columnProperties.column.replace(
-                          /[^a-zA-Z0-9]/g,
-                          '_'
-                      )}_s`.toLowerCase()
+                        /[^a-zA-Z0-9]/g,
+                        '_'
+                    )}_s`.toLowerCase()
                     : `${alias}_vc_sort`.toLowerCase()
 
-                const vcSortAlias = rawAlias.length > 55 ? rawAlias.slice(0, 55) : rawAlias
+                const vcSortAlias =
+                    rawAlias.length > 55
+                        ? rawAlias.slice(0, 55)
+                        : rawAlias
 
-                queryBuilder.addSelect(subqueryExpr, vcSortAlias)
+                queryBuilder.addSelect(
+                    subqueryExpr,
+                    vcSortAlias
+                )
+
                 alias = vcSortAlias
-            } else if (isVirtualProperty) {
-                alias = quoteColumn(alias, isMySqlOrMariaDb)
             }
 
             if (isMySqlOrMariaDb) {
                 if (nullSort) {
                     const selectionAliasName = `${alias.replace(/\./g, '_')}IsNull`
-                    queryBuilder.addSelect(`${alias} ${nullSort}`, selectionAliasName)
+
+                    queryBuilder.addSelect(
+                        `${alias} ${nullSort}`,
+                        selectionAliasName
+                    )
+
                     queryBuilder.addOrderBy(selectionAliasName)
                 }
+
                 queryBuilder.addOrderBy(alias, order[1])
             } else {
-                queryBuilder.addOrderBy(alias, order[1], nullSort as 'NULLS FIRST' | 'NULLS LAST' | undefined)
+                queryBuilder.addOrderBy(
+                    alias,
+                    order[1],
+                    nullSort as 'NULLS FIRST' | 'NULLS LAST' | undefined
+                )
             }
         }
     }

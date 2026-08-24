@@ -247,21 +247,21 @@ describe('paginate', () => {
                 cat: cats[0],
                 street: null,
                 naptimePillow: null,
-                config: { theme: 'dark', fontSize: 14 },
+                config: { theme: 'dark', fontSize: 14, metadata: { price: 1.99 } },
             }),
             catHomeRepo.create({
                 name: 'House',
                 cat: cats[1],
                 street: 'Mainstreet',
                 naptimePillow: null,
-                config: { theme: 'light', fontSize: 12 },
+                config: { theme: 'light', fontSize: 12, metadata: { price: 1.98 } },
             }),
             catHomeRepo.create({
                 name: 'Mansion',
                 cat: cats[2],
                 street: 'Boulevard Avenue',
                 naptimePillow,
-                config: { theme: 'dark', fontSize: 16, nested: { level: 2, tag: 'vip' } },
+                config: { theme: 'dark', fontSize: 16, nested: { level: 2, tag: 'vip' }, metadata: { price: 10.25 } },
             }),
         ])
         catHomePillows = await catHomePillowRepo.save([
@@ -1077,6 +1077,34 @@ describe('paginate', () => {
             const result = await paginate<CatEntity>(query, catRepo, config)
 
             expect(result.meta.sortBy).toStrictEqual([['bestFriend.bestFriend.name', 'ASC']])
+        })
+
+        it('should sort by a nested JSON value using a wildcard sortable column', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['home.config.*'],
+                relations: ['home']
+            }
+
+            const query: PaginateQuery = {
+                path: '',
+                sortBy: [['home.config.metadata.price', 'ASC']],
+            }
+
+            const result = await paginate<CatEntity>(query, catRepo, config)
+
+            expect(result.meta.sortBy).toStrictEqual([['home.config.metadata.price', 'ASC']])
+
+            const values = result.data.map((cat) => cat?.home?.config?.metadata?.price ?? null)
+
+            const sortedValues = [...values].sort((a, b) => {
+                if (a === null && b === null) return 0
+                if (a === null) return 1
+                if (b === null) return -1
+
+                return a - b
+            })
+
+            expect(values).toStrictEqual(sortedValues)
         })
     })
 
