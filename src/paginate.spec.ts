@@ -87,9 +87,9 @@ describe('paginate', () => {
                     type: 'postgres',
                     host: process.env.DB_HOST || 'localhost',
                     port: +process.env.POSTGRESS_DB_PORT || 5432,
-                    username: 'root',
-                    password: 'pass',
-                    database: 'test',
+                    username: process.env.DB_USERNAME || 'root',
+                    password: process.env.DB_PASSWORD || 'pass',
+                    database: process.env.DB_DATABASE || 'test',
                 })
                 break
             case 'mariadb':
