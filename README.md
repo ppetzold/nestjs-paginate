@@ -241,9 +241,8 @@ const paginateConfig: PaginateConfig<CatEntity> {
    * - It matches one or more descendant segments.
    *
    * Examples:
-   * - `latestTelemetry.snapshot.*` allows sorting by
-   *   `latestTelemetry.snapshot.status` and
-   *   `latestTelemetry.snapshot.vehicle.speed`.
+   * - `home.config.metadata.*` allows sorting by
+   *   `home.config.metadata.price`.
    *
    * Exact entries take precedence over wildcard entries.
    */
@@ -687,25 +686,25 @@ You can use a trailing `.\*` in `sortableColumns` to allow sorting by dynamic de
 
 ```typescript
 const config: PaginateConfig<CatEntity> = {
-  sortableColumns: ['id', 'latestTelemetry.snapshot.*'],
+  sortableColumns: ['id', 'home.config.metadata.*'],
 }
 ```
 
-This allows sorting by any descendant path under latestTelemetry.snapshot, such as:
+This allows sorting by any descendant path under home.config.metadata, such as:
 
 ### Endpoint
 
 ```
-http://localhost:3000/cats?sortBy=latestTelemetry.snapshot.status:ASC
+http://localhost:3000/home?sortBy=home.config.metadata.status:ASC
 ```
 
 or
 
 ```
-http://localhost:3000/cats?sortBy=latestTelemetry.snapshot.vehicle.speed:DESC
+http://localhost:3000/home?sortBy=home.config.metadata.status:DESC
 ```
 
-The wildcard must be the final path segment. It matches one or more descendant segments, so latestTelemetry.snapshot.\* matches latestTelemetry.snapshot.status and latestTelemetry.snapshot.vehicle.speed, but does not match latestTelemetry.snapshot itself.
+The wildcard must be the final path segment. It matches one or more descendant segments, so home.config.metadata.\* matches home.config.metadata.price, but does not match home.config.metadata itself.
 
 Exact sortable column entries take precedence over wildcard entries.
 
