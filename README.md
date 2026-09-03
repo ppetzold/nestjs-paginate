@@ -234,6 +234,17 @@ const paginateConfig: PaginateConfig<CatEntity> {
    * Required: true (must have a minimum of one column)
    * Type: (keyof CatEntity)[]
    * Description: These are the columns that are valid to be sorted by.
+   *
+   * Wildcard support:
+   * - Use a trailing `.*` to allow sorting by descendant paths dynamically.
+   * - The wildcard must be the final path segment.
+   * - It matches one or more descendant segments.
+   *
+   * Examples:
+   * - `home.config.metadata.*` allows sorting by
+   *   `home.config.metadata.price`.
+   *
+   * Exact entries take precedence over wildcard entries.
    */
   sortableColumns: ['id', 'name', 'color'],
 
@@ -667,6 +678,36 @@ Notes and limitations:
 - Polymorphic groups are **not supported with cursor pagination** (the COALESCE value
   cannot be encoded into a cursor) and will throw.
 
+## Wildcard sortable columns
+
+You can use a trailing `.\*` in `sortableColumns` to allow sorting by dynamic descendant paths without explicitly listing every path.
+
+### Code
+
+```typescript
+const config: PaginateConfig<CatEntity> = {
+  sortableColumns: ['id', 'home.config.metadata.*'],
+}
+```
+
+This allows sorting by any descendant path under home.config.metadata, such as:
+
+### Endpoint
+
+```
+http://localhost:3000/home?sortBy=home.config.metadata.status:ASC
+```
+
+or
+
+```
+http://localhost:3000/home?sortBy=home.config.metadata.status:DESC
+```
+
+The wildcard must be the final path segment. It matches one or more descendant segments, so home.config.metadata.\* matches home.config.metadata.price, but does not match home.config.metadata itself.
+
+Exact sortable column entries take precedence over wildcard entries.
+
 ## Filters
 
 Filter operators must be whitelisted per column in `PaginateConfig`.
@@ -850,6 +891,19 @@ Paths inside the JSON value itself can be arbitrarily deep:
 ```
 
 Regardless of nesting depth, the library walks TypeORM entity metadata to determine where the relation chain ends and the JSON key path begins, then builds the correct `@>` containment expression automatically.
+
+### Allowing dynamic JSON keys (and all fields on a relation)
+
+Use a trailing `.*` in `filterableColumns` to allow every descendant path. For example, this permits requests such as `?filter.metadata.snapshot.test.value=$eq:1` without enumerating every possible JSON key:
+
+```typescript
+filterableColumns: {
+  'metadata.*': [FilterOperator.EQ, FilterOperator.IN],
+  'profile.*': true,
+}
+```
+
+The wildcard must be the final path segment. It matches one or more descendant segments, so `profile.*` matches `profile.status` (and deeper paths), but not `profile` itself. Exact entries take precedence over a wildcard entry.
 
 ### `$in` operator on JSONB
 
