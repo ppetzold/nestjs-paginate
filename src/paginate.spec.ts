@@ -5727,6 +5727,42 @@ describe('paginate', () => {
             expect(result.data[0]).not.toHaveProperty('home')
             expect(existsSpy).toHaveBeenCalledTimes(1)
         })
+
+        it('should apply a wildcard filter configuration through a to-one relation', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id'],
+                filterableColumns: {
+                    'home.*': [FilterOperator.IN],
+                },
+            }
+            const query: PaginateQuery = {
+                path: '',
+                filter: { 'home.name': '$in:House,Mansion' },
+            }
+
+            const result = await paginate<CatEntity>(query, catRepo, config)
+
+            expect(result.data.map((cat) => cat.id)).toStrictEqual([cats[1].id, cats[2].id])
+            expect(existsSpy).toHaveBeenCalledTimes(1)
+        })
+
+        it('should apply a wildcard filter configuration through a to-many relation', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id'],
+                filterableColumns: {
+                    'toys.*': [FilterOperator.IN],
+                },
+            }
+            const query: PaginateQuery = {
+                path: '',
+                filter: { 'toys.name': '$in:String,Mouse' },
+            }
+
+            const result = await paginate<CatEntity>(query, catRepo, config)
+
+            expect(result.data.map((cat) => cat.id)).toStrictEqual([cats[0].id, cats[1].id])
+            expect(existsSpy).toHaveBeenCalledTimes(1)
+        })
     })
 
     describe('filter= boolean expression (root columns)', () => {
