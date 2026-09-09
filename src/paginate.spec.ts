@@ -1799,6 +1799,22 @@ describe('paginate', () => {
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=cat.(size.height):DESC')
     })
 
+    it('should return result based on filter on embedded entity on a nested relation', async () => {
+        const config: PaginateConfig<CatHomePillowEntity> = {
+            sortableColumns: ['id'],
+            relations: { home: { cat: true } },
+            filterableColumns: { 'home.cat.(size.height)': true },
+        }
+        const query: PaginateQuery = {
+            path: '',
+            filter: { 'home.cat.(size.height)': '$gte:30' },
+        }
+
+        const result = await paginate<CatHomePillowEntity>(query, catHomePillowRepo, config)
+
+        expect(result.data.map((pillow) => pillow.color)).toStrictEqual(['pink', 'purple', 'teal'])
+    })
+
     it('should return result based on search on embedded entity', async () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id', 'name', 'size.height', 'size.length', 'size.width'],
@@ -2790,6 +2806,43 @@ describe('paginate', () => {
         })
         expect(result.meta.select).toStrictEqual(['id', 'toys.(size.height)'])
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&select=id,toys.(size.height)')
+    })
+
+    it.each([['size.height'], ['(size.height)']])('should return the selected embedded column %s', async (column) => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            select: ['id', column],
+        }
+        const query: PaginateQuery = { path: '' }
+
+        const result = await paginate<CatEntity>(query, catRepo, config)
+
+        result.data.forEach((cat) => {
+            expect(cat.name).not.toBeDefined()
+            expect(cat.size.height).toBeDefined()
+            expect(cat.size.width).not.toBeDefined()
+        })
+    })
+
+    it('should return selected embedded columns on a nested relation', async () => {
+        const config: PaginateConfig<CatHomeEntity> = {
+            sortableColumns: ['id'],
+            select: ['id', 'cat.id', 'cat.toys.id', 'cat.toys.(size.height)'],
+            relations: { cat: { toys: true } },
+        }
+        const query: PaginateQuery = { path: '' }
+
+        const result = await paginate<CatHomeEntity>(query, catHomeRepo, config)
+
+        const home = result.data.find((home) => home.id === catHomes[0].id)
+        expect(home.name).not.toBeDefined()
+        expect(home.cat.id).toBe(cats[0].id)
+        expect(home.cat.name).not.toBeDefined()
+
+        const toy = home.cat.toys.find((toy) => toy.id === catToys[0].id)
+        expect(toy.name).not.toBeDefined()
+        expect(toy.size.height).toBe(catToys[0].size.height)
+        expect(toy.size.width).not.toBeDefined()
     })
 
     it('should only select columns via query which are selected in config', async () => {
@@ -5182,6 +5235,28 @@ describe('paginate', () => {
             expect(result.data[0].toys[0]).toHaveProperty('size.height')
             expect(result.data[0].toys[0]).toHaveProperty('size.width')
             expect(result.data[0].toys[0]).toHaveProperty('size.length')
+        })
+
+        it('should expand nestedRelation.* wildcard to all relation columns', async () => {
+            const query: PaginateQuery = {
+                page: 1,
+                limit: 10,
+                select: ['id', 'cat.id', 'cat.toys.*'],
+                path: '/cat-homes',
+            }
+
+            const result = await paginate(query, catHomeRepo, {
+                sortableColumns: ['id'],
+                select: ['id', 'cat.id', 'cat.toys.*'],
+                relations: { cat: { toys: true } },
+            })
+
+            const toy = result.data[0].cat.toys[0]
+            expect(toy).toHaveProperty('id')
+            expect(toy).toHaveProperty('name')
+            expect(toy).toHaveProperty('size.height')
+            expect(toy).toHaveProperty('size.width')
+            expect(toy).toHaveProperty('size.length')
         })
 
         it('should handle both * and relation.* wildcards together', async () => {

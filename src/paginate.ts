@@ -935,8 +935,17 @@ export async function paginate<T extends ObjectLiteral>(
         let cols: string[] = selectParams.reduce((cols, currentCol) => {
             const columnProperties = getPropertiesByColumnName(currentCol)
             const isRelation = checkIsRelation(queryBuilder, columnProperties.propertyPath)
+            const isEmbedded = checkIsEmbedded(queryBuilder, columnProperties.propertyPath)
             cols.push(
-                fixColumnAlias(columnProperties, queryBuilder.alias, isRelation, false, false, undefined, queryBuilder)
+                fixColumnAlias(
+                    columnProperties,
+                    queryBuilder.alias,
+                    isRelation,
+                    false,
+                    isEmbedded,
+                    undefined,
+                    queryBuilder
+                )
             )
             return cols
         }, [])
