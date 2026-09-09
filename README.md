@@ -549,6 +549,35 @@ Quantifiers define how many related rows must satisfy the condition:
 - `$all`: all related rows match the condition
 - `$none`: no related rows match the condition
 
+### Filtering on presence or absence of a relation
+
+Filtering the relation _itself_, rather than one of its columns, tests whether the related rows exist
+at all. A relation column carries no value to compare, so `$any` and `$none` are the only filters it
+accepts — this works for **to-one and to-many relations alike**:
+
+```url
+GET /cats?filter.home=$none          # cats that have no home
+GET /cats?filter.home=$any           # cats that have a home
+GET /cats?filter.toys=$none          # cats that own no toys
+```
+
+Whitelist the quantifier like any other operator:
+
+```typescript
+const config: PaginateConfig<CatEntity> = {
+  sortableColumns: ['id'],
+  filterableColumns: {
+    home: [FilterQuantifier.NONE, FilterQuantifier.ANY],
+  },
+}
+```
+
+Anything else on a relation column — `$null`, `$eq:5`, or a quantifier carrying a value such as
+`$none:red` — is rejected (a `400` when `throwOnInvalidFilter` is set, otherwise the filter is
+dropped). In particular, `filter.home=$null` is **not** a way to select rows without a home; use
+`$none`. To test a *column* of a related row for null, name the column: `filter.home.street=$null`
+selects cats whose home has no street (and therefore excludes cats with no home at all).
+
 ### Examples
 
 Assume `CatEntity` has a one‑to‑many relation `toys: CatToyEntity[]` where `CatToyEntity` has a string column `name`.
