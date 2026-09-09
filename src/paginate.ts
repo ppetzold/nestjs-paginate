@@ -34,6 +34,8 @@ import {
     getQueryUrlComponents,
     isDateColumnType,
     isEntityKey,
+    isOrderableColumn,
+    needsJsonbSortCast,
     isFindOperator,
     isISODate,
     isNil,
@@ -468,11 +470,15 @@ export async function paginate<T extends ObjectLiteral>(
             }
             // A polymorphic group (e.g. `colA~colB`) is valid only when every
             // column in the group is sortable.
+            // A column that names no single value (a relation, a `json` blob) cannot be ordered
+            // by: TypeORM would compile it to SQL the database rejects. Drop it like any other
+            // unsortable column rather than emit a query that cannot run.
+            const sortable = (c: string) => isEntityKey(config.sortableColumns, c) && isOrderableColumn(metadata, c)
             if (Array.isArray(column)) {
-                if (column.length > 0 && column.every((c) => isEntityKey(config.sortableColumns, c))) {
+                if (column.length > 0 && column.every(sortable)) {
                     sortBy.push(order as Order<T>)
                 }
-            } else if (isEntityKey(config.sortableColumns, column)) {
+            } else if (sortable(column)) {
                 sortBy.push(order as Order<T>)
             }
         }
@@ -825,6 +831,23 @@ export async function paginate<T extends ObjectLiteral>(
                 alias = vcSortAlias
             } else if (isVirtualProperty) {
                 alias = quoteColumn(alias, isMySqlOrMariaDb)
+            }
+
+            if (!Array.isArray(order[0]) && needsJsonbSortCast(queryBuilder, order[0] as string)) {
+                // Select the cast expression under an alias and order by that, the way a virtual or
+                // jsonb-path sort does. Ordering by the expression itself would not survive
+                // pagination: `take` wraps the query in a DISTINCT subquery, and the query builder
+                // resolves each ORDER BY back to a selected column — an identifier it did not
+                // escape itself is not one it can find ("__root" alias was not found).
+                const escape = (identifier: string) => queryBuilder.connection.driver.escape(identifier)
+                const separator = alias.indexOf('.')
+                const quoted =
+                    separator === -1
+                        ? escape(alias)
+                        : `${escape(alias.slice(0, separator))}.${escape(alias.slice(separator + 1))}`
+                const jsonSortAlias = `${alias.replace(/[^a-zA-Z0-9]/g, '_')}_json_sort`.toLowerCase()
+                queryBuilder.addSelect(`${quoted}::jsonb`, jsonSortAlias)
+                alias = jsonSortAlias
             }
 
             if (isMySqlOrMariaDb) {
