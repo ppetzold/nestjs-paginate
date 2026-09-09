@@ -42,6 +42,16 @@ import {
 import { EmbeddedMetadata } from 'typeorm/metadata/EmbeddedMetadata'
 import { RelationMetadata } from 'typeorm/metadata/RelationMetadata'
 import { addRelationsFromSchema } from './paginate'
+import {
+    buildDistanceExpression,
+    DistanceColumnConfig,
+    distanceColumnStem,
+    isDistanceColumn,
+    parseDistanceColumn,
+} from './distance'
+
+/** Per-column distance configuration, keyed by the name used in `<name>:$dist:lat,lng`. */
+export type DistanceColumns = Record<string, DistanceColumnConfig>
 
 export enum FilterOperator {
     EQ = '$eq',
@@ -206,6 +216,16 @@ export function generatePredicateCondition(
     ) as WherePredicateOperator
 }
 
+/** Looks up the `DistanceColumnConfig` for a distance column reference, throwing if unconfigured. */
+function resolveDistanceConfig(distanceColumns: DistanceColumns | undefined, column: string): DistanceColumnConfig {
+    const { name } = parseDistanceColumn(column)
+    const config = distanceColumns?.[name]
+    if (!config) {
+        throw new BadRequestException(`No 'distanceColumns' config for distance column "${name}".`)
+    }
+    return config
+}
+
 /**
  * Validates the parts of a polymorphic `a~b` column and left-joins any to-one relation parts
  * (without selecting them). Must run on the main query builder — joins cannot be added from
@@ -275,23 +295,31 @@ export function addWhereCondition<T>(
     qb: SelectQueryBuilder<T>,
     column: string,
     filter: ColumnFilters,
+    distanceColumns?: DistanceColumns,
     paramKeySuffix = ''
 ) {
-    const isPolymorphic = column.includes('~')
+    // A distance column (`name:$dist:lat,lng`) resolves to a computed scalar expression and a
+    // polymorphic column (`a~b`) to a COALESCE across columns; both bypass entity-column resolution
+    // and apply the ordinary value-side operator ($lt, $btw, …) against the derived expression.
+    const distance = isDistanceColumn(column)
+    const isPolymorphic = column.includes('~') && !distance
+    const isDerived = distance || isPolymorphic
     const columnProperties = getPropertiesByColumnName(column)
-    const { isVirtualProperty, query: virtualQuery } = isPolymorphic
+    const { isVirtualProperty, query: virtualQuery } = isDerived
         ? { isVirtualProperty: false, query: undefined }
         : extractVirtualProperty(qb, columnProperties)
-    const isRelation = !isPolymorphic && checkIsRelation(qb, columnProperties.propertyPath)
-    const isEmbedded = !isPolymorphic && checkIsEmbedded(qb, columnProperties.propertyPath)
-    const isArray = !isPolymorphic && checkIsArray(qb, columnProperties.propertyName)
+    const isRelation = !isDerived && checkIsRelation(qb, columnProperties.propertyPath)
+    const isEmbedded = !isDerived && checkIsEmbedded(qb, columnProperties.propertyPath)
+    const isArray = !isDerived && checkIsArray(qb, columnProperties.propertyName)
 
-    const alias = isPolymorphic
+    const alias = distance
+        ? buildDistanceExpression(qb, resolveDistanceConfig(distanceColumns, column), parseDistanceColumn(column))
+        : isPolymorphic
         ? buildPolymorphicCoalesce(qb, column)
         : fixColumnAlias(columnProperties, qb.alias, isRelation, isVirtualProperty, isEmbedded, virtualQuery, qb)
 
-    // `~` is not a valid parameter-name character, so sanitise it for polymorphic columns.
-    const paramColumn = isPolymorphic ? column.replace(/[^a-zA-Z0-9_]/g, '_') : columnProperties.column
+    // `:$dist:`, `,` and `~` are not valid parameter-name characters, so sanitise for derived columns.
+    const paramColumn = isDerived ? column.replace(/[^a-zA-Z0-9_]/g, '_') : columnProperties.column
 
     filter[column].forEach((columnFilter: Filter, index: number) => {
         // The suffix keeps parameter names unique when the same column appears in several
@@ -419,13 +447,17 @@ export function parseFilter<T>(
         return {}
     }
     for (const column of Object.keys(query.filter)) {
-        if (!(column in filterableColumns)) {
+        // A distance column (`name:$dist:lat,lng`) is whitelisted by its stem (`name:$dist`); the
+        // origin varies per request so it can't be listed verbatim.
+        const distance = isDistanceColumn(column)
+        const allowKey = distance ? distanceColumnStem(column) : column
+        if (!(allowKey in filterableColumns)) {
             if (throwOnInvalidFilter) {
                 throw new BadRequestException(`Column '${column}' is not filterable`)
             }
             continue
         }
-        const allowedOperators = filterableColumns[column]
+        const allowedOperators = filterableColumns[allowKey]
         const input = query.filter[column]
         const statements = !Array.isArray(input) ? [input] : input
         for (const raw of statements) {
@@ -480,10 +512,16 @@ export function parseFilter<T>(
                 findOperator: undefined,
             }
 
-            const fixValue = fixColumnFilterValue(column, qb)
+            // Distance columns compare a computed metre value, so coerce to Number; their colon
+            // syntax has no entity metadata to classify and is never a JSONB path.
+            const fixValue = distance
+                ? (value: string) => (value != null && !isNaN(Number(value)) ? Number(value) : value)
+                : fixColumnFilterValue(column, qb)
 
             const columnProperties = getPropertiesByColumnName(column)
-            const jsonbResolution = resolveJsonbPath(qb, columnProperties.column)
+            const jsonbResolution = distance
+                ? { isJsonb: false as const, relationPath: [], jsonbColumn: '', jsonPath: [] }
+                : resolveJsonbPath(qb, columnProperties.column)
 
             switch (token.operator) {
                 case FilterOperator.BTW:
@@ -749,7 +787,8 @@ export function addFilter<T>(
         [column: string]: (FilterOperator | FilterSuffix | FilterQuantifier)[] | true
     },
     opts: AddFilterOptions = {},
-    throwOnInvalidFilter = false
+    throwOnInvalidFilter = false,
+    distanceColumns?: DistanceColumns
 ) {
     const { subFilter = false } = opts
     const filter = parseFilter(query, filterableColumns, qb, throwOnInvalidFilter)
@@ -760,7 +799,7 @@ export function addFilter<T>(
         if (key.includes('~')) preparePolymorphicColumn(qb, key)
     }
 
-    addDirectFilters(qb, filter, subFilter)
+    addDirectFilters(qb, filter, subFilter, distanceColumns)
     addToManySubFilters(qb, filter, query, filterableColumns, opts)
 
     const columnJoinMethods: ColumnJoinMethods = {}
@@ -803,7 +842,8 @@ export function addFilterExpression<T>(
     qb: SelectQueryBuilder<T>,
     expression: string,
     filterableColumns?: ExpressionFilterableColumns,
-    maxComplexity?: number
+    maxComplexity?: number,
+    distanceColumns?: DistanceColumns
 ) {
     const ast = normalizeFilterExpression(parseFilterExpression(expression, maxComplexity))
     // Join the relation parts of any polymorphic `a~b` leaves up front (joins can't be added from
@@ -811,7 +851,7 @@ export function addFilterExpression<T>(
     for (const column of collectLeafColumns(ast)) {
         if (column.includes('~')) preparePolymorphicColumn(qb, column)
     }
-    qb.andWhere(compileFilterExpression(ast, filterableColumns, { next: 0 }))
+    qb.andWhere(compileFilterExpression(ast, filterableColumns, { next: 0 }, distanceColumns))
 }
 
 function collectLeafColumns(node: NormalizedFilterExpression): string[] {
@@ -821,14 +861,19 @@ function collectLeafColumns(node: NormalizedFilterExpression): string[] {
 function compileFilterExpression(
     node: NormalizedFilterExpression,
     filterableColumns: ExpressionFilterableColumns | undefined,
-    counter: { next: number }
+    counter: { next: number },
+    distanceColumns?: DistanceColumns
 ): Brackets {
     if (node.type === 'leaf') {
         const leafId = counter.next++
-        return new Brackets((qb: SelectQueryBuilder<any>) => applyExpressionLeaf(qb, node, filterableColumns, leafId))
+        return new Brackets((qb: SelectQueryBuilder<any>) =>
+            applyExpressionLeaf(qb, node, filterableColumns, leafId, distanceColumns)
+        )
     }
     // Compile children eagerly so each leaf gets a stable id and unique parameter names.
-    const childBrackets = node.children.map((child) => compileFilterExpression(child, filterableColumns, counter))
+    const childBrackets = node.children.map((child) =>
+        compileFilterExpression(child, filterableColumns, counter, distanceColumns)
+    )
     return new Brackets((qb: SelectQueryBuilder<any>) => {
         childBrackets.forEach((childBracket, index) => {
             if (index === 0 || node.type === 'and') {
@@ -844,13 +889,14 @@ function applyExpressionLeaf(
     qb: SelectQueryBuilder<any>,
     leaf: { column: string; value: string; negated: boolean },
     filterableColumns: ExpressionFilterableColumns | undefined,
-    leafId: number
+    leafId: number,
+    distanceColumns?: DistanceColumns
 ) {
     const metadata = qb.expressionMap.mainAlias.metadata
 
-    // Polymorphic `a~b` columns COALESCE across columns and are applied as a direct condition
+    // Polymorphic `a~b` and distance (`name:$dist:…`) columns are applied as direct conditions
     // (handled by addWhereCondition below), never as an EXISTS.
-    if (!leaf.column.includes('~') && findFirstRelationship(leaf.column, metadata)) {
+    if (!leaf.column.includes('~') && !isDistanceColumn(leaf.column) && findFirstRelationship(leaf.column, metadata)) {
         // A relation leaf is a correlated EXISTS; its negation is NOT EXISTS, expressed with the
         // $none quantifier. addFilter (top level) routes the relation through the EXISTS builder.
         let value = leaf.value
@@ -877,23 +923,35 @@ function applyExpressionLeaf(
                 filter.findOperator = Not(filter.findOperator)
             }
         }
-        addWhereCondition(qb, key, columnFilters, `_e${leafId}`)
+        addWhereCondition(qb, key, columnFilters, distanceColumns, `_e${leafId}`)
     }
 }
 
-export function addDirectFilters<T>(qb: SelectQueryBuilder<T>, filter: ColumnFilters, subFilter = false) {
+export function addDirectFilters<T>(
+    qb: SelectQueryBuilder<T>,
+    filter: ColumnFilters,
+    subFilter = false,
+    distanceColumns?: DistanceColumns
+) {
     const metadata = qb.expressionMap.mainAlias.metadata
 
-    // Top level: only root/embedded/polymorphic columns are direct WHERE clauses; every relation
-    // filter becomes an EXISTS subquery. Inside a subquery, to-one relations are joined locally and
-    // stay direct, and only to-many relations are lifted into nested EXISTS.
+    // Top level: only root/embedded/polymorphic/distance columns are direct WHERE clauses; every
+    // relation filter becomes an EXISTS subquery. Inside a subquery, to-one relations are joined
+    // locally and stay direct, and only to-many relations are lifted into nested EXISTS. Distance
+    // columns are always direct (they compare a computed scalar, never a relation).
     const findRelation = subFilter ? findFirstToManyRelationship : findFirstRelationship
-    const directColumns = Object.keys(filter).filter((key) => key.includes('~') || !findRelation(key, metadata))
+    const directColumns = Object.keys(filter).filter(
+        (key) => key.includes('~') || isDistanceColumn(key) || !findRelation(key, metadata)
+    )
 
     // Columns are ANDed; each is wrapped in its own brackets so a column's own OR group
     // (e.g. a JSONB `$in` expansion) stays self-contained.
     for (const column of directColumns) {
-        qb.andWhere(new Brackets((bracket: SelectQueryBuilder<T>) => addWhereCondition(bracket, column, filter)))
+        qb.andWhere(
+            new Brackets((bracket: SelectQueryBuilder<T>) =>
+                addWhereCondition(bracket, column, filter, distanceColumns)
+            )
+        )
     }
 }
 

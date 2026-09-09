@@ -30,9 +30,13 @@ export interface PaginateQuery {
 const singleSplit = (param: string, res: any[]) => res.push(param)
 
 const multipleSplit = (param: string, res: any[]) => {
-    const items = param.split(':')
-    if (items.length === 2) {
-        res.push(items as [string, string])
+    // Split on the LAST colon so a column reference may itself contain colons (e.g. a
+    // `name:$dist:lat,lng` distance column) while the trailing `:DIRECTION` is still peeled off.
+    // Colons never occur in plain column paths (those use `.`/`~`), so this is a safe superset of
+    // the previous exact-two-parts rule.
+    const idx = param.lastIndexOf(':')
+    if (idx > 0) {
+        res.push([param.slice(0, idx), param.slice(idx + 1)] as [string, string])
     }
 }
 

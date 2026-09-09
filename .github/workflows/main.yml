@@ -17,7 +17,8 @@ jobs:
 
         services:
             postgres:
-                image: postgres:latest
+                # PostGIS image (a superset of stock postgres) so the $dist PostGIS strategy is tested.
+                image: postgis/postgis:16-3.4
                 env:
                     POSTGRES_USER: root
                     POSTGRES_PASSWORD: pass
