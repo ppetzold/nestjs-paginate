@@ -18,6 +18,7 @@ export const ApiOkPaginatedResponse = <DTO extends Type<unknown> | string>(
                 allOf: [
                     { $ref: getSchemaPath(PaginatedDocumented) },
                     {
+                        required: ['data', 'meta'],
                         properties: {
                             data: {
                                 type: 'array',
