@@ -79,7 +79,8 @@ export type RelationColumn<T> = Extract<
     }[Column<T>]
 >
 
-export type Order<T> = [Column<T> | Column<T>[], 'ASC' | 'DESC']
+// eslint-disable-next-line @typescript-eslint/ban-types
+export type Order<T> = [Column<T> | Column<T>[] | (string & {}), 'ASC' | 'DESC']
 export type SortBy<T> = Order<T>[]
 
 // eslint-disable-next-line @typescript-eslint/ban-types
@@ -89,7 +90,8 @@ export type RelationSchemaInput<T = any> = FindOptionsRelations<T> | RelationCol
 // eslint-disable-next-line @typescript-eslint/ban-types
 export type RelationSchema<T = any> = { [relation in Column<T> | (string & {})]: true }
 
-export function isEntityKey<T>(entityColumns: Column<T>[], column: string): column is Column<T> {
+// eslint-disable-next-line @typescript-eslint/ban-types
+export function isEntityKey<T>(entityColumns: (Column<T> | (string & {}))[], column: string): column is Column<T> {
     return !!entityColumns.find((c) => c === column)
 }
 
@@ -252,6 +254,7 @@ export interface JsonbPathResolution {
     jsonbColumn: string
     /** Key path inside the JSON value (may be empty for a top-level JSONB filter) */
     jsonPath: string[]
+    column?: string
 }
 
 /**
@@ -259,7 +262,7 @@ export interface JsonbPathResolution {
  * `#>>` path extraction works on both, and TypeORM's `JsonContains` ($eq/$in/$contains)
  * emits `<column> ::jsonb @> :value`, which casts a `json` column to `jsonb` for free.
  */
-export const JSON_COLUMN_TYPES = ['jsonb', 'json']
+export const JSON_COLUMN_TYPES = ['jsonb', 'json', 'simple-json']
 
 /**
  * Walks the dot-separated `column` path through TypeORM entity metadata to determine
@@ -341,17 +344,11 @@ export function fixColumnAlias(
     }
 
     if (jsonbResolution && jsonbResolution.isJsonb) {
-        const baseColumnProperties = getPropertiesByColumnName(
-            [...jsonbResolution.relationPath, jsonbResolution.jsonbColumn].join('.')
-        )
-        const baseAlias = fixColumnAlias(
-            baseColumnProperties,
-            alias,
-            jsonbResolution.relationPath.length > 0,
-            isVirtualProperty,
-            isEmbedded,
-            query
-        )
+        const relationAlias =
+            jsonbResolution.relationPath.length > 0
+                ? `${alias}_${jsonbResolution.relationPath.join('_rel_')}_rel`
+                : alias
+        const baseAlias = `${relationAlias}.${jsonbResolution.jsonbColumn}`
 
         if (jsonbResolution.jsonPath.length === 0) {
             return baseAlias

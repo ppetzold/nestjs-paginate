@@ -108,6 +108,45 @@ type Filter = { quantifier: FilterQuantifier; comparator: FilterComparator; find
 type ColumnFilters = { [columnName: string]: Filter[] }
 type ColumnJoinMethods = { [columnName: string]: JoinMethod }
 
+type FilterableColumns = {
+    [column: string]: (FilterOperator | FilterSuffix | FilterQuantifier)[] | true
+}
+
+/**
+ * Returns the filter configuration for a column. Besides exact matches, a trailing `.*`
+ * matches every descendant path. This is particularly useful for JSON(B) documents with
+ * dynamic keys (`metadata.*`) and relations/embeddeds whose fields should all be exposed
+ * (`profile.*`).
+ *
+ * Only a complete final path segment is treated as a wildcard: `metadata.*` matches
+ * `metadata.foo` and `metadata.foo.bar`, but not `metadata` or `metadataFoo`. A bare
+ * `*` is the relative form used after a relation subquery strips its parent path.
+ */
+export function getFilterableColumn(
+    column: string,
+    filterableColumns?: FilterableColumns
+): FilterableColumns[string] | undefined {
+    if (!filterableColumns) return undefined
+
+    if (Object.prototype.hasOwnProperty.call(filterableColumns, column)) {
+        return filterableColumns[column]
+    }
+
+    for (const [configuredColumn, allowedOperators] of Object.entries(filterableColumns)) {
+        if (configuredColumn === '*' && column.length > 0) {
+            return allowedOperators
+        }
+        if (!configuredColumn.endsWith('.*')) continue
+
+        const prefix = configuredColumn.slice(0, -2)
+        if (prefix === '' ? column.length > 0 : column.startsWith(`${prefix}.`)) {
+            return allowedOperators
+        }
+    }
+
+    return undefined
+}
+
 /**
  * Matches TypeORM named parameters (`:name` and `:...name` spread form) while skipping
  * PostgreSQL cast syntax (`::type`).
@@ -408,9 +447,7 @@ function fixColumnFilterValue<T>(column: string, qb: SelectQueryBuilder<T>, isJs
 
 export function parseFilter<T>(
     query: PaginateQuery,
-    filterableColumns?: {
-        [column: string]: (FilterOperator | FilterSuffix | FilterQuantifier)[] | true
-    },
+    filterableColumns?: FilterableColumns,
     qb?: SelectQueryBuilder<T>,
     throwOnInvalidFilter = false
 ): ColumnFilters {
@@ -419,13 +456,13 @@ export function parseFilter<T>(
         return {}
     }
     for (const column of Object.keys(query.filter)) {
-        if (!(column in filterableColumns)) {
+        const allowedOperators = getFilterableColumn(column, filterableColumns)
+        if (!allowedOperators) {
             if (throwOnInvalidFilter) {
                 throw new BadRequestException(`Column '${column}' is not filterable`)
             }
             continue
         }
-        const allowedOperators = filterableColumns[column]
         const input = query.filter[column]
         const statements = !Array.isArray(input) ? [input] : input
         for (const raw of statements) {

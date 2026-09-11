@@ -1,4 +1,11 @@
-import { FilterComparator, parseFilter, parseFilterToken, TYPEORM_PARAM_REGEX } from './filter'
+import {
+    FilterComparator,
+    FilterOperator,
+    getFilterableColumn,
+    parseFilter,
+    parseFilterToken,
+    TYPEORM_PARAM_REGEX,
+} from './filter'
 import { isISODate } from './helper'
 
 function createQueryBuilderMock(columns: Array<{ propertyName: string; type: unknown }>): any {
@@ -30,6 +37,38 @@ describe('parseFilter', () => {
         )
 
         expect((result.age[0].findOperator as any).value).toEqual([1, 2, 3])
+    })
+
+    it('uses a trailing wildcard configuration for descendant fields', () => {
+        const qb = createQueryBuilderMock([])
+
+        const result = parseFilter(
+            { path: '', filter: { 'profile.status': '$eq:active' } },
+            { 'profile.*': true },
+            qb,
+            true
+        )
+
+        expect(result['profile.status']).toHaveLength(1)
+    })
+})
+
+describe('getFilterableColumn', () => {
+    it('matches only descendant paths for a trailing wildcard', () => {
+        const config = { 'metadata.*': true as const }
+
+        expect(getFilterableColumn('metadata.snapshot.test.value', config)).toBe(true)
+        expect(getFilterableColumn('metadata', config)).toBeUndefined()
+        expect(getFilterableColumn('metadataValue', config)).toBeUndefined()
+    })
+
+    it('matches the relative wildcard used inside a relation subquery', () => {
+        expect(getFilterableColumn('status', { '*': true })).toBe(true)
+    })
+
+    it('prefers an exact configuration over a wildcard', () => {
+        const exact = [FilterOperator.IN]
+        expect(getFilterableColumn('metadata.status', { 'metadata.*': true, 'metadata.status': exact })).toBe(exact)
     })
 })
 

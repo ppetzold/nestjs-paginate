@@ -247,21 +247,21 @@ describe('paginate', () => {
                 cat: cats[0],
                 street: null,
                 naptimePillow: null,
-                config: { theme: 'dark', fontSize: 14 },
+                config: { theme: 'dark', fontSize: 14, metadata: { price: 1.99 } },
             }),
             catHomeRepo.create({
                 name: 'House',
                 cat: cats[1],
                 street: 'Mainstreet',
                 naptimePillow: null,
-                config: { theme: 'light', fontSize: 12 },
+                config: { theme: 'light', fontSize: 12, metadata: { price: 1.98 } },
             }),
             catHomeRepo.create({
                 name: 'Mansion',
                 cat: cats[2],
                 street: 'Boulevard Avenue',
                 naptimePillow,
-                config: { theme: 'dark', fontSize: 16, nested: { level: 2, tag: 'vip' } },
+                config: { theme: 'dark', fontSize: 16, nested: { level: 2, tag: 'vip' }, metadata: { price: 10.25 } },
             }),
         ])
         catHomePillows = await catHomePillowRepo.save([
@@ -942,6 +942,292 @@ describe('paginate', () => {
             await expect(paginate<CatEntity>(query, catRepo, config)).rejects.toThrow(
                 'Polymorphic sort groups (using "~") support only plain and relation columns'
             )
+        })
+    })
+
+    describe('wildcard sortable columns (*)', () => {
+        it('should sort by a relation column matched by a wildcard', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id', 'bestFriend.*'],
+                relations: { bestFriend: true },
+            }
+
+            const query: PaginateQuery = {
+                path: '',
+                sortBy: [['bestFriend.age', 'ASC']],
+            }
+
+            const result = await paginate<CatEntity>(query, catRepo, config)
+
+            expect(result.meta.sortBy).toStrictEqual([['bestFriend.age', 'ASC']])
+
+            const nonNullAges = result.data
+                .map((cat) => cat.bestFriend?.age ?? null)
+                .filter((age): age is number => age !== null)
+
+            expect(nonNullAges).toStrictEqual([...nonNullAges].sort((a, b) => a - b))
+        })
+
+        it('should sort by a nested relation column matched by a wildcard', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id', 'bestFriend.bestFriend.*'],
+                relations: {
+                    bestFriend: {
+                        bestFriend: true,
+                    },
+                },
+            }
+
+            const query: PaginateQuery = {
+                path: '',
+                sortBy: [['bestFriend.bestFriend.name', 'ASC']],
+            }
+
+            const result = await paginate<CatEntity>(query, catRepo, config)
+
+            expect(result.meta.sortBy).toStrictEqual([['bestFriend.bestFriend.name', 'ASC']])
+        })
+
+        it('should ignore a relation column that does not exist when using a wildcard', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id', 'bestFriend.*'],
+                relations: { bestFriend: true },
+                defaultSortBy: [['id', 'ASC']],
+            }
+
+            const query: PaginateQuery = {
+                path: '',
+                sortBy: [['bestFriend.doesNotExist', 'ASC']],
+            }
+
+            const result = await paginate<CatEntity>(query, catRepo, config)
+
+            expect(result.meta.sortBy).toStrictEqual([['id', 'ASC']])
+        })
+
+        it('should not treat a different relation path as matching a wildcard', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id', 'bestFriend.*'],
+                relations: { bestFriend: true },
+                defaultSortBy: [['id', 'ASC']],
+            }
+
+            const query: PaginateQuery = {
+                path: '',
+                sortBy: [['nemesis.age', 'ASC']],
+            }
+
+            const result = await paginate<CatEntity>(query, catRepo, config)
+
+            expect(result.meta.sortBy).toStrictEqual([['id', 'ASC']])
+        })
+
+        it('should sort by a JSONB path matched by a wildcard', async () => {
+            const config: PaginateConfig<CatHomeEntity> = {
+                sortableColumns: ['id', 'config.*'],
+            }
+
+            const query: PaginateQuery = {
+                path: '',
+                sortBy: [['config.fontsize', 'ASC']],
+            }
+
+            const result = await paginate<CatHomeEntity>(query, catHomeRepo, config)
+
+            expect(result.meta.sortBy).toStrictEqual([['config.fontsize', 'ASC']])
+
+            const values = result.data.map((catHair) => catHair.config?.fontsize ?? null)
+
+            const sortedValues = [...values].sort((a, b) => {
+                if (a === null && b === null) return 0
+                if (a === null) return 1
+                if (b === null) return -1
+
+                return a - b
+            })
+
+            expect(values).toStrictEqual(sortedValues)
+        })
+
+        it('should ignore a JSONB path that is not matched by the wildcard', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id', 'snapshot.*'],
+                defaultSortBy: [['id', 'ASC']],
+            }
+
+            const query: PaginateQuery = {
+                path: '',
+                sortBy: [['otherField.value', 'ASC']],
+            }
+
+            const result = await paginate<CatEntity>(query, catRepo, config)
+
+            expect(result.meta.sortBy).toStrictEqual([['id', 'ASC']])
+        })
+
+        it('should sort by a deeply nested relation column matched by a wildcard', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id', 'bestFriend.*'],
+                relations: { bestFriend: { bestFriend: true } },
+            }
+
+            const query: PaginateQuery = { path: '', sortBy: [['bestFriend.bestFriend.name', 'ASC']] }
+
+            const result = await paginate<CatEntity>(query, catRepo, config)
+
+            expect(result.meta.sortBy).toStrictEqual([['bestFriend.bestFriend.name', 'ASC']])
+        })
+
+        it('should sort by a nested JSON value using a wildcard sortable column', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['home.config.*'],
+                relations: ['home'],
+                nullSort: 'last',
+            }
+
+            const query: PaginateQuery = {
+                path: '',
+                sortBy: [['home.config.metadata.price', 'ASC']],
+            }
+
+            const result = await paginate<CatEntity>(query, catRepo, config)
+
+            expect(result.meta.sortBy).toStrictEqual([['home.config.metadata.price', 'ASC']])
+
+            const values = result.data.map((cat) => cat?.home?.config?.metadata?.price ?? null)
+
+            const sortedValues = [...values].sort((a, b) => {
+                if (a === null && b === null) return 0
+                if (a === null) return 1
+                if (b === null) return -1
+
+                return a - b
+            })
+
+            expect(values).toStrictEqual(sortedValues)
+        })
+    })
+
+    describe('wildcard searchable columns (*)', () => {
+        it('should search every relation column matched by a wildcard without searchBy', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id'],
+                searchableColumns: ['home.*'],
+                relations: { home: true },
+            }
+            const query: PaginateQuery = {
+                path: '',
+                search: 'Mansion',
+            }
+
+            const result = await paginate<CatEntity>(query, catRepo, config)
+
+            expect(result.data.map((cat) => cat.name)).toStrictEqual(['Shadow'])
+            expect(result.meta.searchBy).toContain('home.name')
+            expect(result.meta.searchBy).not.toContain('home.*')
+        })
+
+        it('should search every embedded column matched by a wildcard without searchBy', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id'],
+                searchableColumns: ['size.*'],
+            }
+            const query: PaginateQuery = {
+                path: '',
+                search: '35',
+            }
+
+            const result = await paginate<CatEntity>(query, catRepo, config)
+
+            expect(result.data.map((cat) => cat.name)).toStrictEqual(['George'])
+            expect(result.meta.searchBy).toEqual(expect.arrayContaining(['size.height', 'size.width', 'size.length']))
+        })
+
+        it('should search the complete JSON value matched by a wildcard without searchBy', async () => {
+            const config: PaginateConfig<CatHomeEntity> = {
+                sortableColumns: ['id'],
+                searchableColumns: ['config.*'],
+            }
+            const query: PaginateQuery = {
+                path: '',
+                search: 'vip',
+            }
+
+            const result = await paginate<CatHomeEntity>(query, catHomeRepo, config)
+
+            expect(result.data.map((home) => home.name)).toStrictEqual(['Mansion'])
+            expect(result.meta.searchBy).toStrictEqual(['config'])
+        })
+
+        it('should allow searchBy to select a concrete JSON path matched by a wildcard', async () => {
+            const config: PaginateConfig<CatHomeEntity> = {
+                sortableColumns: ['id'],
+                searchableColumns: ['config.*'],
+            }
+            const query: PaginateQuery = {
+                path: '',
+                search: 'dark',
+                searchBy: ['config.theme'],
+            }
+
+            const result = await paginate<CatHomeEntity>(query, catHomeRepo, config)
+
+            expect(result.data.map((home) => home.name)).toStrictEqual(['Box', 'Mansion'])
+            expect(result.meta.searchBy).toStrictEqual(['config.theme'])
+        })
+
+        it('should ignore a nonexistent column matched by a wildcard', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id'],
+                searchableColumns: ['home.*'],
+                relations: { home: true },
+            }
+            const query: PaginateQuery = {
+                path: '',
+                search: 'Milo',
+                searchBy: ['home.doesNotExist'],
+            }
+
+            const result = await paginate<CatEntity>(query, catRepo, config)
+
+            expect(result.data).toHaveLength(cats.length)
+            expect(result.meta.searchBy).toStrictEqual([])
+        })
+
+        it('should reject unsafe dynamic JSON paths matched by a wildcard', async () => {
+            const config: PaginateConfig<CatHomeEntity> = {
+                sortableColumns: ['id'],
+                searchableColumns: ['config.*'],
+            }
+            const query: PaginateQuery = {
+                path: '',
+                search: 'dark',
+                searchBy: ["config.theme') OR 1=1 --"],
+            }
+
+            const result = await paginate<CatHomeEntity>(query, catHomeRepo, config)
+
+            expect(result.data).toHaveLength(catHomes.length)
+            expect(result.meta.searchBy).toStrictEqual([])
+        })
+
+        it('should combine exact and expanded searchable columns by default', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id'],
+                searchableColumns: ['name', 'home.*'],
+                relations: { home: true },
+            }
+            const query: PaginateQuery = {
+                path: '',
+                search: 'Milo',
+            }
+
+            const result = await paginate<CatEntity>(query, catRepo, config)
+
+            expect(result.data.map((cat) => cat.name)).toStrictEqual(['Milo'])
+            expect(result.meta.searchBy).toContain('name')
+            expect(result.meta.searchBy).toContain('home.name')
+            expect(result.meta.searchBy).not.toContain('home.*')
         })
     })
 
@@ -5725,6 +6011,42 @@ describe('paginate', () => {
 
             expect(result.data.map((c) => c.id)).toStrictEqual([cats[2].id])
             expect(result.data[0]).not.toHaveProperty('home')
+            expect(existsSpy).toHaveBeenCalledTimes(1)
+        })
+
+        it('should apply a wildcard filter configuration through a to-one relation', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id'],
+                filterableColumns: {
+                    'home.*': [FilterOperator.IN],
+                },
+            }
+            const query: PaginateQuery = {
+                path: '',
+                filter: { 'home.name': '$in:House,Mansion' },
+            }
+
+            const result = await paginate<CatEntity>(query, catRepo, config)
+
+            expect(result.data.map((cat) => cat.id)).toStrictEqual([cats[1].id, cats[2].id])
+            expect(existsSpy).toHaveBeenCalledTimes(1)
+        })
+
+        it('should apply a wildcard filter configuration through a to-many relation', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id'],
+                filterableColumns: {
+                    'toys.*': [FilterOperator.IN],
+                },
+            }
+            const query: PaginateQuery = {
+                path: '',
+                filter: { 'toys.name': '$in:String,Mouse' },
+            }
+
+            const result = await paginate<CatEntity>(query, catRepo, config)
+
+            expect(result.data.map((cat) => cat.id)).toStrictEqual([cats[0].id, cats[1].id])
             expect(existsSpy).toHaveBeenCalledTimes(1)
         })
     })
