@@ -19,6 +19,7 @@ import {
     FilterOperator,
     FilterQuantifier,
     FilterSuffix,
+    translateLegacyFilterToExpression,
 } from './filter'
 import {
     buildOptimizedCountQuery,
@@ -122,6 +123,12 @@ export interface PaginateConfig<T> {
      * nested or very wide expressions. Defaults to 100.
      */
     filterExpressionMaxComplexity?: number
+    /**
+     * When `true`, per-column filters using the legacy `$and:`/`$or:` comparator prefixes
+     * (e.g. `filter.col=$and:Ball`) are automatically translated into a `filter=` boolean
+     * expression before processing. Overrides `defaultTranslateLegacyFilter` from global config.
+     */
+    translateLegacyFilter?: boolean
 }
 
 export enum PaginationLimit {
@@ -698,16 +705,33 @@ export async function paginate<T extends ObjectLiteral>(
     }
 
     let filterJoinMethods = {}
-    if (query.filter) {
-        filterJoinMethods = addFilter(queryBuilder, query, config.filterableColumns, {}, config.throwOnInvalidFilter)
-    }
-    if (query.filterExpression) {
-        addFilterExpression(
-            queryBuilder,
-            query.filterExpression,
-            config.filterableColumns,
-            config.filterExpressionMaxComplexity ?? globalConfig.defaultFilterExpressionMaxComplexity
-        )
+    const shouldTranslateLegacy = config.translateLegacyFilter ?? globalConfig.defaultTranslateLegacyFilter
+    if (query.filter && shouldTranslateLegacy) {
+        const translated = translateLegacyFilterToExpression(query.filter)
+        if (translated) {
+            const maxComplexity =
+                config.filterExpressionMaxComplexity ?? globalConfig.defaultFilterExpressionMaxComplexity
+            const combined = query.filterExpression ? `(${translated}) AND (${query.filterExpression})` : translated
+            addFilterExpression(queryBuilder, combined, config.filterableColumns, maxComplexity)
+        }
+    } else {
+        if (query.filter) {
+            filterJoinMethods = addFilter(
+                queryBuilder,
+                query,
+                config.filterableColumns,
+                {},
+                config.throwOnInvalidFilter
+            )
+        }
+        if (query.filterExpression) {
+            addFilterExpression(
+                queryBuilder,
+                query.filterExpression,
+                config.filterableColumns,
+                config.filterExpressionMaxComplexity ?? globalConfig.defaultFilterExpressionMaxComplexity
+            )
+        }
     }
     const joinMethods = { ...filterJoinMethods, ...config.joinMethods }
 
