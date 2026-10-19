@@ -3278,6 +3278,25 @@ describe('paginate', () => {
             )
         })
 
+        it('with $lte operator and date only includes the whole endpoint date', async () => {
+            const config: PaginateConfig<CatEntity> = {
+                sortableColumns: ['id'],
+                filterableColumns: {
+                    lastVetVisit: [FilterOperator.LTE],
+                },
+            }
+            const query: PaginateQuery = {
+                path: '',
+                filter: {
+                    lastVetVisit: '$lte:2022-12-21',
+                },
+            }
+
+            const result = await paginate<CatEntity>(query, catRepo, config)
+
+            expect(result.data).toStrictEqual([cats[0], cats[1], cats[2]])
+        })
+
         it('with $btw operator', async () => {
             const config: PaginateConfig<CatEntity> = {
                 sortableColumns: ['id'],
