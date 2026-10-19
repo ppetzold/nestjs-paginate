@@ -234,6 +234,17 @@ const paginateConfig: PaginateConfig<CatEntity> {
    * Required: true (must have a minimum of one column)
    * Type: (keyof CatEntity)[]
    * Description: These are the columns that are valid to be sorted by.
+   *
+   * Wildcard support:
+   * - Use a trailing `.*` to allow sorting by descendant paths dynamically.
+   * - The wildcard must be the final path segment.
+   * - It matches one or more descendant segments.
+   *
+   * Examples:
+   * - `home.config.metadata.*` allows sorting by
+   *   `home.config.metadata.price`.
+   *
+   * Exact entries take precedence over wildcard entries.
    */
   sortableColumns: ['id', 'name', 'color'],
 
@@ -258,6 +269,11 @@ const paginateConfig: PaginateConfig<CatEntity> {
    * Type: (keyof CatEntity)[]
    * Description: These columns will be searched through when using the search query
    * param. Limit search scope further by using `searchBy` query param.
+   *
+   * Wildcard support:
+   * - Use a trailing `.*` to search every descendant without requiring `searchBy`.
+   * - Relation and embedded wildcards expand to concrete columns.
+   * - JSON wildcards search the complete JSON value as text.
    */
   searchableColumns: ['name', 'color'],
 
@@ -667,6 +683,61 @@ Notes and limitations:
 - Polymorphic groups are **not supported with cursor pagination** (the COALESCE value
   cannot be encoded into a cursor) and will throw.
 
+## Wildcard sortable columns
+
+You can use a trailing `.\*` in `sortableColumns` to allow sorting by dynamic descendant paths without explicitly listing every path.
+
+### Code
+
+```typescript
+const config: PaginateConfig<CatEntity> = {
+  sortableColumns: ['id', 'home.config.metadata.*'],
+}
+```
+
+This allows sorting by any descendant path under home.config.metadata, such as:
+
+### Endpoint
+
+```
+http://localhost:3000/home?sortBy=home.config.metadata.status:ASC
+```
+
+or
+
+```
+http://localhost:3000/home?sortBy=home.config.metadata.status:DESC
+```
+
+The wildcard must be the final path segment. It matches one or more descendant segments, so home.config.metadata.\* matches home.config.metadata.price, but does not match home.config.metadata itself.
+
+Exact sortable column entries take precedence over wildcard entries.
+
+## Wildcard searchable columns
+
+You can use a trailing `.*` in `searchableColumns` to include every descendant
+in the default global search. A `searchBy` query parameter is not required.
+
+```typescript
+const config: PaginateConfig<CatEntity> = {
+  sortableColumns: ['id'],
+  searchableColumns: ['name', 'home.config.*'],
+  relations: { home: true },
+}
+```
+
+For example, this configuration searches values nested anywhere inside
+`home.config` with a normal search request:
+
+```
+http://localhost:3000/cats?search=dark
+```
+
+The wildcard must be the final path segment. Relation and embedded wildcards
+expand to their concrete scalar columns. JSON/JSONB wildcards search the complete
+JSON value as text, allowing values under dynamic keys to match. Clients may still
+use `searchBy=home.config.theme` to restrict a search to one concrete path.
+
 ## Filters
 
 Filter operators must be whitelisted per column in `PaginateConfig`.
@@ -850,6 +921,19 @@ Paths inside the JSON value itself can be arbitrarily deep:
 ```
 
 Regardless of nesting depth, the library walks TypeORM entity metadata to determine where the relation chain ends and the JSON key path begins, then builds the correct `@>` containment expression automatically.
+
+### Allowing dynamic JSON keys (and all fields on a relation)
+
+Use a trailing `.*` in `filterableColumns` to allow every descendant path. For example, this permits requests such as `?filter.metadata.snapshot.test.value=$eq:1` without enumerating every possible JSON key:
+
+```typescript
+filterableColumns: {
+  'metadata.*': [FilterOperator.EQ, FilterOperator.IN],
+  'profile.*': true,
+}
+```
+
+The wildcard must be the final path segment. It matches one or more descendant segments, so `profile.*` matches `profile.status` (and deeper paths), but not `profile` itself. Exact entries take precedence over a wildcard entry.
 
 ### `$in` operator on JSONB
 
