@@ -382,7 +382,12 @@ function resolveLeafColumnType(qb: SelectQueryBuilder<unknown>, column: string):
     return metadata?.columns?.find((c) => c.propertyName === leaf)?.type
 }
 
-function fixColumnFilterValue<T>(column: string, qb: SelectQueryBuilder<T>, isJsonb = false) {
+function fixColumnFilterValue<T>(
+    column: string,
+    qb: SelectQueryBuilder<T>,
+    isJsonb = false,
+    inclusiveDateUpperBound = false
+) {
     const isPolymorphic = column.includes('~')
     // A polymorphic `a~b` column has no metadata of its own; coerce values using its first part,
     // so e.g. a numeric COALESCE compares numerically on type-strict drivers (SQLite). The first
@@ -394,6 +399,13 @@ function fixColumnFilterValue<T>(column: string, qb: SelectQueryBuilder<T>, isJs
         : extractVirtualProperty(qb, columnProperties).type
 
     return (value: string) => {
+        if (inclusiveDateUpperBound && isDateColumnType(columnType) && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+            const endOfDay = new Date(`${value}T23:59:59.999Z`)
+            if (!Number.isNaN(endOfDay.getTime()) && endOfDay.toISOString().slice(0, 10) === value) {
+                return endOfDay
+            }
+        }
+
         if ((isDateColumnType(columnType) || isJsonb) && isISODate(value)) {
             return new Date(value)
         }
@@ -480,7 +492,7 @@ export function parseFilter<T>(
                 findOperator: undefined,
             }
 
-            const fixValue = fixColumnFilterValue(column, qb)
+            const fixValue = fixColumnFilterValue(column, qb, false, token.operator === FilterOperator.LTE)
 
             const columnProperties = getPropertiesByColumnName(column)
             const jsonbResolution = resolveJsonbPath(qb, columnProperties.column)
