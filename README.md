@@ -851,6 +851,19 @@ Paths inside the JSON value itself can be arbitrarily deep:
 
 Regardless of nesting depth, the library walks TypeORM entity metadata to determine where the relation chain ends and the JSON key path begins, then builds the correct `@>` containment expression automatically.
 
+### Allowing dynamic JSON keys (and all fields on a relation)
+
+Use a trailing `.*` in `filterableColumns` to allow every descendant path. For example, this permits requests such as `?filter.metadata.snapshot.test.value=$eq:1` without enumerating every possible JSON key:
+
+```typescript
+filterableColumns: {
+  'metadata.*': [FilterOperator.EQ, FilterOperator.IN],
+  'profile.*': true,
+}
+```
+
+The wildcard must be the final path segment. It matches one or more descendant segments, so `profile.*` matches `profile.status` (and deeper paths), but not `profile` itself. Exact entries take precedence over a wildcard entry.
+
 ### `$in` operator on JSONB
 
 ```
