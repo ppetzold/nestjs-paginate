@@ -41,6 +41,8 @@ updateGlobalConfig({
   defaultOrigin: undefined,
   defaultLimit: 20,
   defaultMaxLimit: 100,
+  defaultFilterExpressionMaxComplexity: 100,
+  defaultTranslateLegacyFilter: false, // set to true to enable legacy $and:/$or: filter translation globally
 })
 ```
 
@@ -322,6 +324,18 @@ const paginateConfig: PaginateConfig<CatEntity> {
    * are silently ignored.
    */
   throwOnInvalidFilter: false,
+
+  /**
+   * Required: false
+   * Type: boolean
+   * Default: false (inherits defaultTranslateLegacyFilter from global config)
+   * Description: When true, per-column filters using the legacy $and:/$or: comparator
+   * syntax (e.g. filter.col=$and:Ball or filter.col=$or:$eq:7) are automatically
+   * translated into a filter= boolean expression before processing. Useful for
+   * gradually migrating from the old $and/$or multi-filter API. Can be set globally
+   * via updateGlobalConfig({ defaultTranslateLegacyFilter: true }).
+   */
+  translateLegacyFilter: false,
 
   /**
    * Required: false
