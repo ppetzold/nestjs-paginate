@@ -315,6 +315,21 @@ const paginateConfig: PaginateConfig<CatEntity> {
 
   /**
    * Required: false
+   * Type: number
+   * Default: None
+   * Description: Bulk-allow any filtered or sorted column (including relation,
+   * embedded and nested paths) whose dot-path depth is at most this value, without
+   * listing each one in `filterableColumns` or `sortableColumns`. Depth is the number
+   * of dot-separated segments, so `allowDepth: 5` permits `a.b.c.d.e` but rejects
+   * `a.b.c.d.e.f`. Only columns the request actually references (via `filter`, a
+   * `filter=` expression, or `sortBy`) are considered. An explicit `filterableColumns`
+   * entry always wins, so its per-column operator restrictions still apply within the
+   * depth.
+   */
+  allowDepth: 5,
+
+  /**
+   * Required: false
    * Type: boolean
    * Default: false
    * Description: Throw a 400 error when a request uses an unknown filter column
