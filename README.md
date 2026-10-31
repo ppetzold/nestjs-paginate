@@ -995,3 +995,7 @@ The package does not report error reasons in the response bodies. They are inste
 reported as `debug` level [logging](https://docs.nestjs.com/techniques/logger#logger).
 
 Common errors include missing `sortableColumns` or `filterableColumns` (the latter only affects filtering).
+
+## Related projects
+
+- [go-paginate](https://github.com/svyatoslavratov/go-paginate): the same query syntax and `{ data, meta, links }` responses for Go backends (GORM, squirrel/pgx), so a frontend written for nestjs-paginate can talk to a Go service.
