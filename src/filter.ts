@@ -30,6 +30,7 @@ import {
     createRelationSchema,
     extractVirtualProperty,
     fixColumnAlias,
+    getJoinAlias,
     getPropertiesByColumnName,
     isDateColumnType,
     isISODate,
@@ -244,11 +245,12 @@ export function preparePolymorphicColumn(qb: SelectQueryBuilder<any>, column: st
                     `Polymorphic filter groups (using "~") support only to-one relations, not "${part}".`
                 )
             }
-            const joinAlias = `${parentAlias}_${relationName}_rel`
+            const pathAlias = `${parentAlias}_${relationName}_rel`
+            const joinAlias = getJoinAlias(qb, pathAlias)
             if (!qb.expressionMap.joinAttributes.some((attr) => attr.alias?.name === joinAlias)) {
-                qb.leftJoin(`${parentAlias}.${relationName}`, joinAlias)
+                qb.leftJoin(`${getJoinAlias(qb, parentAlias)}.${relationName}`, joinAlias)
             }
-            parentAlias = joinAlias
+            parentAlias = pathAlias
             metadata = relation.inverseEntityMetadata
         }
     }
@@ -962,8 +964,8 @@ export function addToManySubFilters<T>(
         // Build and correlate the single EXISTS subquery for this path. `pathSlug` keeps its
         // aliases and parameters from colliding with other relation paths in the same query.
         const buildExistsQb = () => {
-            const relAlias = (name: string, depth: number) => `_rel_${name}_${depth}_${pathSlug}`
-            const juncAlias = (name: string, depth: number) => `_junc_${name}_${depth}_${pathSlug}`
+            const relAlias = (name: string, depth: number) => getJoinAlias(qb, `_rel_${name}_${depth}_${pathSlug}`)
+            const juncAlias = (name: string, depth: number) => getJoinAlias(qb, `_junc_${name}_${depth}_${pathSlug}`)
             const leafAlias = relAlias(relationPath[relationPath.length - 1][0], relationPath.length - 1)
             const existsQb = qb.connection.createQueryBuilder(existsMetadata.target as any, leafAlias)
 
