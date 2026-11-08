@@ -28,6 +28,7 @@ import {
     createRelationSchema,
     extractVirtualProperty,
     fixColumnAlias,
+    getJoinAlias,
     getMissingPrimaryKeyColumns,
     getPaddedExpr,
     getPropertiesByColumnName,
@@ -193,8 +194,14 @@ function flattenWhereAndTransform<T>(
                                   .map((p) => p + '_rel')
                                   .join('_')}`
                     const tableName = pathSplit[pathSplit.length - 1]
-                    const tableAliasWithProperty = `${queryBuilder.alias}${fullPath}.${tableName}`
-                    const joinTableAlias = `${queryBuilder.alias}${fullPath}_${tableName}_rel`
+                    const tableAliasWithProperty = `${getJoinAlias(
+                        queryBuilder,
+                        `${queryBuilder.alias}${fullPath}`
+                    )}.${tableName}`
+                    const joinTableAlias = getJoinAlias(
+                        queryBuilder,
+                        `${queryBuilder.alias}${fullPath}_${tableName}_rel`
+                    )
 
                     const baseTableAlias = allJoinedTables[joinTableAlias]
 
@@ -1173,7 +1180,10 @@ export function addRelationsFromSchema<T>(
         Object.keys(relations).forEach((relationName) => {
             const joinMethod =
                 joinMethods[parentRelation ? `${parentRelation}.${relationName}` : relationName] ?? defaultJoinMethod
-            const joinAlias = `${alias ?? prefix}_${relationName}_rel`
+            // The path-derived alias is kept for building the aliases of nested relations; the join
+            // itself uses the (possibly shortened) alias that fixColumnAlias resolves to.
+            const pathAlias = `${alias ?? prefix}_${relationName}_rel`
+            const joinAlias = getJoinAlias(queryBuilder, pathAlias)
 
             // A prior step (e.g. a polymorphic `~` filter, which left-joins its relation parts on
             // the main query builder before relations are loaded) may have already joined this
@@ -1188,7 +1198,7 @@ export function addRelationsFromSchema<T>(
                     queryBuilder.addSelect(joinAlias)
                 }
             } else {
-                queryBuilder[joinMethod](`${alias ?? prefix}.${relationName}`, joinAlias)
+                queryBuilder[joinMethod](`${getJoinAlias(queryBuilder, alias ?? prefix)}.${relationName}`, joinAlias)
             }
 
             // Check whether this is a non-terminal node with a relation schema to load
@@ -1201,7 +1211,7 @@ export function addRelationsFromSchema<T>(
                 createQueryBuilderRelations(
                     relationName,
                     relationSchema,
-                    `${alias ?? prefix}_${relationName}_rel`,
+                    pathAlias,
                     parentRelation ? `${parentRelation}.${relationName}` : relationName
                 )
             }

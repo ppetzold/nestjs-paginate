@@ -1,3 +1,4 @@
+import { createHash } from 'crypto'
 import { mergeWith } from 'lodash'
 import { FindOperator, FindOptionsRelations, ObjectLiteral, Repository, SelectQueryBuilder } from 'typeorm'
 import { ColumnMetadata } from 'typeorm/metadata/ColumnMetadata'
@@ -325,6 +326,23 @@ export function resolveJsonbPath(qb: SelectQueryBuilder<unknown>, column: string
     return notJsonb
 }
 
+/**
+ * Returns the alias to use for a join whose path-derived alias (e.g. `__root_toys_rel_shop_rel`) may
+ * exceed the identifier length limit of the database (63 characters on Postgres). The database would
+ * silently truncate such an alias, so two joins sharing a long prefix would end up with the same
+ * name. Aliases over the driver's `maxAliasLength` are cut and suffixed with a hash of the full
+ * alias, which keeps them deterministic (every reference to the same path resolves to the same
+ * alias) and distinct. Aliases within the limit are returned unchanged.
+ */
+export function getJoinAlias(qb: { connection: { driver: { maxAliasLength?: number } } }, alias: string): string {
+    const maxAliasLength = qb.connection.driver.maxAliasLength
+    if (!maxAliasLength || alias.length <= maxAliasLength) {
+        return alias
+    }
+    const hash = createHash('sha1').update(alias).digest('hex').slice(0, 8)
+    return `${alias.slice(0, maxAliasLength - hash.length - 1)}_${hash}`
+}
+
 // This function is used to fix the column alias when using relation, embedded or virtual properties
 export function fixColumnAlias(
     properties: ColumnProperties,
@@ -344,13 +362,14 @@ export function fixColumnAlias(
         const baseColumnProperties = getPropertiesByColumnName(
             [...jsonbResolution.relationPath, jsonbResolution.jsonbColumn].join('.')
         )
-        const baseAlias = fixColumnAlias(
+        const baseAlias = buildColumnAlias(
             baseColumnProperties,
             alias,
             jsonbResolution.relationPath.length > 0,
             isVirtualProperty,
             isEmbedded,
-            query
+            query,
+            qb
         )
 
         if (jsonbResolution.jsonPath.length === 0) {
@@ -370,9 +389,24 @@ export function fixColumnAlias(
         }
     }
 
+    return buildColumnAlias(properties, alias, isRelation, isVirtualProperty, isEmbedded, query, qb)
+}
+
+function buildColumnAlias(
+    properties: ColumnProperties,
+    alias: string,
+    isRelation: boolean,
+    isVirtualProperty: boolean,
+    isEmbedded: boolean,
+    query?: ColumnMetadata['query'],
+    qb?: SelectQueryBuilder<unknown>
+): string {
+    const joinAlias = (path: string) => (qb ? getJoinAlias(qb, path) : path)
+
     if (isRelation) {
+        const relationAlias = joinAlias(`${alias}_${properties.propertyPath}_rel`)
         if (isVirtualProperty && query) {
-            return `(${query(`${alias}_${properties.propertyPath}_rel`)})` // () is needed to avoid parameter conflict
+            return `(${query(relationAlias)})` // () is needed to avoid parameter conflict
         } else if ((isVirtualProperty && !query) || properties.isNested) {
             if (properties.propertyName.includes('.')) {
                 const propertyPath = properties.propertyName.split('.')
@@ -382,12 +416,12 @@ export function fixColumnAlias(
                     .join('_')
                 const nestedCol = propertyPath[propertyPath.length - 1]
 
-                return `${alias}_${properties.propertyPath}_rel_${nestedRelations}.${nestedCol}`
+                return `${joinAlias(`${alias}_${properties.propertyPath}_rel_${nestedRelations}`)}.${nestedCol}`
             } else {
-                return `${alias}_${properties.propertyPath}_rel_${properties.propertyName}`
+                return `${relationAlias}_${properties.propertyName}`
             }
         } else {
-            return `${alias}_${properties.propertyPath}_rel.${properties.propertyName}`
+            return `${relationAlias}.${properties.propertyName}`
         }
     } else if (isVirtualProperty) {
         return query ? `(${query(`${alias}`)})` : `${alias}_${properties.propertyName}`

@@ -9,6 +9,7 @@ import { CatHomePillowEntity } from './__tests__/cat-home-pillow.entity'
 import { CatHomeEntity } from './__tests__/cat-home.entity'
 import { CatToyEntity } from './__tests__/cat-toy.entity'
 import { CatEntity, CutenessLevel } from './__tests__/cat.entity'
+import { LongAliasLeafEntity, LongAliasOwnerEntity, LongAliasTargetEntity } from './__tests__/long-alias.entity'
 import { ToyShopAddressEntity } from './__tests__/toy-shop-address.entity'
 import { ToyShopEntity } from './__tests__/toy-shop.entity'
 import { PaginateQuery } from './decorator'
@@ -76,6 +77,9 @@ describe('paginate', () => {
                 CatHomePillowEntity,
                 CatHomePillowBrandEntity,
                 ToyShopEntity,
+                LongAliasOwnerEntity,
+                LongAliasTargetEntity,
+                LongAliasLeafEntity,
                 process.env.DB === 'postgres' ? CatHairEntity : undefined,
             ],
         }
@@ -6132,4 +6136,111 @@ describe('paginate', () => {
             })
         })
     }
+
+    describe('join aliases longer than the database identifier limit', () => {
+        let ownerRepo: Repository<LongAliasOwnerEntity>
+
+        const first = 'relationWithAnExceptionallyLongNameThatOverflowsTheAliasLimitFirst'
+        const second = 'relationWithAnExceptionallyLongNameThatOverflowsTheAliasLimitSecond'
+        const nested = 'leafReachedThroughAnotherVeryLongRelationName'
+        const toMany = 'targetsReachedThroughAVeryLongRelationName'
+
+        beforeAll(async () => {
+            ownerRepo = dataSource.getRepository(LongAliasOwnerEntity)
+            const targetRepo = dataSource.getRepository(LongAliasTargetEntity)
+            const leafRepo = dataSource.getRepository(LongAliasLeafEntity)
+
+            const [leafA, leafB] = await leafRepo.save([
+                leafRepo.create({ label: 'A' }),
+                leafRepo.create({ label: 'B' }),
+            ])
+            const [one, two] = await targetRepo.save([
+                targetRepo.create({ name: 'one', [nested]: leafA }),
+                targetRepo.create({ name: 'two', [nested]: leafB }),
+            ])
+            const [alpha, beta] = await ownerRepo.save([
+                ownerRepo.create({ name: 'alpha', [first]: one, [second]: two }),
+                ownerRepo.create({ name: 'beta', [first]: two, [second]: one }),
+            ])
+            await targetRepo.save([
+                targetRepo.create({ name: 'child of alpha', owner: alpha }),
+                targetRepo.create({ name: 'child of beta', owner: beta }),
+            ])
+        })
+
+        it('loads, sorts and filters two relations whose aliases share a long prefix', async () => {
+            const config: PaginateConfig<LongAliasOwnerEntity> = {
+                relations: { [first]: { [nested]: true }, [second]: { [nested]: true } },
+                sortableColumns: ['id', `${first}.name`, `${second}.${nested}.label`],
+                filterableColumns: {
+                    [`${first}.name`]: [FilterOperator.EQ],
+                    [`${second}.${nested}.label`]: [FilterOperator.EQ],
+                },
+                searchableColumns: [`${first}.name`, `${second}.name`],
+            }
+
+            const result = await paginate<LongAliasOwnerEntity>(
+                {
+                    path: '',
+                    sortBy: [[`${second}.${nested}.label`, 'DESC']],
+                    filter: { [`${first}.name`]: '$eq:one', [`${second}.${nested}.label`]: '$eq:B' },
+                    search: 'o',
+                },
+                ownerRepo,
+                config
+            )
+
+            expect(result.data.map((owner) => owner.name)).toStrictEqual(['alpha'])
+            const [alpha] = result.data
+            expect(alpha[first].name).toBe('one')
+            expect(alpha[first][nested].label).toBe('A')
+            expect(alpha[second].name).toBe('two')
+            expect(alpha[second][nested].label).toBe('B')
+        })
+
+        it('filters through to-many and nested relations without loading them', async () => {
+            const result = await paginate<LongAliasOwnerEntity>(
+                {
+                    path: '',
+                    filter: {
+                        [`${toMany}.name`]: '$eq:child of beta',
+                        [`${first}.${nested}.label`]: '$eq:B',
+                    },
+                },
+                ownerRepo,
+                {
+                    sortableColumns: ['id'],
+                    filterableColumns: {
+                        [`${toMany}.name`]: [FilterOperator.EQ],
+                        [`${first}.${nested}.label`]: [FilterOperator.EQ],
+                    },
+                }
+            )
+
+            expect(result.data.map((owner) => owner.name)).toStrictEqual(['beta'])
+        })
+
+        it('applies a config where on nested relations that are not loaded', async () => {
+            const result = await paginate<LongAliasOwnerEntity>({ path: '' }, ownerRepo, {
+                sortableColumns: ['id'],
+                where: {
+                    [first]: { [nested]: { label: 'A' } },
+                    [second]: { [nested]: { label: 'B' } },
+                },
+            })
+
+            expect(result.data.map((owner) => owner.name)).toStrictEqual(['alpha'])
+        })
+
+        it('joins the relation parts of a polymorphic (~) filter', async () => {
+            const column = `${first}.${nested}.label~${second}.${nested}.label`
+            const result = await paginate<LongAliasOwnerEntity>(
+                { path: '', filterExpression: `${column}=$eq:B` } as PaginateQuery,
+                ownerRepo,
+                { sortableColumns: ['id'], filterableColumns: { [column]: true } }
+            )
+
+            expect(result.data.map((owner) => owner.name)).toStrictEqual(['beta'])
+        })
+    })
 })
