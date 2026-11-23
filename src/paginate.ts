@@ -26,6 +26,7 @@ import {
     checkIsRelation,
     Column,
     createRelationSchema,
+    escapeLikePattern,
     extractVirtualProperty,
     fixColumnAlias,
     getMissingPrimaryKeyColumns,
@@ -49,6 +50,7 @@ import {
     RelationSchemaInput,
     resolveJsonbPath,
     SortBy,
+    withLikeEscape,
 } from './helper'
 import globalConfig from './global-config'
 
@@ -997,8 +999,8 @@ export async function paginate<T extends ObjectLiteral>(
                             condition.parameters[0] = `CAST(${condition.parameters[0]} AS text)`
                         }
 
-                        qb.orWhere(qb['createWhereConditionExpression'](condition), {
-                            [property.column]: `%${query.search}%`,
+                        qb.orWhere(qb['createWhereConditionExpression'](withLikeEscape(qb, condition)), {
+                            [property.column]: `%${escapeLikePattern(query.search)}%`,
                         })
                     }
                 } else {
@@ -1034,9 +1036,12 @@ export async function paginate<T extends ObjectLiteral>(
                                         condition.parameters[0] = `CAST(${condition.parameters[0]} AS text)`
                                     }
 
-                                    subQb.orWhere(subQb['createWhereConditionExpression'](condition), {
-                                        [`${property.column}_${index}`]: `%${searchWord}%`,
-                                    })
+                                    subQb.orWhere(
+                                        subQb['createWhereConditionExpression'](withLikeEscape(subQb, condition)),
+                                        {
+                                            [`${property.column}_${index}`]: `%${escapeLikePattern(searchWord)}%`,
+                                        }
+                                    )
                                 }
                             })
                         )

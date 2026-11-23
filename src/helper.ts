@@ -1,6 +1,7 @@
 import { mergeWith } from 'lodash'
 import { FindOperator, FindOptionsRelations, ObjectLiteral, Repository, SelectQueryBuilder } from 'typeorm'
 import { ColumnMetadata } from 'typeorm/metadata/ColumnMetadata'
+import { WhereClauseCondition } from 'typeorm/query-builder/WhereClause'
 import { OrmUtils } from 'typeorm/util/OrmUtils'
 
 /**
@@ -574,4 +575,21 @@ export function buildOptimizedCountQuery<T extends ObjectLiteral>(qb: SelectQuer
 
     qb.expressionMap.joinAttributes = joins.filter((join) => kept.has(join.alias.name))
     return qb
+}
+
+export function escapeLikePattern(value: string): string {
+    return value.replace(/[!%_]/g, '!$&')
+}
+
+export function withLikeEscape(qb: SelectQueryBuilder<unknown>, condition: WhereClauseCondition): WhereClauseCondition {
+    if (typeof condition !== 'object' || Array.isArray(condition)) {
+        return condition
+    }
+    if (condition.operator === 'not') {
+        return { operator: 'not', condition: withLikeEscape(qb, condition.condition) }
+    }
+    if (condition.operator !== 'ilike') {
+        return condition
+    }
+    return `${qb['createWhereConditionExpression'](condition)} ESCAPE '!'`
 }

@@ -28,6 +28,7 @@ import {
     checkIsEmbedded,
     checkIsRelation,
     createRelationSchema,
+    escapeLikePattern,
     extractVirtualProperty,
     fixColumnAlias,
     getPropertiesByColumnName,
@@ -38,6 +39,7 @@ import {
     mergeRelationSchema,
     quoteColumn,
     resolveJsonbPath,
+    withLikeEscape,
 } from './helper'
 import { EmbeddedMetadata } from 'typeorm/metadata/EmbeddedMetadata'
 import { RelationMetadata } from 'typeorm/metadata/RelationMetadata'
@@ -308,7 +310,7 @@ export function addWhereCondition<T>(
         ) {
             condition.parameters[0] = `cardinality(${condition.parameters[0]})`
         }
-        const expression = qb['createWhereConditionExpression'](condition)
+        const expression = qb['createWhereConditionExpression'](withLikeEscape(qb, condition))
         if (columnFilter.comparator === FilterComparator.OR) {
             qb.orWhere(expression, parameters)
         } else {
@@ -510,10 +512,14 @@ export function parseFilter<T>(
                     )
                     break
                 case FilterOperator.ILIKE:
-                    params.findOperator = OperatorSymbolToFunction.get(token.operator)(`%${token.value}%`)
+                    params.findOperator = OperatorSymbolToFunction.get(token.operator)(
+                        `%${escapeLikePattern(token.value)}%`
+                    )
                     break
                 case FilterOperator.SW:
-                    params.findOperator = OperatorSymbolToFunction.get(token.operator)(`${token.value}%`)
+                    params.findOperator = OperatorSymbolToFunction.get(token.operator)(
+                        `${escapeLikePattern(token.value)}%`
+                    )
                     break
                 default:
                     params.findOperator = OperatorSymbolToFunction.get(token.operator)(fixValue(token.value))
