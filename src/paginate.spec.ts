@@ -2205,6 +2205,50 @@ describe('paginate', () => {
         expect(result.links.current).toBe('?page=1&limit=20&sortBy=id:ASC&filter.name=$ilike:arf')
     })
 
+    describe('with LIKE wildcards in the term', () => {
+        let wildcardCat: CatEntity
+
+        beforeAll(async () => {
+            wildcardCat = await catRepo.save(
+                catRepo.create({
+                    name: '50%_off!',
+                    color: 'black',
+                    age: null,
+                    weightChange: null,
+                    cutenessLevel: CutenessLevel.LOW,
+                    size: { height: 0, width: 0, length: 0 },
+                })
+            )
+        })
+
+        afterAll(async () => {
+            await catRepo.remove(wildcardCat)
+        })
+
+        const names = async (query: Omit<PaginateQuery, 'path'>, config: Partial<PaginateConfig<CatEntity>> = {}) =>
+            (
+                await paginate<CatEntity>({ path: '', ...query }, catRepo, {
+                    sortableColumns: ['id'],
+                    searchableColumns: ['name'],
+                    filterableColumns: { name: true },
+                    ...config,
+                })
+            ).data.map((cat) => cat.name)
+
+        it('should match them literally in search', async () => {
+            expect(await names({ search: '%' })).toStrictEqual(['50%_off!'])
+            expect(await names({ search: '_off!' })).toStrictEqual(['50%_off!'])
+            expect(await names({ search: '% _' }, { multiWordSearch: true })).toStrictEqual(['50%_off!'])
+        })
+
+        it('should match them literally in $ilike and $sw filters', async () => {
+            expect(await names({ filter: { name: '$ilike:_' } })).toStrictEqual(['50%_off!'])
+            expect(await names({ filter: { name: '$sw:50%_' } })).toStrictEqual(['50%_off!'])
+            expect(await names({ filter: { name: '$sw:M_' } })).toStrictEqual([])
+            expect(await names({ filter: { name: '$not:$ilike:%' } })).toStrictEqual(cats.map((cat) => cat.name))
+        })
+    })
+
     it('should return result based on $sw filter', async () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id'],
