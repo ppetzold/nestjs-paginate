@@ -231,6 +231,12 @@ describe('paginate', () => {
             catToyRepo.create({ name: 'String', cat: cats[1], size: { height: 1, width: 1, length: 50 } }),
         ])
 
+        for (const shop of [...toysShops, ...catToys.map((toy) => toy.shop)]) {
+            if (shop) {
+                shop.upperShopName = shop.shopName.toUpperCase()
+            }
+        }
+
         catToysWithoutShop = catToys.map(({ shop: _, ...other }) => {
             const newInstance = new CatToyEntity()
             for (const otherKey in other) {
@@ -3990,6 +3996,86 @@ describe('paginate', () => {
             expect(result.links.last).toBeUndefined()
             expect(result.links.next).toBeUndefined()
             expect(result.links.current).toBe('?page=1&limit=20&sortBy=home.countCat:ASC')
+        })
+
+        describe('on the inverse side of a one-to-one relation', () => {
+            let extraAddress: ToyShopAddressEntity
+            let extraShop: ToyShopEntity
+
+            beforeAll(async () => {
+                extraAddress = await toyShopAddressRepository.save(
+                    toyShopAddressRepository.create({ address: '456 Side St' })
+                )
+                extraShop = await toyShopRepo.save(toyShopRepo.create({ shopName: 'A Toys', address: extraAddress }))
+            })
+
+            afterAll(async () => {
+                await toyShopRepo.remove(extraShop)
+                await toyShopAddressRepository.remove(extraAddress)
+            })
+
+            it('should return result sorted by a virtual column', async () => {
+                const config: PaginateConfig<ToyShopAddressEntity> = {
+                    sortableColumns: ['id', 'shop.upperShopName'],
+                    relations: { shop: true },
+                }
+
+                const ascending = await paginate<ToyShopAddressEntity>(
+                    { path: '', sortBy: [['shop.upperShopName', 'ASC']] },
+                    toyShopAddressRepository,
+                    config
+                )
+                const descending = await paginate<ToyShopAddressEntity>(
+                    { path: '', sortBy: [['shop.upperShopName', 'DESC']] },
+                    toyShopAddressRepository,
+                    config
+                )
+
+                expect(ascending.data.map((address) => address.shop.upperShopName)).toStrictEqual([
+                    'A TOYS',
+                    'BEST TOYS',
+                ])
+                expect(descending.data.map((address) => address.shop.upperShopName)).toStrictEqual([
+                    'BEST TOYS',
+                    'A TOYS',
+                ])
+            })
+
+            it('should return result based on search on a virtual column', async () => {
+                const config: PaginateConfig<ToyShopAddressEntity> = {
+                    sortableColumns: ['id'],
+                    relations: { shop: true },
+                    searchableColumns: ['shop.upperShopName'],
+                }
+                const query: PaginateQuery = {
+                    path: '',
+                    search: 'best',
+                }
+
+                const result = await paginate<ToyShopAddressEntity>(query, toyShopAddressRepository, config)
+
+                expect(result.data.map((address) => address.address)).toStrictEqual(['123 Main St'])
+            })
+
+            it('should return result based on virtual column filter', async () => {
+                const config: PaginateConfig<ToyShopAddressEntity> = {
+                    sortableColumns: ['id'],
+                    relations: { shop: true },
+                    filterableColumns: {
+                        'shop.upperShopName': [FilterOperator.EQ],
+                    },
+                }
+                const query: PaginateQuery = {
+                    path: '',
+                    filter: {
+                        'shop.upperShopName': '$eq:A TOYS',
+                    },
+                }
+
+                const result = await paginate<ToyShopAddressEntity>(query, toyShopAddressRepository, config)
+
+                expect(result.data.map((address) => address.address)).toStrictEqual(['456 Side St'])
+            })
         })
     })
 
