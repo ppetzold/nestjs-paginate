@@ -949,7 +949,7 @@ export async function paginate<T extends ObjectLiteral>(
         queryBuilder.select(cols)
     }
 
-    if (config.where && isRepository(repo)) {
+    if (config.where) {
         const baseWhereStr = generateWhereStatement(queryBuilder, config.where)
         queryBuilder.andWhere(`(${baseWhereStr})`)
     }
