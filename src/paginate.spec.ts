@@ -444,6 +444,60 @@ describe('paginate', () => {
         expect(result.data).toStrictEqual(cats.slice(3, 4))
     })
 
+    it('should apply where config to a query builder', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            defaultSortBy: [['id', 'ASC']],
+            where: { color: 'white' },
+        }
+        const query: PaginateQuery = {
+            path: '',
+        }
+
+        const queryBuilder = catRepo.createQueryBuilder('cats')
+
+        const result = await paginate<CatEntity>(query, queryBuilder, config)
+
+        expect(result.meta.totalItems).toBe(2)
+        expect(result.data).toStrictEqual(cats.slice(3, 5))
+    })
+
+    it('should combine where config with the conditions of a query builder', async () => {
+        const config: PaginateConfig<CatEntity> = {
+            sortableColumns: ['id'],
+            defaultSortBy: [['id', 'ASC']],
+            where: [{ color: 'black' }, { color: 'white' }],
+        }
+        const query: PaginateQuery = {
+            path: '',
+        }
+
+        const queryBuilder = catRepo.createQueryBuilder('cats').where('cats.name = :name', { name: 'George' })
+
+        const result = await paginate<CatEntity>(query, queryBuilder, config)
+
+        expect(result.meta.totalItems).toBe(1)
+        expect(result.data).toStrictEqual([cats[3]])
+    })
+
+    it('should apply where config on a relation to a query builder', async () => {
+        const config: PaginateConfig<CatToyEntity> = {
+            sortableColumns: ['id'],
+            defaultSortBy: [['id', 'ASC']],
+            where: { cat: { id: cats[0].id } },
+        }
+        const query: PaginateQuery = {
+            path: '',
+        }
+
+        const queryBuilder = catToyRepo.createQueryBuilder('toys')
+
+        const result = await paginate<CatToyEntity>(query, queryBuilder, config)
+
+        expect(result.meta.totalItems).toBe(3)
+        expect(result.data.map((toy) => toy.name)).toStrictEqual(catToys.slice(0, 3).map((toy) => toy.name))
+    })
+
     it('should default to page 1, if negative page is given', async () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id'],
