@@ -126,10 +126,10 @@ export function extractVirtualProperty(
     qb: SelectQueryBuilder<unknown>,
     columnProperties: ColumnProperties
 ): Partial<ColumnMetadata> {
+    const mainMetadata = qb?.expressionMap?.mainAlias?.metadata
     const metadata = columnProperties.propertyPath
-        ? qb?.expressionMap?.mainAlias?.metadata?.findColumnWithPropertyPath(columnProperties.propertyPath)
-              ?.referencedColumn?.entityMetadata // on relation
-        : qb?.expressionMap?.mainAlias?.metadata
+        ? mainMetadata?.findRelationWithPropertyPath(columnProperties.propertyPath)?.inverseEntityMetadata // on relation
+        : mainMetadata
     return (
         metadata?.columns?.find((column) => column.propertyName === columnProperties.propertyName) || {
             isVirtualProperty: false,

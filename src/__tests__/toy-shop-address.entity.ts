@@ -1,5 +1,6 @@
-import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn } from 'typeorm'
+import { Column, CreateDateColumn, Entity, OneToOne, PrimaryGeneratedColumn } from 'typeorm'
 import { DateColumnNotNull } from './column-option'
+import { ToyShopEntity } from './toy-shop.entity'
 
 @Entity()
 export class ToyShopAddressEntity {
@@ -8,6 +9,9 @@ export class ToyShopAddressEntity {
 
     @Column()
     address: string
+
+    @OneToOne(() => ToyShopEntity, (shop) => shop.address)
+    shop: ToyShopEntity
 
     @CreateDateColumn(DateColumnNotNull)
     createdAt: string

@@ -1,4 +1,4 @@
-import { Column, CreateDateColumn, Entity, JoinColumn, OneToOne, PrimaryGeneratedColumn } from 'typeorm'
+import { Column, CreateDateColumn, Entity, JoinColumn, OneToOne, PrimaryGeneratedColumn, VirtualColumn } from 'typeorm'
 import { DateColumnNotNull } from './column-option'
 import { ToyShopAddressEntity } from './toy-shop-address.entity'
 
@@ -10,9 +10,17 @@ export class ToyShopEntity {
     @Column()
     shopName: string
 
-    @OneToOne(() => ToyShopAddressEntity, { nullable: true })
+    @OneToOne(() => ToyShopAddressEntity, (address) => address.shop, { nullable: true })
     @JoinColumn()
     address: ToyShopAddressEntity
+
+    @VirtualColumn({
+        query: (alias) => {
+            const tck = process.env.DB === 'mariadb' ? '`' : '"'
+            return `UPPER(${alias}.${tck}shopName${tck})`
+        },
+    })
+    upperShopName: string
 
     @CreateDateColumn(DateColumnNotNull)
     createdAt: string
