@@ -122,6 +122,15 @@ export interface PaginateConfig<T> {
      * nested or very wide expressions. Defaults to 100.
      */
     filterExpressionMaxComplexity?: number
+    /**
+     * Enables TypeORM query result caching for the paginated query and its count query.
+     * `true` uses the cache duration configured on the DataSource, a number sets the
+     * duration in milliseconds, and `false` disables caching on a passed query builder.
+     * Requires `cache` to be enabled in the DataSource options.
+     * A fixed cache id is intentionally not supported: it would make every page share
+     * the same cache entry. The cache is keyed by the generated SQL and parameters instead.
+     */
+    cache?: boolean | number
 }
 
 export enum PaginationLimit {
@@ -695,6 +704,10 @@ export async function paginate<T extends ObjectLiteral>(
 
     if (config.withDeleted || (config.allowWithDeletedInQuery && query.withDeleted)) {
         queryBuilder.withDeleted()
+    }
+
+    if (config.cache !== undefined) {
+        queryBuilder.cache(config.cache)
     }
 
     let filterJoinMethods = {}

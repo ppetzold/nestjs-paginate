@@ -2672,6 +2672,113 @@ describe('paginate', () => {
         await catRepo.restore({ id: cats[0].id })
     })
 
+    describe('cache', () => {
+        const query: PaginateQuery = { path: '' }
+
+        it('should not enable query cache when cache is not configured', async () => {
+            const queryBuilder = catRepo.createQueryBuilder('__root')
+            const cacheSpy = jest.spyOn(queryBuilder, 'cache')
+
+            await paginate<CatEntity>(query, queryBuilder, { sortableColumns: ['id'] })
+
+            expect(cacheSpy).not.toHaveBeenCalled()
+            expect(queryBuilder.expressionMap.cache).toBeFalsy()
+        })
+
+        it('should enable query cache with the default duration when cache is true', async () => {
+            const queryBuilder = catRepo.createQueryBuilder('__root')
+            const cacheSpy = jest.spyOn(queryBuilder, 'cache')
+
+            await paginate<CatEntity>(query, queryBuilder, { sortableColumns: ['id'], cache: true })
+
+            expect(cacheSpy).toHaveBeenCalledWith(true)
+            expect(queryBuilder.expressionMap.cache).toBe(true)
+            expect(queryBuilder.expressionMap.cacheDuration).toBeUndefined()
+            expect(queryBuilder.expressionMap.cacheId).toBeUndefined()
+        })
+
+        it('should enable query cache with the given duration when cache is a number', async () => {
+            const queryBuilder = catRepo.createQueryBuilder('__root')
+
+            await paginate<CatEntity>(query, queryBuilder, { sortableColumns: ['id'], cache: 30000 })
+
+            expect(queryBuilder.expressionMap.cache).toBe(true)
+            expect(queryBuilder.expressionMap.cacheDuration).toBe(30000)
+            expect(queryBuilder.expressionMap.cacheId).toBeUndefined()
+        })
+
+        it('should disable query cache on a passed query builder when cache is false', async () => {
+            const queryBuilder = catRepo.createQueryBuilder('__root').cache(true)
+
+            await paginate<CatEntity>(query, queryBuilder, { sortableColumns: ['id'], cache: false })
+
+            expect(queryBuilder.expressionMap.cache).toBe(false)
+        })
+
+        it('should keep cache enabled on a custom count query', async () => {
+            const buildCountQuery = jest.fn((qb: SelectQueryBuilder<CatEntity>) => qb)
+
+            await paginate<CatEntity>(query, catRepo, { sortableColumns: ['id'], cache: 1000, buildCountQuery })
+
+            expect(buildCountQuery).toHaveBeenCalledTimes(1)
+            const countQueryBuilder = buildCountQuery.mock.calls[0][0]
+            expect(countQueryBuilder.expressionMap.cache).toBe(true)
+            expect(countQueryBuilder.expressionMap.cacheDuration).toBe(1000)
+        })
+
+        const itWithSqlite = process.env.DB === 'sqlite' ? it : it.skip
+
+        itWithSqlite('should serve repeated identical queries from the query result cache', async () => {
+            const cachedDataSource = new DataSource({
+                type: 'better-sqlite3',
+                database: ':memory:',
+                synchronize: true,
+                logging: ['error'],
+                cache: true,
+                entities: [
+                    CatEntity,
+                    CatToyEntity,
+                    ToyShopAddressEntity,
+                    CatHomeEntity,
+                    CatHomePillowEntity,
+                    CatHomePillowBrandEntity,
+                    ToyShopEntity,
+                ],
+            })
+            await cachedDataSource.initialize()
+
+            try {
+                const repo = cachedDataSource.getRepository(CatEntity)
+                const newCat = (name: string) =>
+                    repo.create({
+                        name,
+                        color: 'grey',
+                        age: 1,
+                        cutenessLevel: CutenessLevel.HIGH,
+                        lastVetVisit: null,
+                        size: { height: 10, width: 10, length: 10 },
+                        weightChange: 0,
+                    })
+                await repo.save([newCat('Tom'), newCat('Felix')])
+
+                const cachedConfig: PaginateConfig<CatEntity> = { sortableColumns: ['id'], cache: 60000 }
+                const first = await paginate<CatEntity>(query, repo, cachedConfig)
+                expect(first.meta.totalItems).toBe(2)
+
+                await repo.save(newCat('Garfield'))
+
+                const cached = await paginate<CatEntity>(query, repo, cachedConfig)
+                expect(cached.meta.totalItems).toBe(2)
+                expect(cached.data.map((cat) => cat.name)).toStrictEqual(['Tom', 'Felix'])
+
+                const fresh = await paginate<CatEntity>(query, repo, { sortableColumns: ['id'] })
+                expect(fresh.meta.totalItems).toBe(3)
+            } finally {
+                await cachedDataSource.destroy()
+            }
+        })
+    })
+
     it('should return the specified columns only', async () => {
         const config: PaginateConfig<CatEntity> = {
             sortableColumns: ['id'],

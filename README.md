@@ -356,6 +356,17 @@ const paginateConfig: PaginateConfig<CatEntity> {
 
   /**
    * Required: false
+   * Type: boolean | number
+   * Description: Enables TypeORM query result caching for the paginated query and its count query.
+   * `true` uses the cache duration configured on the DataSource, a number sets the duration in milliseconds.
+   * Requires the `cache` option to be enabled on the DataSource. Entries are keyed by the generated SQL and
+   * parameters, so every page, filter and sort combination is cached separately.
+   * https://typeorm.io/caching
+   */
+  cache: 60000,
+
+  /**
+   * Required: false
    * Type: string
    * Description: Allow user to choose between limit/offset and take/skip, or cursor-based pagination.
    * Default: PaginationType.TAKE_AND_SKIP
